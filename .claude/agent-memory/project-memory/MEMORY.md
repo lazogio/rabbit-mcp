@@ -1,6 +1,6 @@
 # rabbit-mcp memory — index
 
-Last updated: 2026-10-12 · Bugs: 3 (0 open) · Next ID: BUG-004
+Last updated: 2026-10-13 · Bugs: 3 (0 open) · Next ID: BUG-004
 
 ## Files
 - `bugs.md` — bug log (symptom, root cause, fix, guard, lesson)
@@ -8,7 +8,7 @@ Last updated: 2026-10-12 · Bugs: 3 (0 open) · Next ID: BUG-004
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
-- 2026-10-12 phase-1/reliability: BUG-002/003 fixed, peek guard, integration tests vs real MassTransit (all green, awaiting merge)
+- 2026-10-12 phase-1/reliability: BUG-002/003 fixed, peek guard, integration tests vs real MassTransit (all green, merged to main 2026-10-13)
 - 2026-10-12 0742939 project-memory agent added (seeded from history)
 - 2026-10-12 25db129 subagents + CLAUDE.md
 - 2026-10-12 84e14d7 BUG-001 fixed: CI actions moved to Node 24 majors

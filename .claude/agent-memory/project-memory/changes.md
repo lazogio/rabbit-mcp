@@ -1,6 +1,6 @@
 # Changes and decisions (newest first)
 
-### 2026-10-12 Phase 1 reliability — branch phase-1/reliability (f7306bd..12c0df5)
+### 2026-10-12 Phase 1 reliability — branch phase-1/reliability (f7306bd..12c0df5), fast-forwarded into main 2026-10-13
 - What: BUG-002/003 fixed; peek and republish preview refuse queues with active consumers unless `force=true`;
   `tests/RabbitMcp.IntegrationTests` (Testcontainers RabbitMQ 4-management + MassTransit 8.5.10 consumers, 13 tests);
   CI runs on every branch push, separate integration job, failures reported as annotations (GitHubActionsTestLogger 3.0.5).

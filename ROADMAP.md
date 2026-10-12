@@ -2,7 +2,7 @@
 
 Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its own branch and merged via PR after CI is green.
 
-## Phase 1 — Reliability (`phase-1/reliability`) ✅ (CI green, awaiting merge)
+## Phase 1 — Reliability (`phase-1/reliability`) ✅ (merged 2026-10-13)
 1. ✅ Fix: republish preview ignores `targetExchange` override; reply `ContractCheck.Version` shows the request's version.
 2. ✅ Integration tests (`tests/RabbitMcp.IntegrationTests`): Testcontainers RabbitMQ 4 + MassTransit v8 consumer —
    publish delivered, missing exchange, unbound exchange, request responded / not found / faulted / timeout,
