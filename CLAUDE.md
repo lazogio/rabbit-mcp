@@ -11,13 +11,15 @@ code comments in English. README.md is in Georgian.
 
 ```bash
 dotnet build RabbitMcp.slnx
-dotnet test RabbitMcp.slnx
+dotnet test tests/RabbitMcp.Tests                 # unit, no broker
+dotnet test tests/RabbitMcp.IntegrationTests      # Testcontainers RabbitMQ 4 + MassTransit 8 consumers (needs Docker)
 dotnet publish src/RabbitMcp.Server -c Release -o out   # MCP clients must run this binary, never `dotnet run`
 docker compose up -d                                     # local RabbitMQ 4 (5672, UI 15672 guest/guest)
 ```
 
-CI (`.github/workflows/ci.yml`) builds and tests every push/PR; it is the source of truth when
-the local environment cannot restore NuGet packages.
+CI (`.github/workflows/ci.yml`) builds and tests every push (any branch) and PR, with a separate
+integration job; failing tests appear as annotations (readable via the REST API without auth).
+It is the source of truth when the local environment cannot restore NuGet packages.
 
 ## Layout
 
@@ -28,6 +30,7 @@ the local environment cannot restore NuGet packages.
 | `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish), `ReplyListener` + `ReplyInterpreter` (request/response) |
 | `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas) |
 | `tests/RabbitMcp.Tests` | xUnit unit tests, no broker needed |
+| `tests/RabbitMcp.IntegrationTests` | end-to-end against real RabbitMQ + MassTransit v8 (`BrokerFixture`); test-only contracts in `TestContracts.cs` |
 
 ## Conventions (must not break)
 

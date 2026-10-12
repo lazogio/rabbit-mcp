@@ -18,12 +18,19 @@
   every receive queue has a same-name fanout exchange bound to it (republish target).
 - MassTransit v9 is commercial; v8 stays open source (maintenance ends after 2026) → never depend on the package in the server.
 
+- For envelope-serialized messages MassTransit's `ConsumeContext.Headers` are the **envelope** headers; AMQP headers
+  (e.g. `X-Republished-From`, `MT-Fault-*`) are only in `ReceiveContext.TransportHeaders` (proven by integration test, 12c0df5).
+- MassTransit sends replies to our `responseAddress` even if its host part differs from MassTransit's own host config
+  (send transport uses its own connection; only the path/vhost/query of the address matter).
+
 ## MCP C# SDK (ModelContextProtocol 2.2)
 - Only `McpException` messages reach the client; other exceptions become a generic "An error occurred invoking '<tool>'".
 - `UseStructuredContent = true` + record return type → `outputSchema` + `structuredContent`.
 - DataAnnotations (`Range`, `StringLength`, `RegularExpression`, `EmailAddress`, `MinLength`) are mapped into the input schema by MEAI.
 
 ## Environment / tooling
+- CI logs need auth, but check-run **annotations** don't: test failures are emitted as annotations by
+  `--logger GitHubActions`; read them via `/repos/lazogio/rabbit-mcp/check-runs/<job id>/annotations`.
 - The cloud authoring sandbox cannot reach api.nuget.org (policy 403) → code cannot be built there; CI is the verifier.
 - Registering `dotnet run` as an MCP server corrupts stdout (build output) → always register the published binary.
 - `gh` CLI token in the sandbox is invalid; pushes go through the session git proxy; GitHub REST API is readable unauthenticated (the repo is public).

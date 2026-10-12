@@ -1,6 +1,16 @@
 # Changes and decisions (newest first)
 
-### 2026-10-12 Project memory agent — this commit
+### 2026-10-12 Phase 1 reliability — branch phase-1/reliability (f7306bd..12c0df5)
+- What: BUG-002/003 fixed; peek and republish preview refuse queues with active consumers unless `force=true`;
+  `tests/RabbitMcp.IntegrationTests` (Testcontainers RabbitMQ 4-management + MassTransit 8.5.10 consumers, 13 tests);
+  CI runs on every branch push, separate integration job, failures reported as annotations (GitHubActionsTestLogger 3.0.5).
+- Why: MassTransit compatibility had only been checked by reading source; now proven end to end.
+- Result: first run passed everything except one test whose assumption was wrong (see gotchas: MT transport headers);
+  request/response, Fault<T>, temporary reply exchange flags, republish from _error all work against real MassTransit.
+- Decision: integration tests call server components directly (not over MCP stdio) — they test broker semantics;
+  MCP schema shape stays covered by unit tests.
+
+### 2026-10-12 Project memory agent — commit 0742939
 - What: `project-memory` subagent (`memory: project`) with bugs/changes/gotchas files, seeded from history.
 - Why: keep knowledge about changes and bugs across sessions.
 

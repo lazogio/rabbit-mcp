@@ -16,7 +16,8 @@ RabbitMQ-ის MCP სერვერი, რომელიც **შეტყ�
 
 ```bash
 docker compose up -d                                    # RabbitMQ, UI: http://localhost:15672
-dotnet test
+dotnet test tests/RabbitMcp.Tests                     # unit ტესტები
+dotnet test tests/RabbitMcp.IntegrationTests          # ინტეგრაციული: RabbitMQ + MassTransit (Docker სჭირდება)
 dotnet publish src/RabbitMcp.Server -c Release -o out
 claude mcp add rabbit-mcp \
   -e RabbitMcp__Uri=amqp://guest:guest@localhost:5672/ \
@@ -103,7 +104,7 @@ MassTransit consumer ჩვეულებრივ პასუხობს: `a
 
 - **publish/request:** ვალიდაციის ჩავარდნისას არაფერი იგზავნება. exchange-ის არსებობა წინასწარ მოწმდება. publisher confirms და `mandatory` უზრუნველყოფს, რომ ვერ მიწოდებული შეტყობინება შეცდომად დაბრუნდეს და ჩუმად არ დაიკარგოს. შეტყობინებები persistent-ია.
 - **republish:** შეტყობინება error რიგიდან ack-დება მხოლოდ ბროკერის დადასტურების შემდეგ, წარუმატებელი კი რიგში რჩება. body უცვლელია, იშლება მხოლოდ `MT-Reason`, `MT-Fault-*` და `MT-Host-*`. `messageIds`-ით მხოლოდ preview-ში ნანახ შეტყობინებებს აბრუნებთ. მიწოდება at-least-once-ია, ამიტომ consumer-ები `messageId`-ით იდემპოტენტური უნდა იყვნენ.
-- **peek:** შეტყობინება რიგში რჩება, მაგრამ იღებს `redelivered` დროშას და შეიძლება თანმიმდევრობა შეეცვალოს. quorum რიგებზე თითოეული peek delivery-limit-ში ითვლება.
+- **peek:** აქტიური consumer-ის მქონე რიგზე უარს ამბობს, თუ `force=true` არ არის. შეტყობინება რიგში რჩება, მაგრამ იღებს `redelivered` დროშას და შეიძლება თანმიმდევრობა შეეცვალოს. quorum რიგებზე თითოეული peek delivery-limit-ში ითვლება.
 
 ## Claude Code აგენტები
 
@@ -128,6 +129,6 @@ src/RabbitMcp.Server       Contracts/ რეესტრი, ვალიდა�
 tests/RabbitMcp.Tests      unit ტესტები (RabbitMQ არ სჭირდება)
 ```
 
-**CI:** ყოველ push-სა და PR-ზე GitHub Actions აგებს პროექტს და უშვებს ტესტებს. `main`-ზე ასევე ქვეყნდება სერვერის ბინარი (artifact `rabbit-mcp-linux-x64`).
+**CI:** ყოველ push-სა და PR-ზე GitHub Actions აგებს პროექტს, უშვებს unit ტესტებს და ცალკე job-ში ინტეგრაციულ ტესტებს ნამდვილ RabbitMQ 4-სა და MassTransit 8-ზე. ჩავარდნილი ტესტი PR-ში annotation-ად ჩანს. `main`-ზე ასევე ქვეყნდება სერვერის ბინარი (artifact `rabbit-mcp-linux-x64`).
 
 **შემდეგი ნაბიჯები:** ინტეგრაციული ტესტები Testcontainers-ით, `list_queues` Management API-ით, HTTP ტრანსპორტი ავტორიზაციით.
