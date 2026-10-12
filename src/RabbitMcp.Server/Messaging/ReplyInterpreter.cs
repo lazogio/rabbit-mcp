@@ -34,7 +34,7 @@ public static class ReplyInterpreter
         var errors = MessageInspector.Validate(response.Type, message, MassTransitJson.Options);
         return new ReplyInterpretation(
             "responded", response.Name, message,
-            new ContractCheck(response.Name, request.Version, errors.Count == 0, errors),
+            new ContractCheck(response.Name, Version: null, errors.Count == 0, errors),
             null, responder);
     }
 

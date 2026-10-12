@@ -48,7 +48,7 @@ public sealed record QueueStats(IReadOnlyList<QueueStat> Queues);
 
 public sealed record ContractCheck(
     string Contract,
-    int Version,
+    [property: Description("Contract version; null for response types, which are not versioned.")] int? Version,
     bool Valid,
     IReadOnlyList<string> Errors);
 

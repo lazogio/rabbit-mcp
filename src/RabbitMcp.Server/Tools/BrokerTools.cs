@@ -69,10 +69,11 @@ public sealed class BrokerTools(
         "Shows the first messages of a queue without removing them: payload, matching contract with validation result, " +
         "and MassTransit fault details (exception, consumer, retry count) for _error/_skipped queues. " +
         "Messages are fetched unacknowledged and immediately requeued, so they get the redelivered flag and may change order; " +
-        "on quorum queues each peek counts towards the delivery limit. Avoid peeking queues with active consumers.")]
+        "on quorum queues each peek counts towards the delivery limit. Queues with active consumers are refused unless force=true.")]
     public Task<PeekResult> PeekMessagesAsync(
         [Description("Queue name, e.g. submit-order_error.")] string queue,
         [Description("How many messages to show (default 5).")] int count = 5,
+        [Description("Peek even if the queue has active consumers (they may get the messages later, redelivered and out of order).")] bool force = false,
         CancellationToken cancellationToken = default) =>
-        browser.PeekAsync(queue, count, cancellationToken);
+        browser.PeekAsync(queue, count, force, cancellationToken);
 }

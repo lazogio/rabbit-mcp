@@ -21,11 +21,12 @@ public sealed class RepublishTools(QueueBrowser browser)
         [Description("Set to true to execute. Without it, only a preview is returned.")] bool confirm = false,
         [Description("Only republish messages with these MessageIds (from the preview). Others are left in place.")] string[]? messageIds = null,
         [Description("Override the destination exchange. By default it is taken from MT-Fault-InputAddress.")] string? targetExchange = null,
+        [Description("Preview even if the error queue has active consumers.")] bool force = false,
         CancellationToken cancellationToken = default)
     {
         if (!confirm)
         {
-            var preview = await browser.PeekAsync(errorQueue, count, cancellationToken);
+            var preview = await browser.PeekAsync(errorQueue, count, force, cancellationToken, targetExchange);
             return new RepublishResult(errorQueue, Executed: false, preview, Outcomes: [], Republished: 0, Requeued: 0);
         }
 

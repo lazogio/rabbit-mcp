@@ -18,11 +18,20 @@ public sealed class QueueBrowser(
     /// <summary>
     /// Fetches up to <paramref name="count"/> messages without acknowledging them, then
     /// returns all of them to the queue with one multiple-nack. Messages are never removed.
+    /// Refuses queues with active consumers unless <paramref name="force"/> is set: while
+    /// peeked messages are held they are invisible to those consumers, and they come back
+    /// redelivered and possibly out of order.
     /// </summary>
-    public async Task<PeekResult> PeekAsync(string queue, int count, CancellationToken ct)
+    /// <param name="targetExchangeOverride">Shown as each message's RepublishTarget (republish preview).</param>
+    public async Task<PeekResult> PeekAsync(
+        string queue, int count, bool force, CancellationToken ct, string? targetExchangeOverride = null)
     {
         CheckCount(count);
-        await EnsureQueueExistsAsync(queue, ct);
+        var info = await EnsureQueueExistsAsync(queue, ct);
+        if (info.ConsumerCount > 0 && !force)
+            throw new McpException(
+                $"Queue '{queue}' has {info.ConsumerCount} active consumer(s). Peeking holds messages away from them and " +
+                "returns them redelivered, possibly out of order. Nothing was read. Pass force=true to peek anyway.");
 
         var messages = new List<PeekedMessage>(count);
         ulong lastTag = 0;
@@ -39,7 +48,8 @@ public sealed class QueueBrowser(
 
                 lastTag = delivery.DeliveryTag;
                 remaining = delivery.MessageCount;
-                messages.Add(inspector.Inspect(messages.Count, queue, delivery));
+                var peeked = inspector.Inspect(messages.Count, queue, delivery);
+                messages.Add(targetExchangeOverride is null ? peeked : peeked with { RepublishTarget = targetExchangeOverride });
             }
         }
         finally
@@ -168,12 +178,12 @@ public sealed class QueueBrowser(
         return new RepublishResult(errorQueue, Executed: true, Preview: null, outcomes, republished, toRequeue.Count);
     }
 
-    private async Task EnsureQueueExistsAsync(string queue, CancellationToken ct)
+    private async Task<QueueDeclareOk> EnsureQueueExistsAsync(string queue, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(queue))
             throw new McpException("Queue name is required.");
-        if (await connection.GetQueueAsync(queue, ct) is null)
-            throw new McpException($"Queue '{queue}' does not exist.");
+        return await connection.GetQueueAsync(queue, ct)
+            ?? throw new McpException($"Queue '{queue}' does not exist.");
     }
 
     private void CheckCount(int count)

@@ -101,6 +101,7 @@ public class RequestResponseTests
         Assert.Equal("responded", r.Status);
         Assert.Equal("OrderStatus", r.ResponseType);
         Assert.True(r.ResponseCheck!.Valid);
+        Assert.Null(r.ResponseCheck.Version); // response types are not versioned (was: request's version)
         Assert.Equal("rabbitmq://localhost/order-status", r.RespondedBy.Address);
         Assert.Equal("orders-01", r.RespondedBy.MachineName);
     }
