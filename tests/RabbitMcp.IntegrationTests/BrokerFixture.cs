@@ -1,0 +1,161 @@
+using System.Collections.Concurrent;
+using MassTransit;
+using Microsoft.Extensions.Logging.Abstractions;
+using RabbitMcp.Contracts.Orders;
+using RabbitMcp.IntegrationTests.Contracts;
+using RabbitMcp.Server;
+using RabbitMcp.Server.Contracts;
+using RabbitMcp.Server.Messaging;
+using RabbitMcp.Server.Tools;
+using RabbitMQ.Client;
+using Testcontainers.RabbitMq;
+
+namespace RabbitMcp.IntegrationTests;
+
+/// <summary>What a MassTransit consumer saw.</summary>
+public sealed record Received<T>(T Message, Guid? MessageId, IReadOnlyDictionary<string, object?> Headers);
+
+/// <summary>
+/// One RabbitMQ container + one MassTransit bus (the "services") + the rabbit-mcp components
+/// under test, shared by all integration tests.
+/// </summary>
+public sealed class BrokerFixture : IAsyncLifetime
+{
+    public const string OrderSubmittedQueue = "it-order-submitted";
+    public const string OrderCancelledQueue = "it-order-cancelled";
+    public const string OrderStatusQueue = "it-order-status";
+    public const string PingQueue = "it-ping-nobody";
+
+    public static readonly Guid KnownOrderId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    public static readonly Guid FailingOrderId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    public static readonly Guid BadReplyOrderId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+    private readonly RabbitMqContainer _container = new RabbitMqBuilder("rabbitmq:4-management").Build();
+    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<Received<OrderSubmitted>>> _submitted = new();
+    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<Received<OrderCancelled>>> _cancelled = new();
+    private readonly ConcurrentDictionary<Guid, int> _cancelAttempts = new();
+    private IBusControl? _bus;
+
+    public RabbitConnection Connection { get; private set; } = null!;
+    public ContractRegistry Registry { get; private set; } = null!;
+    public QueueBrowser Browser { get; private set; } = null!;
+    public ContractPublisher Publisher { get; private set; } = null!;
+    private ReplyListener _replies = null!;
+
+    public async Task InitializeAsync()
+    {
+        await _container.StartAsync();
+        var amqp = new Uri(_container.GetConnectionString());
+
+        // --- rabbit-mcp under test, wired exactly like Program.cs but without the MCP host.
+        var options = Microsoft.Extensions.Options.Options.Create(new RabbitMcpOptions { Uri = amqp.ToString(), ClientName = "rabbit-mcp-it" });
+        Connection = new RabbitConnection(options, NullLogger<RabbitConnection>.Instance);
+        Registry = ContractRegistry.FromAssemblies(typeof(OrderSubmitted).Assembly, typeof(NobodyListens).Assembly);
+        var inspector = new MessageInspector(Registry, options);
+        Browser = new QueueBrowser(Connection, inspector, TimeProvider.System, options, NullLogger<QueueBrowser>.Instance);
+        _replies = new ReplyListener(Connection, options, NullLogger<ReplyListener>.Instance);
+        Publisher = new ContractPublisher(Connection, Registry, new EnvelopeFactory(TimeProvider.System), _replies,
+            TimeProvider.System, options, NullLogger<ContractPublisher>.Instance);
+
+        // --- the "services": a plain MassTransit v8 bus, no retries (faults go straight to _error).
+        var user = Uri.UnescapeDataString(amqp.UserInfo.Split(':')[0]);
+        var pass = Uri.UnescapeDataString(amqp.UserInfo.Split(':')[1]);
+        _bus = Bus.Factory.CreateUsingRabbitMq(cfg =>
+        {
+            cfg.Host(amqp.Host, (ushort)amqp.Port, "/", h =>
+            {
+                h.Username(user);
+                h.Password(pass);
+            });
+
+            cfg.ReceiveEndpoint(OrderSubmittedQueue, e => e.Handler<OrderSubmitted>(ctx =>
+            {
+                Complete(_submitted, ctx.Message.OrderId, Capture(ctx));
+                return Task.CompletedTask;
+            }));
+
+            // Fails the first delivery of every order, succeeds afterwards → exercises _error + republish.
+            cfg.ReceiveEndpoint(OrderCancelledQueue, e => e.Handler<OrderCancelled>(ctx =>
+            {
+                if (_cancelAttempts.AddOrUpdate(ctx.Message.OrderId, 1, (_, n) => n + 1) == 1)
+                    throw new InvalidOperationException("Cancellation service unavailable");
+
+                Complete(_cancelled, ctx.Message.OrderId, Capture(ctx));
+                return Task.CompletedTask;
+            }));
+
+            cfg.ReceiveEndpoint(OrderStatusQueue, e => e.Handler<GetOrderStatus>(async ctx =>
+            {
+                var id = ctx.Message.OrderId;
+                if (id == KnownOrderId)
+                    await ctx.RespondAsync(new OrderStatus { OrderId = id, Status = "Shipped", UpdatedAtUtc = DateTime.UtcNow });
+                else if (id == BadReplyOrderId)
+                    await ctx.RespondAsync(new OrderStatus { OrderId = id, Status = "Lost" });
+                else if (id == FailingOrderId)
+                    throw new InvalidOperationException("Order database unavailable");
+                else
+                    await ctx.RespondAsync(new OrderNotFound { OrderId = id });
+            }));
+        });
+        await _bus.StartAsync();
+
+        // --- topology for situations MassTransit would never create.
+        await using var channel = await Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
+        var unbound = Registry.Get(typeof(UnboundEvent)).Exchange;
+        await channel.ExchangeDeclareAsync(unbound, RabbitMQ.Client.ExchangeType.Fanout, durable: true, autoDelete: false);
+
+        var ping = Registry.Get(typeof(PingNobody)).Exchange;
+        await channel.ExchangeDeclareAsync(ping, RabbitMQ.Client.ExchangeType.Fanout, durable: true, autoDelete: false);
+        await channel.QueueDeclareAsync(PingQueue, durable: true, exclusive: false, autoDelete: false);
+        await channel.QueueBindAsync(PingQueue, ping, routingKey: "");
+    }
+
+    public Task<Received<OrderSubmitted>> WaitForSubmitted(Guid orderId) =>
+        Get(_submitted, orderId).Task.WaitAsync(TimeSpan.FromSeconds(15));
+
+    public Task<Received<OrderCancelled>> WaitForCancelled(Guid orderId) =>
+        Get(_cancelled, orderId).Task.WaitAsync(TimeSpan.FromSeconds(15));
+
+    public bool WasSubmitted(Guid orderId) => _submitted.TryGetValue(orderId, out var t) && t.Task.IsCompleted;
+
+    /// <summary>Polls until the queue holds <paramref name="expected"/> ready messages.</summary>
+    public async Task WaitForQueueCount(string queue, uint expected)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        uint last = 0;
+        while (DateTime.UtcNow < deadline)
+        {
+            last = (await Connection.GetQueueAsync(queue, CancellationToken.None))?.MessageCount ?? 0;
+            if (last == expected)
+                return;
+            await Task.Delay(200);
+        }
+        throw new TimeoutException($"Queue '{queue}' has {last} messages, expected {expected}.");
+    }
+
+    private static Received<T> Capture<T>(ConsumeContext<T> ctx) where T : class =>
+        new(ctx.Message, ctx.MessageId, ctx.Headers.GetAll().ToDictionary(h => h.Key, h => (object?)h.Value));
+
+    private static TaskCompletionSource<Received<T>> Get<T>(
+        ConcurrentDictionary<Guid, TaskCompletionSource<Received<T>>> map, Guid id) =>
+        map.GetOrAdd(id, _ => new TaskCompletionSource<Received<T>>(TaskCreationOptions.RunContinuationsAsynchronously));
+
+    private static void Complete<T>(
+        ConcurrentDictionary<Guid, TaskCompletionSource<Received<T>>> map, Guid id, Received<T> received) =>
+        Get(map, id).TrySetResult(received);
+
+    public async Task DisposeAsync()
+    {
+        if (_bus is not null)
+            await _bus.StopAsync();
+        await _replies.DisposeAsync();
+        await Connection.DisposeAsync();
+        await _container.DisposeAsync();
+    }
+}
+
+[CollectionDefinition(Name)]
+public sealed class BrokerCollection : ICollectionFixture<BrokerFixture>
+{
+    public const string Name = "broker";
+}
