@@ -105,6 +105,20 @@ MassTransit consumer ჩვეულებრივ პასუხობს: `a
 - **republish:** შეტყობინება error რიგიდან ack-დება მხოლოდ ბროკერის დადასტურების შემდეგ, წარუმატებელი კი რიგში რჩება. body უცვლელია, იშლება მხოლოდ `MT-Reason`, `MT-Fault-*` და `MT-Host-*`. `messageIds`-ით მხოლოდ preview-ში ნანახ შეტყობინებებს აბრუნებთ. მიწოდება at-least-once-ია, ამიტომ consumer-ები `messageId`-ით იდემპოტენტური უნდა იყვნენ.
 - **peek:** შეტყობინება რიგში რჩება, მაგრამ იღებს `redelivered` დროშას და შეიძლება თანმიმდევრობა შეეცვალოს. quorum რიგებზე თითოეული peek delivery-limit-ში ითვლება.
 
+## Claude Code აგენტები
+
+`.claude/agents/`-ში პროექტისთვის მორგებული აგენტებია. Claude მათ ავტომატურად იყენებს შესაბამის ამოცანაზე, ან შეგიძლიათ სახელით გამოიძახოთ (`@code-reviewer`). საერთო წესები `CLAUDE.md`-შია.
+
+| აგენტი | რისთვის |
+|---|---|
+| `contract-author` | ახალი ან შეცვლილი კონტრაქტი, ვერსიები, breaking ცვლილებები |
+| `mcp-tool-designer` | ახალი MCP ხელსაწყოს დიზაინი: სახელი, სქემა, ანოტაციები, gating |
+| `masstransit-compat-reviewer` | wire ფორმატის შემოწმება MassTransit-ის საწყის კოდზე (მხოლოდ კითხვა) |
+| `code-reviewer` | diff-ის review merge-მდე (მხოლოდ კითხვა) |
+| `test-engineer` | unit და Testcontainers ინტეგრაციული ტესტები |
+| `ci-doctor` | წითელი CI-ის დიაგნოსტიკა და გასწორება |
+| `docs-writer` | README-ის და CLAUDE.md-ის სინქრონიზაცია კოდთან |
+
 ## სტრუქტურა
 
 ```
