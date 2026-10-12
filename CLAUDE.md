@@ -51,6 +51,16 @@ the local environment cannot restore NuGet packages.
 - Pure logic stays testable without a broker (registry, validator, envelope, fault parsing,
   reply interpretation, `PendingRequests`). Add tests for every behaviour change.
 
+## Project memory
+
+Knowledge about past changes, bugs and gotchas lives in `.claude/agent-memory/project-memory/`
+(`MEMORY.md` index, `bugs.md`, `changes.md`, `gotchas.md`) and is committed with the code.
+
+- **Before** debugging a failure or designing a change: ask `project-memory` to recall related entries
+  (or grep those files yourself).
+- **After** fixing a bug, landing a feature/decision, or a CI break: ask `project-memory` to record it,
+  with the commit SHA.
+
 ## Specialised agents (`.claude/agents/`)
 
 | Agent | Use it for |
@@ -62,3 +72,4 @@ the local environment cannot restore NuGet packages.
 | `test-engineer` | unit tests and Testcontainers integration tests |
 | `ci-doctor` | failing GitHub Actions runs, build/restore/test errors |
 | `docs-writer` | keeping the Georgian README in sync with the code |
+| `project-memory` | recording and recalling changes, bugs, decisions and gotchas |

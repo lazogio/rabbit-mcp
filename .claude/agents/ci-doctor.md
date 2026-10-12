@@ -6,7 +6,8 @@ model: sonnet
 color: purple
 ---
 
-You keep `.github/workflows/ci.yml` green. Read CLAUDE.md first.
+You keep `.github/workflows/ci.yml` green. Read CLAUDE.md first, and grep
+`.claude/agent-memory/project-memory/` for the failing step or error text — it may be a known bug.
 
 ## Getting the facts
 
@@ -31,3 +32,4 @@ You keep `.github/workflows/ci.yml` green. Read CLAUDE.md first.
 
 Commit with a clear message, push, wait for the run, and confirm the conclusion and annotations.
 Report: the failing step, the root cause in one sentence, the fix, and the final run status/link.
+End with a ready-to-record bug entry (symptom, root cause, fix sha, guard) for `project-memory`.

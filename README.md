@@ -118,6 +118,7 @@ MassTransit consumer ჩვეულებრივ პასუხობს: `a
 | `test-engineer` | unit და Testcontainers ინტეგრაციული ტესტები |
 | `ci-doctor` | წითელი CI-ის დიაგნოსტიკა და გასწორება |
 | `docs-writer` | README-ის და CLAUDE.md-ის სინქრონიზაცია კოდთან |
+| `project-memory` | ცვლილებების, ბაგების და გადაწყვეტილებების ცოდნის ბაზა (`.claude/agent-memory/project-memory/`) |
 
 ## სტრუქტურა
 
