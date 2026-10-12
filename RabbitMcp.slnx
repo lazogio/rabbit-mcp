@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RabbitMcp.Contracts/RabbitMcp.Contracts.csproj" />
+    <Project Path="src/RabbitMcp.Server/RabbitMcp.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RabbitMcp.Tests/RabbitMcp.Tests.csproj" />
+  </Folder>
+</Solution>
