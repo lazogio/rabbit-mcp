@@ -1,119 +1,74 @@
 # rabbit-mcp
 
-MCP სერვერი RabbitMQ-სთვის, რომელიც **შეტყობინებების კონტრაქტებზეა** აგებული. თითო კონტრაქტი (C# record) ცალკე ტიპიზებულ `publish_*` ხელსაწყოდ იქცევა. ხელსაწყოს `inputSchema` თავად კონტრაქტის JSON Schema-ა, ამიტომ მოდელი მხოლოდ კონტრაქტთან შესაბამის შეტყობინებას აგზავნის, სერვერი კი გაგზავნამდე ვალიდაციის წესებსაც ამოწმებს.
+RabbitMQ-ის MCP სერვერი, რომელიც **შეტყობინებების კონტრაქტებზეა** აგებული (.NET 10).
+თითო C# record კონტრაქტი ცალკე ტიპიზებულ ხელსაწყოდ იქცევა, რომლის `inputSchema` თავად კონტრაქტია. შეტყობინებები MassTransit-ის ფორმატშია, ამიტომ MassTransit v8/v9 სერვისები მათ კონფიგურაციის გარეშე იღებენ. თავად სერვერი MassTransit-ზე დამოკიდებული არ არის, იყენებს მხოლოდ `RabbitMQ.Client`-ს.
 
-შეტყობინებები MassTransit-ის ფორმატში იწერება (`application/vnd.masstransit+json`, `urn:message:…`, exchange `Namespace:Type`), ამიტომ MassTransit v8/v9 consumer-ები მათ დამატებითი კონფიგურაციის გარეშე იღებენ. თავად სერვერი MassTransit-ის პაკეტზე დამოკიდებული არ არის, იყენებს მხოლოდ `RabbitMQ.Client`-ს.
+## შესაძლებლობები
 
-## სტრუქტურა
-
-```
-src/RabbitMcp.Contracts   კონტრაქტები ([MessageContract] record-ები). დამოკიდებულებები არ აქვს,
-                          ამიტომ შეგიძლიათ თქვენს სერვისებშიც გამოიყენოთ.
-src/RabbitMcp.Server      MCP სერვერი (stdio)
-  Contracts/              რეესტრი, სახელების კონვენციები, DataAnnotations ვალიდაცია
-  Messaging/              კავშირი, envelope, fault-ების პარსინგი, peek/republish
-  Tools/                  MCP ხელსაწყოები და მათი შედეგის ტიპები (outputSchema)
-tests/RabbitMcp.Tests     unit ტესტები (RabbitMQ არ სჭირდება)
-```
-
-მოთხოვნები: .NET 10 SDK, ModelContextProtocol 2.2.0, RabbitMQ.Client 7.2.2.
+- **Event-ები:** `publish_<contract>` აქვეყნებს შეტყობინებას გაგზავნამდე ვალიდაციით.
+- **Request/response:** `request_<contract>` აგზავნის მოთხოვნას და ელოდება consumer-ის პასუხს. პასუხიც მოწმდება თავის კონტრაქტზე.
+- **დიაგნოსტიკა:** რიგების სტატისტიკა და შეტყობინებების ნახვა ამოღების გარეშე, MassTransit-ის fault-ის დეტალებით.
+- **აღდგენა:** `_error` რიგიდან შეტყობინებების უსაფრთხოდ დაბრუნება საწყის რიგში.
 
 ## სწრაფი დაწყება
 
 ```bash
-docker compose up -d                 # ლოკალური RabbitMQ, UI: http://localhost:15672
-dotnet test                          # ტესტები
+docker compose up -d                                    # RabbitMQ, UI: http://localhost:15672
+dotnet test
 dotnet publish src/RabbitMcp.Server -c Release -o out
-```
-
-MCP კლიენტში **გამოქვეყნებული ბინარი** დაარეგისტრირეთ და არა `dotnet run`. `dotnet run` აგების ლოგს stdout-ზე წერს და ეს MCP პროტოკოლს აზიანებს.
-
-**Claude Code:**
-
-```bash
 claude mcp add rabbit-mcp \
   -e RabbitMcp__Uri=amqp://guest:guest@localhost:5672/ \
   -e RabbitMcp__EnablePublish=true \
   -- /full/path/to/out/rabbit-mcp
 ```
 
-**Claude Desktop** (`claude_desktop_config.json`):
+> MCP კლიენტში დაარეგისტრირეთ `dotnet publish`-ით მიღებული ბინარი და არა `dotnet run`: `dotnet run` stdout-ზე წერს და MCP პროტოკოლს აზიანებს.
 
-```json
-{
-  "mcpServers": {
-    "rabbit-mcp": {
-      "command": "/full/path/to/out/rabbit-mcp",
-      "env": {
-        "RabbitMcp__Uri": "amqp://guest:guest@localhost:5672/",
-        "RabbitMcp__EnablePublish": "true",
-        "RabbitMcp__EnableRepublish": "false"
-      }
-    }
-  }
-}
-```
+Claude Desktop-ისთვის იგივე ბინარი და env ცვლადები `claude_desktop_config.json`-ის `mcpServers`-ში ჩაწერეთ.
 
 ## კონფიგურაცია
 
-| პარამეტრი | ნაგულისხმევი | აღწერა |
+პარამეტრები `appsettings.json`-ში ან env ცვლადებში იწერება.
+
+| ცვლადი | ნაგულისხმევი | აღწერა |
 |---|---|---|
-| `RabbitMcp__Uri` | `amqp://guest:guest@localhost:5672/` | AMQP URI. vhost მის ბოლოშია (`…/prod`). |
-| `RabbitMcp__ClientName` | `rabbit-mcp` | კავშირის სახელი და envelope-ის `sourceAddress`. |
-| `RabbitMcp__EnablePublish` | `false` | `publish_*` და `request_*` ხელსაწყოების რეგისტრაცია. |
-| `RabbitMcp__EnableRepublish` | `false` | `republish_from_error` ხელსაწყოს რეგისტრაცია. |
-| `RabbitMcp__MaxMessagesPerCall` | `50` | `count`-ის ზედა ზღვარი. |
-| `RabbitMcp__MaxPayloadChars` | `16000` | ამაზე დიდი body ნაჩვენებია შეკვეცილი (მხოლოდ ჩვენებისას). |
+| `RabbitMcp__Uri` | `amqp://guest:guest@localhost:5672/` | AMQP URI, vhost ბოლოშია (`…/prod`) |
+| `RabbitMcp__ClientName` | `rabbit-mcp` | კავშირის სახელი და envelope-ის `sourceAddress` |
+| `RabbitMcp__EnablePublish` | `false` | ჩართავს `publish_*` და `request_*` ხელსაწყოებს |
+| `RabbitMcp__EnableRepublish` | `false` | ჩართავს `republish_from_error`-ს |
+| `RabbitMcp__MaxMessagesPerCall` | `50` | `count`-ის ზედა ზღვარი |
+| `RabbitMcp__MaxPayloadChars` | `16000` | ამაზე დიდი body ჩვენებისას იკვეცება |
 
 ## ხელსაწყოები
 
-| ხელსაწყო | როდის ჩანს | რას აკეთებს |
-|---|---|---|
-| `list_contracts` | ყოველთვის | კონტრაქტები: ვერსია, URN, exchange, publish ხელსაწყოს სახელი |
-| `validate_message` | ყოველთვის | JSON-ის შემოწმება კონტრაქტზე, გაგზავნის გარეშე |
-| `queue_stats` | ყოველთვის | ready შეტყობინებებისა და consumer-ების რაოდენობა |
-| `peek_messages` | ყოველთვის | შეტყობინებების ნახვა ამოღების გარეშე: payload, კონტრაქტის შემოწმება, MassTransit fault-ის დეტალები |
-| `publish_<contract>` | `EnablePublish` | event კონტრაქტის ტიპიზებული publish |
-| `request_<contract>` | `EnablePublish` | request კონტრაქტის გაგზავნა და consumer-ის პასუხის მოლოდინი (request/response) |
-| `republish_from_error` | `EnableRepublish` | `_error`/`_skipped` რიგიდან საწყის რიგში დაბრუნება, ორ ნაბიჯად |
+| ხელსაწყო | რას აკეთებს |
+|---|---|
+| `list_contracts` | კონტრაქტების სია: event/request, ვერსია, URN, exchange, პასუხის ტიპები |
+| `validate_message` | JSON-ს კონტრაქტზე ამოწმებს გაგზავნის გარეშე |
+| `queue_stats` | რიგში მზა შეტყობინებების და consumer-ების რაოდენობა |
+| `peek_messages` | აჩვენებს შეტყობინებებს ამოღების გარეშე: payload, კონტრაქტის შემოწმება, fault |
+| `publish_<contract>` * | აქვეყნებს event-ს |
+| `request_<contract>` * | აგზავნის request-ს და აბრუნებს პასუხს |
+| `republish_from_error` ** | აბრუნებს შეტყობინებებს `_error`/`_skipped` რიგიდან: ჯერ preview, შემდეგ `confirm=true` |
 
-ყველა ხელსაწყო აბრუნებს `structuredContent`-ს და აცხადებს `outputSchema`-ს. მოსალოდნელი შეცდომები, მაგალითად ვალიდაციის ჩავარდნა ან გამოუყენებელი exchange, `isError: true`-ით ბრუნდება გასაგები ტექსტით, რომ მოდელმა შეცდომა გაასწოროს.
+\* `EnablePublish` · \** `EnableRepublish`. ყველა ხელსაწყო აბრუნებს `structuredContent`-ს და აცხადებს `outputSchema`-ს. შეცდომები `isError: true`-ით და გასაგები ტექსტით ბრუნდება.
 
-## კონტრაქტის დამატება
+## კონტრაქტები
 
 ```csharp
-namespace Shop.Contracts.Payments;
-
+// Event → publish_payment_captured
 [MessageContract("Payment was captured by the PSP.", Version = 1)]
 public sealed record PaymentCaptured
 {
     [Description("Order the payment belongs to.")]
     public required Guid OrderId { get; init; }
 
-    [Description("Captured amount, > 0.")]
     [Range(typeof(decimal), "0.01", "1000000")]
     public required decimal Amount { get; init; }
-
-    [Description("ISO 4217 currency, e.g. GEL.")]
-    [RegularExpression("^[A-Z]{3}$")]
-    public required string Currency { get; init; }
 }
-```
 
-- `required`/nullability: სქემის `required` ველი, `null` უარიყოფა.
-- `[Description]`: ველის აღწერა, რომელსაც მოდელი კითხულობს.
-- DataAnnotations (`[Range]`, `[StringLength]`, `[RegularExpression]`, `[EmailAddress]`, `[MinLength]`): SDK მათ სქემაშიც ასახავს (`minimum`, `pattern`, `format` ...), სერვერი კი publish-ამდე თავადაც ამოწმებს, ჩადგმულ ობიექტებსა და სიებშიც.
-
-თუ კონტრაქტი სხვა ასამბლეაშია, დაამატეთ ის `Program.cs`-ში: `ContractRegistry.FromAssemblies(...)`.
-
-**MassTransit-თან თავსებადობა.** consumer მაშინ მიიღებს შეტყობინებას, როცა მისი ტიპის სრული სახელი (`Namespace:Type`) URN-ს ემთხვევა. თუ consumer-ების კონტრაქტები სხვა namespace-შია, მიუთითეთ `[MessageContract(..., Urn = "urn:message:Their.Namespace:Type", Exchange = "Their.Namespace:Type")]`. ყველაზე მარტივი გზა კი ისაა, რომ Contracts პროექტი სერვისებშიც გამოიყენოთ.
-
-## Request/response
-
-კონტრაქტი request ხდება, როცა მას `Responses` აქვს მითითებული. ასეთი კონტრაქტისთვის `publish_*`-ის ნაცვლად `request_*` ხელსაწყო იქმნება:
-
-```csharp
-[MessageContract("Asks the order service for the current status of an order.",
+// Request → request_get_order_status
+[MessageContract("Asks for the current status of an order.",
     Responses = new[] { typeof(OrderStatus), typeof(OrderNotFound) })]
 public sealed record GetOrderStatus
 {
@@ -121,57 +76,39 @@ public sealed record GetOrderStatus
 }
 ```
 
-MassTransit consumer-ს არაფერი სჭირდება ჩვეულებრივი request consumer-ის გარდა:
+- **`required` / nullability:** ველი სავალდებულოა, `null` უარიყოფა.
+- **`[Description]`:** ველის ახსნა, რომელსაც მოდელი კითხულობს.
+- **DataAnnotations** (`[Range]`, `[StringLength]`, `[RegularExpression]`, `[EmailAddress]`, `[MinLength]`): ჩანს სქემაში და სერვერიც ამოწმებს, ჩადგმულ ობიექტებსა და სიებშიც.
+- **სახელები:** URN `urn:message:Namespace:Type`, exchange `Namespace:Type`. სხვა namespace-ის კონტრაქტზე მისაბმელად გამოიყენეთ `Urn`/`Exchange`.
+- **სხვა ასამბლეის კონტრაქტები:** დაამატეთ `Program.cs`-ში, `ContractRegistry.FromAssemblies(...)`-ში.
 
-```csharp
-public class GetOrderStatusConsumer(IOrderRepository orders) : IConsumer<GetOrderStatus>
-{
-    public async Task Consume(ConsumeContext<GetOrderStatus> context)
-    {
-        var order = await orders.Find(context.Message.OrderId);
-        if (order is null)
-            await context.RespondAsync(new OrderNotFound { OrderId = context.Message.OrderId });
-        else
-            await context.RespondAsync(new OrderStatus { OrderId = order.Id, Status = order.Status });
-    }
-}
-```
+## Request/response
 
-როგორ მუშაობს:
-1. სერვერი ერთხელ ქმნის დროებით reply exchange-ს და queue-ს (`rabbit-mcp_<machine>_<guid>`, non-durable, auto-delete). დროშები იგივეა, რასაც MassTransit იყენებს `?temporary=true` მისამართისთვის, ამიტომ consumer-ის მხარეს declare-ზე კონფლიქტი არ წარმოიქმნება.
-2. request-ს თან ახლავს `requestId`, `responseAddress` და TTL, რომელიც timeout-ის ტოლია (AMQP `expiration` + envelope `expirationTime`). სერვერი ჯერ იწყებს პასუხის მოსმენას და მხოლოდ შემდეგ აგზავნის request-ს.
+MassTransit consumer ჩვეულებრივ პასუხობს: `await context.RespondAsync(new OrderStatus { ... })`.
+
+1. სერვერი ერთ დროებით reply queue-ს ქმნის. მისი დროშები ემთხვევა MassTransit-ის `?temporary=true` მისამართისას.
+2. request-ს თან ახლავს `requestId`, `responseAddress` და TTL, რომელიც timeout-ის ტოლია (1–120 წამი, ნაგულისხმევად 30).
 3. პასუხი `requestId`-ით უკავშირდება request-ს. შედეგში ჩანს:
    - `status`: `responded`, `faulted` ან `timeout`;
-   - `responseType`: მაგალითად `OrderStatus` ან `OrderNotFound`;
-   - `responseCheck`: აკმაყოფილებს თუ არა პასუხი **თავის** კონტრაქტს, ანუ consumer-იც მოწმდება;
-   - `respondedBy`: ვინ უპასუხა (endpoint-ის მისამართი, მანქანა, პროცესი, assembly).
-4. თუ consumer exception-ს ისვრის, MassTransit `Fault<T>`-ს აგზავნის response მისამართზე და შედეგში `status: faulted` ჩანს exception-ის ტიპით, შეტყობინებით და stack trace-ით.
-5. timeout-ის შემდეგ მოსული პასუხი იგნორირდება.
+   - `responseType` და `response`;
+   - `responseCheck`: აკმაყოფილებს თუ არა პასუხი თავის კონტრაქტს;
+   - `respondedBy`: endpoint, მანქანა, პროცესი.
+4. consumer-ის exception MassTransit-ის `Fault<T>`-ის სახით მოდის: ტიპი, შეტყობინება, stack trace.
 
-**MassTransit-ის გარეშე დაწერილი responder** (მაგალითად, სუფთა RabbitMQ.Client) უნდა:
-- request envelope-იდან წაიკითხოს `requestId` და `responseAddress`;
-- პასუხი გამოაქვეყნოს exchange-ზე, რომლის სახელიც `responseAddress`-ის ბოლო სეგმენტია (query-ის გარეშე), routing key `""`-ით. ეს exchange უკვე არსებობს, ამიტომ თავიდან declare არ სჭირდება;
-- გააგზავნოს MassTransit envelope: `requestId` (იგივე), `messageType: ["urn:message:<Namespace>:<ResponseType>"]`, `message: {...}`, `sourceAddress` (სურვილისამებრ), content type `application/vnd.masstransit+json`.
+**Responder MassTransit-ის გარეშე** პასუხს აქვეყნებს exchange-ზე, რომლის სახელიც `responseAddress`-ის ბოლო სეგმენტია, routing key `""`-ით. envelope-ში უნდა იყოს იგივე `requestId`, `messageType: ["urn:message:Ns:Type"]` და `message`, content type კი `application/vnd.masstransit+json`.
 
 ## გარანტიები
 
-**publish და request:**
-- ვალიდაცია ჩავარდნისას არაფერი იგზავნება.
-- exchange-ის არსებობა მოწმდება წინასწარ. MassTransit მას consumer-ის გაშვებისას ქმნის, ამიტომ თუ exchange არ არსებობს, შეტყობინებას ჯერ არავინ იღებს.
-- publisher confirms + `mandatory`: თუ შეტყობინება ვერცერთ რიგში ვერ მოხვდა, ბრუნდება შეცდომა და შეტყობინება ჩუმად არ იკარგება.
-- შეტყობინებები persistent-ია.
+- **publish/request:** ვალიდაციის ჩავარდნისას არაფერი იგზავნება. exchange-ის არსებობა წინასწარ მოწმდება. publisher confirms და `mandatory` უზრუნველყოფს, რომ ვერ მიწოდებული შეტყობინება შეცდომად დაბრუნდეს და ჩუმად არ დაიკარგოს. შეტყობინებები persistent-ია.
+- **republish:** შეტყობინება error რიგიდან ack-დება მხოლოდ ბროკერის დადასტურების შემდეგ, წარუმატებელი კი რიგში რჩება. body უცვლელია, იშლება მხოლოდ `MT-Reason`, `MT-Fault-*` და `MT-Host-*`. `messageIds`-ით მხოლოდ preview-ში ნანახ შეტყობინებებს აბრუნებთ. მიწოდება at-least-once-ია, ამიტომ consumer-ები `messageId`-ით იდემპოტენტური უნდა იყვნენ.
+- **peek:** შეტყობინება რიგში რჩება, მაგრამ იღებს `redelivered` დროშას და შეიძლება თანმიმდევრობა შეეცვალოს. quorum რიგებზე თითოეული peek delivery-limit-ში ითვლება.
 
-**republish_from_error:**
-- `confirm`-ის გარეშე მხოლოდ preview-ს აბრუნებს.
-- თითოეული შეტყობინება error რიგში ack-დება მხოლოდ მას შემდეგ, რაც ბროკერმა republish დაადასტურა. ჩავარდნილი და გამოტოვებული შეტყობინებები რიგში რჩება.
-- body ბაიტ-ბაიტ უცვლელად გადაიგზავნება და არასდროს იკვეცება. იშლება მხოლოდ `MT-Reason`, `MT-Fault-*` და `MT-Host-*` ჰედერები, ემატება `X-Republished-*`.
-- `messageIds`-ით შეგიძლიათ ზუსტად ის შეტყობინებები გადააგზავნოთ, რომლებიც preview-ში ნახეთ.
-- მიწოდება at-least-once-ია: confirm-სა და ack-ს შორის crash-ის შემთხვევაში შესაძლოა დუბლიკატი გაჩნდეს. consumer-ები `messageId`-ით იდემპოტენტური უნდა იყვნენ.
+## სტრუქტურა
 
-**peek_messages:** შეტყობინებებს ack-ის გარეშე იღებს და მაშინვე აბრუნებს რიგში. ამიტომ მათ `redelivered` დროშა ედება და რიგში თანმიმდევრობა შეიძლება შეიცვალოს. quorum რიგებზე თითოეული peek delivery-limit-ში ითვლება. აქტიური consumer-ების მქონე რიგებს ნუ დაათვალიერებთ.
+```
+src/RabbitMcp.Contracts    კონტრაქტები (დამოკიდებულებების გარეშე, სერვისებშიც გამოიყენება)
+src/RabbitMcp.Server       Contracts/ რეესტრი, ვალიდაცია · Messaging/ AMQP, envelope, reply · Tools/ MCP ხელსაწყოები
+tests/RabbitMcp.Tests      unit ტესტები (RabbitMQ არ სჭირდება)
+```
 
-## შემდეგი ნაბიჯები
-
-- ინტეგრაციული ტესტები Testcontainers-ით (ნამდვილი RabbitMQ + MassTransit consumer).
-- `list_queues` Management API-ს მეშვეობით (AMQP რიგების ჩამოთვლას ვერ აკეთებს).
-- Streamable HTTP ტრანსპორტი (`ModelContextProtocol.AspNetCore`) და ავტორიზაცია, თუ სერვერი გაზიარებული იქნება.
+**შემდეგი ნაბიჯები:** ინტეგრაციული ტესტები Testcontainers-ით, `list_queues` Management API-ით, HTTP ტრანსპორტი ავტორიზაციით.
