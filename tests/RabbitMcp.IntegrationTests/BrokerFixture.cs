@@ -12,8 +12,16 @@ using Testcontainers.RabbitMq;
 
 namespace RabbitMcp.IntegrationTests;
 
-/// <summary>What a MassTransit consumer saw.</summary>
-public sealed record Received<T>(T Message, Guid? MessageId, IReadOnlyDictionary<string, object?> Headers);
+/// <summary>
+/// What a MassTransit consumer saw. For envelope-serialized messages MassTransit's
+/// <c>ConsumeContext.Headers</c> are the envelope's headers; AMQP headers are only in
+/// <c>ReceiveContext.TransportHeaders</c>.
+/// </summary>
+public sealed record Received<T>(
+    T Message,
+    Guid? MessageId,
+    IReadOnlyDictionary<string, object?> Headers,
+    IReadOnlyDictionary<string, object?> TransportHeaders);
 
 /// <summary>
 /// One RabbitMQ container + one MassTransit bus (the "services") + the rabbit-mcp components
@@ -134,7 +142,9 @@ public sealed class BrokerFixture : IAsyncLifetime
     }
 
     private static Received<T> Capture<T>(ConsumeContext<T> ctx) where T : class =>
-        new(ctx.Message, ctx.MessageId, ctx.Headers.GetAll().ToDictionary(h => h.Key, h => (object?)h.Value));
+        new(ctx.Message, ctx.MessageId,
+            ctx.Headers.GetAll().ToDictionary(h => h.Key, h => (object?)h.Value),
+            ctx.ReceiveContext.TransportHeaders.GetAll().ToDictionary(h => h.Key, h => (object?)h.Value));
 
     private static TaskCompletionSource<Received<T>> Get<T>(
         ConcurrentDictionary<Guid, TaskCompletionSource<Received<T>>> map, Guid id) =>

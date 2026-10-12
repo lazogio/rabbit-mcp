@@ -40,10 +40,14 @@ public sealed class ErrorQueueTests(BrokerFixture broker)
 
         var received = await broker.WaitForCancelled(orderId);
         Assert.Equal("Customer request", received.Message.Reason);
-        Assert.Equal(ErrorQueue, received.Headers["X-Republished-From"]?.ToString());
-        Assert.DoesNotContain(received.Headers.Keys, k => k.StartsWith("MT-Fault-", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(ErrorQueue, ToText(received.TransportHeaders["X-Republished-From"]));
+        Assert.DoesNotContain(received.TransportHeaders.Keys, k => k.StartsWith("MT-Fault-", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(received.TransportHeaders.Keys, k => k.Equals("MT-Reason", StringComparison.OrdinalIgnoreCase));
         await broker.WaitForQueueCount(ErrorQueue, 0);
     }
+
+    private static string? ToText(object? value) =>
+        value is byte[] bytes ? System.Text.Encoding.UTF8.GetString(bytes) : value?.ToString();
 
     [Fact]
     public async Task Republish_to_a_missing_exchange_keeps_the_message()
