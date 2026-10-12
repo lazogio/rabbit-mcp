@@ -1,5 +1,7 @@
 # rabbit-mcp
 
+[![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml)
+
 RabbitMQ-ის MCP სერვერი, რომელიც **შეტყობინებების კონტრაქტებზეა** აგებული (.NET 10).
 თითო C# record კონტრაქტი ცალკე ტიპიზებულ ხელსაწყოდ იქცევა, რომლის `inputSchema` თავად კონტრაქტია. შეტყობინებები MassTransit-ის ფორმატშია, ამიტომ MassTransit v8/v9 სერვისები მათ კონფიგურაციის გარეშე იღებენ. თავად სერვერი MassTransit-ზე დამოკიდებული არ არის, იყენებს მხოლოდ `RabbitMQ.Client`-ს.
 
@@ -110,5 +112,7 @@ src/RabbitMcp.Contracts    კონტრაქტები (დამოკი
 src/RabbitMcp.Server       Contracts/ რეესტრი, ვალიდაცია · Messaging/ AMQP, envelope, reply · Tools/ MCP ხელსაწყოები
 tests/RabbitMcp.Tests      unit ტესტები (RabbitMQ არ სჭირდება)
 ```
+
+**CI:** ყოველ push-სა და PR-ზე GitHub Actions აგებს პროექტს და უშვებს ტესტებს. `main`-ზე ასევე ქვეყნდება სერვერის ბინარი (artifact `rabbit-mcp-linux-x64`).
 
 **შემდეგი ნაბიჯები:** ინტეგრაციული ტესტები Testcontainers-ით, `list_queues` Management API-ით, HTTP ტრანსპორტი ავტორიზაციით.
