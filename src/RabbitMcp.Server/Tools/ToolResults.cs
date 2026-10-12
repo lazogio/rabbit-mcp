@@ -20,15 +20,17 @@ public sealed record PublishResult(
 
 public sealed record ContractInfo(
     string Name,
+    [property: Description("event (publish_*) or request (request_*, waits for a reply)")] string Kind,
     string ToolName,
     int Version,
     string MessageTypeUrn,
     string Exchange,
-    string Description);
+    string Description,
+    [property: Description("For requests: reply types the consumer may answer with.")] IReadOnlyList<string> Responses);
 
 public sealed record ContractList(
     IReadOnlyList<ContractInfo> Contracts,
-    [property: Description("Whether publish_* tools are enabled on this server.")] bool PublishEnabled);
+    [property: Description("Whether publish_* and request_* tools are enabled on this server.")] bool PublishEnabled);
 
 public sealed record ContractValidation(
     string Contract,
@@ -86,3 +88,30 @@ public sealed record RepublishResult(
     IReadOnlyList<RepublishOutcome> Outcomes,
     int Republished,
     int Requeued);
+
+public sealed record ExceptionSummary(string? ExceptionType, string? Message, string? StackTrace);
+
+public sealed record RequestFault(
+    string? FaultedMessageId,
+    string? Timestamp,
+    IReadOnlyList<ExceptionSummary> Exceptions);
+
+public sealed record Responder(
+    [property: Description("Receive endpoint of the consumer that replied (envelope sourceAddress).")] string? Address,
+    string? MachineName,
+    string? ProcessName,
+    string? Assembly);
+
+public sealed record RequestResult(
+    string RequestId,
+    string MessageId,
+    string Contract,
+    [property: Description("responded | faulted | timeout")] string Status,
+    [property: Description("Name of the reply type, e.g. OrderStatus.")] string? ResponseType,
+    [property: Description("Message types of the reply, as sent by the consumer.")] IReadOnlyList<string>? ResponseMessageTypes,
+    [property: Description("The reply message.")] JsonElement? Response,
+    [property: Description("Whether the reply satisfies its response contract. Null for unknown reply types.")] ContractCheck? ResponseCheck,
+    [property: Description("Exceptions thrown by the consumer when Status is faulted.")] RequestFault? Fault,
+    Responder? RespondedBy,
+    long ElapsedMs,
+    [property: Description("Hint for the next step, e.g. after a timeout.")] string? Note);

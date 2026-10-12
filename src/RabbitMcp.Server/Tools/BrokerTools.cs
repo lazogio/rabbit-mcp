@@ -18,11 +18,13 @@ public sealed class BrokerTools(
 {
     [McpServerTool(Name = "list_contracts", Title = "List message contracts",
         ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
-    [Description("Lists the message contracts this server knows: name, version, MassTransit message type, exchange and the publish tool for each.")]
+    [Description("Lists the message contracts this server knows: events (publish_*) and requests (request_*, with their possible replies), with version, MassTransit message type and exchange.")]
     public ContractList ListContracts() =>
         new(
             [.. contracts.Contracts.Select(c =>
-                new ContractInfo(c.Name, c.ToolName, c.Version, c.MessageTypeUrn, c.Exchange, c.Description))],
+                new ContractInfo(
+                    c.Name, c.IsRequest ? "request" : "event", c.ToolName, c.Version, c.MessageTypeUrn, c.Exchange,
+                    c.Description, [.. c.Responses.Select(r => r.Name)]))],
             options.Value.EnablePublish);
 
     [McpServerTool(Name = "validate_message", Title = "Validate a message against a contract",

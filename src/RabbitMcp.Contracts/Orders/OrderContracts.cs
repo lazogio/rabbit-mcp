@@ -43,6 +43,33 @@ public sealed record OrderLine
     public required decimal UnitPrice { get; init; }
 }
 
+// Request/response: the MCP server sends GetOrderStatus and waits for the consumer's
+// reply. A MassTransit consumer answers with context.RespondAsync(new OrderStatus { ... })
+// or context.RespondAsync(new OrderNotFound { ... }).
+[MessageContract("Asks the order service for the current status of an order.",
+    Responses = new[] { typeof(OrderStatus), typeof(OrderNotFound) })]
+public sealed record GetOrderStatus
+{
+    [Description("Id of the order to look up.")]
+    public required Guid OrderId { get; init; }
+}
+
+public sealed record OrderStatus
+{
+    public required Guid OrderId { get; init; }
+
+    [Description("Submitted, Paid, Shipped or Cancelled.")]
+    [RegularExpression("^(Submitted|Paid|Shipped|Cancelled)$")]
+    public required string Status { get; init; }
+
+    public DateTime? UpdatedAtUtc { get; init; }
+}
+
+public sealed record OrderNotFound
+{
+    public required Guid OrderId { get; init; }
+}
+
 [MessageContract("An order was cancelled before shipping.", Version = 1)]
 public sealed record OrderCancelled
 {

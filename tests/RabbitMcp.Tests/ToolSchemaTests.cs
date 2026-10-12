@@ -14,17 +14,30 @@ public class ToolSchemaTests
     private static IEnumerable<string> Names(JsonElement array) => array.EnumerateArray().Select(e => e.GetString()!);
 
     [Fact]
-    public void One_publish_tool_per_contract()
+    public void One_tool_per_contract_publish_for_events_request_for_requests()
     {
-        var names = ContractToolFactory.CreatePublishTools(Registry).Select(t => t.ProtocolTool.Name);
+        var names = ContractToolFactory.CreateTools(Registry).Select(t => t.ProtocolTool.Name);
 
-        Assert.Equal(new[] { "publish_order_cancelled", "publish_order_submitted" }, names);
+        Assert.Equal(new[] { "request_get_order_status", "publish_order_cancelled", "publish_order_submitted" }, names);
+    }
+
+    [Fact]
+    public void Request_tool_takes_timeout_and_returns_request_result()
+    {
+        var tool = ContractToolFactory.CreateTool(Registry.Get(typeof(GetOrderStatus))).ProtocolTool;
+        var props = tool.InputSchema.GetProperty("properties");
+
+        Assert.True(props.TryGetProperty("timeoutSeconds", out _));
+        Assert.True(props.GetProperty("message").GetProperty("properties").TryGetProperty("orderId", out _));
+        Assert.DoesNotContain("timeoutSeconds", Names(tool.InputSchema.GetProperty("required")));
+        Assert.True(tool.OutputSchema!.Value.GetProperty("properties").TryGetProperty("status", out _));
+        Assert.Contains("OrderStatus, OrderNotFound", tool.Description);
     }
 
     [Fact]
     public void Input_schema_is_the_contract_schema()
     {
-        var tool = ContractToolFactory.CreatePublishTool(Registry.Get(typeof(OrderSubmitted))).ProtocolTool;
+        var tool = ContractToolFactory.CreateTool(Registry.Get(typeof(OrderSubmitted))).ProtocolTool;
         var schema = tool.InputSchema;
 
         Assert.Contains("message", Names(schema.GetProperty("required")));
@@ -46,7 +59,7 @@ public class ToolSchemaTests
     [Fact]
     public void Output_schema_and_annotations_are_advertised()
     {
-        var tool = ContractToolFactory.CreatePublishTool(Registry.Get(typeof(OrderCancelled))).ProtocolTool;
+        var tool = ContractToolFactory.CreateTool(Registry.Get(typeof(OrderCancelled))).ProtocolTool;
 
         Assert.NotNull(tool.OutputSchema);
         Assert.True(tool.OutputSchema.Value.GetProperty("properties").TryGetProperty("messageId", out _));

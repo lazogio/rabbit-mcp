@@ -116,7 +116,7 @@ public static class FaultHeaders
         _ => value.ToString(),
     };
 
-    private static string? TrimStackTrace(string? stackTrace)
+    public static string? TrimStackTrace(string? stackTrace)
     {
         if (stackTrace is null)
             return null;

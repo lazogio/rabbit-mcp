@@ -72,6 +72,9 @@ public sealed class EnvelopeHost
     }
 }
 
+/// <summary>Request/response fields of an outgoing request (MassTransit request client semantics).</summary>
+public sealed record RequestEnvelopeInfo(Guid RequestId, string ResponseAddress, DateTime ExpirationTimeUtc);
+
 /// <summary>Builds the envelope for an outgoing contract message.</summary>
 public sealed class EnvelopeFactory(TimeProvider time)
 {
@@ -81,13 +84,17 @@ public sealed class EnvelopeFactory(TimeProvider time)
         Uri brokerUri,
         string sourceName,
         Guid messageId,
-        string? correlationId)
+        string? correlationId,
+        RequestEnvelopeInfo? request = null)
     {
         return new MassTransitEnvelope
         {
             MessageId = messageId.ToString(),
             ConversationId = messageId.ToString(),
             CorrelationId = correlationId,
+            RequestId = request?.RequestId.ToString(),
+            ResponseAddress = request?.ResponseAddress,
+            ExpirationTime = request?.ExpirationTimeUtc,
             SourceAddress = BrokerAddress.ForEntity(brokerUri, sourceName),
             DestinationAddress = BrokerAddress.ForEntity(brokerUri, contract.Exchange),
             MessageType = [contract.MessageTypeUrn],

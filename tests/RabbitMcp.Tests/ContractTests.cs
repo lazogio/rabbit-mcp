@@ -60,7 +60,7 @@ public class ContractRegistryTests
     {
         var registry = ContractRegistry.FromAssemblies(typeof(OrderSubmitted).Assembly);
 
-        Assert.Equal(new[] { "OrderCancelled", "OrderSubmitted" }, registry.Contracts.Select(c => c.Name));
+        Assert.Equal(new[] { "GetOrderStatus", "OrderCancelled", "OrderSubmitted" }, registry.Contracts.Select(c => c.Name));
         Assert.Same(registry.Get(typeof(OrderCancelled)), registry.FindByName("publish_order_cancelled"));
         Assert.Same(registry.Get(typeof(OrderCancelled)), registry.FindByName("ordercancelled"));
         Assert.Equal("OrderSubmitted",

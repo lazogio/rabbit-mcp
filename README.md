@@ -60,7 +60,7 @@ claude mcp add rabbit-mcp \
 |---|---|---|
 | `RabbitMcp__Uri` | `amqp://guest:guest@localhost:5672/` | AMQP URI. vhost მის ბოლოშია (`…/prod`). |
 | `RabbitMcp__ClientName` | `rabbit-mcp` | კავშირის სახელი და envelope-ის `sourceAddress`. |
-| `RabbitMcp__EnablePublish` | `false` | `publish_*` ხელსაწყოების რეგისტრაცია. |
+| `RabbitMcp__EnablePublish` | `false` | `publish_*` და `request_*` ხელსაწყოების რეგისტრაცია. |
 | `RabbitMcp__EnableRepublish` | `false` | `republish_from_error` ხელსაწყოს რეგისტრაცია. |
 | `RabbitMcp__MaxMessagesPerCall` | `50` | `count`-ის ზედა ზღვარი. |
 | `RabbitMcp__MaxPayloadChars` | `16000` | ამაზე დიდი body ნაჩვენებია შეკვეცილი (მხოლოდ ჩვენებისას). |
@@ -73,7 +73,8 @@ claude mcp add rabbit-mcp \
 | `validate_message` | ყოველთვის | JSON-ის შემოწმება კონტრაქტზე, გაგზავნის გარეშე |
 | `queue_stats` | ყოველთვის | ready შეტყობინებებისა და consumer-ების რაოდენობა |
 | `peek_messages` | ყოველთვის | შეტყობინებების ნახვა ამოღების გარეშე: payload, კონტრაქტის შემოწმება, MassTransit fault-ის დეტალები |
-| `publish_<contract>` | `EnablePublish` | თითო კონტრაქტზე ერთი ტიპიზებული publish |
+| `publish_<contract>` | `EnablePublish` | event კონტრაქტის ტიპიზებული publish |
+| `request_<contract>` | `EnablePublish` | request კონტრაქტის გაგზავნა და consumer-ის პასუხის მოლოდინი (request/response) |
 | `republish_from_error` | `EnableRepublish` | `_error`/`_skipped` რიგიდან საწყის რიგში დაბრუნება, ორ ნაბიჯად |
 
 ყველა ხელსაწყო აბრუნებს `structuredContent`-ს და აცხადებს `outputSchema`-ს. მოსალოდნელი შეცდომები, მაგალითად ვალიდაციის ჩავარდნა ან გამოუყენებელი exchange, `isError: true`-ით ბრუნდება გასაგები ტექსტით, რომ მოდელმა შეცდომა გაასწოროს.
@@ -107,9 +108,54 @@ public sealed record PaymentCaptured
 
 **MassTransit-თან თავსებადობა.** consumer მაშინ მიიღებს შეტყობინებას, როცა მისი ტიპის სრული სახელი (`Namespace:Type`) URN-ს ემთხვევა. თუ consumer-ების კონტრაქტები სხვა namespace-შია, მიუთითეთ `[MessageContract(..., Urn = "urn:message:Their.Namespace:Type", Exchange = "Their.Namespace:Type")]`. ყველაზე მარტივი გზა კი ისაა, რომ Contracts პროექტი სერვისებშიც გამოიყენოთ.
 
+## Request/response
+
+კონტრაქტი request ხდება, როცა მას `Responses` აქვს მითითებული. ასეთი კონტრაქტისთვის `publish_*`-ის ნაცვლად `request_*` ხელსაწყო იქმნება:
+
+```csharp
+[MessageContract("Asks the order service for the current status of an order.",
+    Responses = new[] { typeof(OrderStatus), typeof(OrderNotFound) })]
+public sealed record GetOrderStatus
+{
+    public required Guid OrderId { get; init; }
+}
+```
+
+MassTransit consumer-ს არაფერი სჭირდება ჩვეულებრივი request consumer-ის გარდა:
+
+```csharp
+public class GetOrderStatusConsumer(IOrderRepository orders) : IConsumer<GetOrderStatus>
+{
+    public async Task Consume(ConsumeContext<GetOrderStatus> context)
+    {
+        var order = await orders.Find(context.Message.OrderId);
+        if (order is null)
+            await context.RespondAsync(new OrderNotFound { OrderId = context.Message.OrderId });
+        else
+            await context.RespondAsync(new OrderStatus { OrderId = order.Id, Status = order.Status });
+    }
+}
+```
+
+როგორ მუშაობს:
+1. სერვერი ერთხელ ქმნის დროებით reply exchange-ს და queue-ს (`rabbit-mcp_<machine>_<guid>`, non-durable, auto-delete). დროშები იგივეა, რასაც MassTransit იყენებს `?temporary=true` მისამართისთვის, ამიტომ consumer-ის მხარეს declare-ზე კონფლიქტი არ წარმოიქმნება.
+2. request-ს თან ახლავს `requestId`, `responseAddress` და TTL, რომელიც timeout-ის ტოლია (AMQP `expiration` + envelope `expirationTime`). სერვერი ჯერ იწყებს პასუხის მოსმენას და მხოლოდ შემდეგ აგზავნის request-ს.
+3. პასუხი `requestId`-ით უკავშირდება request-ს. შედეგში ჩანს:
+   - `status`: `responded`, `faulted` ან `timeout`;
+   - `responseType`: მაგალითად `OrderStatus` ან `OrderNotFound`;
+   - `responseCheck`: აკმაყოფილებს თუ არა პასუხი **თავის** კონტრაქტს, ანუ consumer-იც მოწმდება;
+   - `respondedBy`: ვინ უპასუხა (endpoint-ის მისამართი, მანქანა, პროცესი, assembly).
+4. თუ consumer exception-ს ისვრის, MassTransit `Fault<T>`-ს აგზავნის response მისამართზე და შედეგში `status: faulted` ჩანს exception-ის ტიპით, შეტყობინებით და stack trace-ით.
+5. timeout-ის შემდეგ მოსული პასუხი იგნორირდება.
+
+**MassTransit-ის გარეშე დაწერილი responder** (მაგალითად, სუფთა RabbitMQ.Client) უნდა:
+- request envelope-იდან წაიკითხოს `requestId` და `responseAddress`;
+- პასუხი გამოაქვეყნოს exchange-ზე, რომლის სახელიც `responseAddress`-ის ბოლო სეგმენტია (query-ის გარეშე), routing key `""`-ით. ეს exchange უკვე არსებობს, ამიტომ თავიდან declare არ სჭირდება;
+- გააგზავნოს MassTransit envelope: `requestId` (იგივე), `messageType: ["urn:message:<Namespace>:<ResponseType>"]`, `message: {...}`, `sourceAddress` (სურვილისამებრ), content type `application/vnd.masstransit+json`.
+
 ## გარანტიები
 
-**publish:**
+**publish და request:**
 - ვალიდაცია ჩავარდნისას არაფერი იგზავნება.
 - exchange-ის არსებობა მოწმდება წინასწარ. MassTransit მას consumer-ის გაშვებისას ქმნის, ამიტომ თუ exchange არ არსებობს, შეტყობინებას ჯერ არავინ იღებს.
 - publisher confirms + `mandatory`: თუ შეტყობინება ვერცერთ რიგში ვერ მოხვდა, ბრუნდება შეცდომა და შეტყობინება ჩუმად არ იკარგება.

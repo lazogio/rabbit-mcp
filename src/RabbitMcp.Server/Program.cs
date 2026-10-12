@@ -39,6 +39,7 @@ builder.Services
     .AddSingleton<EnvelopeFactory>()
     .AddSingleton<MessageInspector>()
     .AddSingleton<QueueBrowser>()
+    .AddSingleton<ReplyListener>()
     .AddSingleton<ContractPublisher>();
 
 var mcp = builder.Services
@@ -46,8 +47,9 @@ var mcp = builder.Services
     .WithStdioServerTransport()
     .WithTools<BrokerTools>(ToolJson.Options);
 
+// publish_* for events, request_* for request/response contracts.
 if (settings.EnablePublish)
-    mcp.WithTools(ContractToolFactory.CreatePublishTools(contracts));
+    mcp.WithTools(ContractToolFactory.CreateTools(contracts));
 
 if (settings.EnableRepublish)
     mcp.WithTools<RepublishTools>(ToolJson.Options);

@@ -13,7 +13,20 @@ public sealed record ContractDescriptor(
     string MessageTypeUrn,
     string Exchange,
     int Version,
-    string Description);
+    string Description)
+{
+    /// <summary>Possible replies. Non-empty means this contract is a request.</summary>
+    public IReadOnlyList<ResponseDescriptor> Responses { get; init; } = [];
+
+    public bool IsRequest => Responses.Count > 0;
+
+    public ResponseDescriptor? FindResponse(IEnumerable<string>? urns) =>
+        urns?.Select(u => Responses.FirstOrDefault(r => string.Equals(r.MessageTypeUrn, u, StringComparison.OrdinalIgnoreCase)))
+            .FirstOrDefault(r => r is not null);
+}
+
+/// <summary>A reply type of a request contract.</summary>
+public sealed record ResponseDescriptor(Type Type, string Name, string MessageTypeUrn);
 
 /// <summary>Discovers [MessageContract] types and resolves them by type, name or URN.</summary>
 public sealed partial class ContractRegistry
@@ -73,9 +86,11 @@ public sealed partial class ContractRegistry
         if (attr.Version < 1)
             throw new InvalidOperationException($"Contract '{type.FullName}' has an invalid version {attr.Version}.");
 
+        var responses = attr.Responses.Distinct().Select(DescribeResponse).ToArray();
+
         // MassTransit defaults: urn:message:Namespace:Type and exchange Namespace:Type.
         var messageName = $"{type.Namespace}:{type.Name}";
-        var toolName = attr.ToolName ?? "publish_" + ToSnakeCase(type.Name);
+        var toolName = attr.ToolName ?? (responses.Length > 0 ? "request_" : "publish_") + ToSnakeCase(type.Name);
 
         if (!ToolNameRegex().IsMatch(toolName))
             throw new InvalidOperationException(
@@ -88,7 +103,19 @@ public sealed partial class ContractRegistry
             MessageTypeUrn: attr.Urn ?? "urn:message:" + messageName,
             Exchange: attr.Exchange ?? messageName,
             Version: attr.Version,
-            Description: attr.Description);
+            Description: attr.Description)
+        {
+            Responses = responses,
+        };
+    }
+
+    private static ResponseDescriptor DescribeResponse(Type type)
+    {
+        if (type.IsGenericType || type.IsNested || type.IsAbstract || !type.IsClass || string.IsNullOrEmpty(type.Namespace))
+            throw new InvalidOperationException(
+                $"Response type '{type.FullName}' must be a non-generic, non-nested, non-abstract class or record in a namespace.");
+
+        return new ResponseDescriptor(type, type.Name, $"urn:message:{type.Namespace}:{type.Name}");
     }
 
     /// <summary>OrderSubmitted -> order_submitted, HTTPRequestSent -> http_request_sent.</summary>

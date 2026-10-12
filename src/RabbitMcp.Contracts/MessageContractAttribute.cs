@@ -29,6 +29,17 @@ public sealed class MessageContractAttribute(string description) : Attribute
     /// <summary>Overrides the exchange the message is published to.</summary>
     public string? Exchange { get; init; }
 
-    /// <summary>Overrides the MCP tool name. Default: <c>publish_{snake_case_type_name}</c>.</summary>
+    /// <summary>
+    /// Overrides the MCP tool name. Default: <c>publish_{snake_case_type_name}</c>, or
+    /// <c>request_{snake_case_type_name}</c> when <see cref="Responses"/> is set.
+    /// </summary>
     public string? ToolName { get; init; }
+
+    /// <summary>
+    /// Makes this contract a request (MassTransit request/response). The consumer replies
+    /// with one of these types via <c>context.RespondAsync(...)</c>. Response types are plain
+    /// classes/records; their URN is <c>urn:message:{Namespace}:{TypeName}</c>.
+    /// </summary>
+    /// <example><c>Responses = new[] { typeof(OrderStatus), typeof(OrderNotFound) }</c></example>
+    public Type[] Responses { get; init; } = [];
 }

@@ -73,12 +73,16 @@ public sealed class MessageInspector(ContractRegistry contracts, IOptions<Rabbit
     }
 
     /// <summary>Deserializes JSON into the contract type and runs its validation rules.</summary>
-    public static IReadOnlyList<string> Validate(ContractDescriptor contract, JsonElement json, JsonSerializerOptions jsonOptions)
+    public static IReadOnlyList<string> Validate(ContractDescriptor contract, JsonElement json, JsonSerializerOptions jsonOptions) =>
+        Validate(contract.Type, json, jsonOptions);
+
+    /// <summary>Deserializes JSON into <paramref name="type"/> and runs its validation rules.</summary>
+    public static IReadOnlyList<string> Validate(Type type, JsonElement json, JsonSerializerOptions jsonOptions)
     {
         object? instance;
         try
         {
-            instance = json.Deserialize(contract.Type, jsonOptions);
+            instance = json.Deserialize(type, jsonOptions);
         }
         catch (JsonException ex)
         {

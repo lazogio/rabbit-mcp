@@ -11,7 +11,7 @@ public sealed class RabbitMcpOptions
     /// <summary>Connection name shown in the management UI and used as the envelope source address.</summary>
     public string ClientName { get; set; } = "rabbit-mcp";
 
-    /// <summary>Registers the typed publish_* tools. Off by default.</summary>
+    /// <summary>Registers the typed publish_* (events) and request_* (request/response) tools. Off by default.</summary>
     public bool EnablePublish { get; set; }
 
     /// <summary>Registers republish_from_error. Off by default.</summary>
