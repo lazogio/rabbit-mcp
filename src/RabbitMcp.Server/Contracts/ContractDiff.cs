@@ -22,8 +22,15 @@ public static class ContractDiff
     public const string Warning = "warning";
     public const string Info = "info";
 
-    private static readonly JsonSerializerOptions SchemaJson =
-        new(MassTransitJson.Options) { TypeInfoResolver = new DefaultJsonTypeInfoResolver() };
+    private static readonly JsonSerializerOptions SchemaJson = CreateSchemaOptions();
+
+    /// <summary>MassTransit naming, but without custom converters: they would turn a type's schema into "any".</summary>
+    private static JsonSerializerOptions CreateSchemaOptions()
+    {
+        var options = new JsonSerializerOptions(MassTransitJson.Options) { TypeInfoResolver = new DefaultJsonTypeInfoResolver() };
+        options.Converters.Clear();
+        return options;
+    }
 
     private static readonly JsonSchemaExporterOptions ExporterOptions = new() { TreatNullObliviousAsNonNullable = true };
 

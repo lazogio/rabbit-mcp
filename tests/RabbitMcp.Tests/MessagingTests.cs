@@ -170,6 +170,23 @@ public class FaultHeaderTests
 
 public class MessageInspectorTests
 {
+    [Fact]
+    public void Decimals_written_as_strings_by_MassTransit_are_valid_and_written_back_as_numbers()
+    {
+        // MassTransit's StringDecimalJsonConverter writes {"unitPrice":"9.99"}.
+        var json = System.Text.Json.JsonDocument.Parse("""
+            {"orderId":"8d9e2b8e-1f3a-4f7e-9a51-0b1d7f2a6c11","customerEmail":"ana@example.ge",
+             "lines":[{"sku":"ABC-1","quantity":2,"unitPrice":"9.99"}]}
+            """).RootElement;
+
+        Assert.Empty(MessageInspector.Validate(typeof(RabbitMcp.Contracts.Orders.OrderSubmitted), json, MassTransitJson.Options));
+        Assert.Equal("""{"amount":9.99}""",
+            System.Text.Json.JsonSerializer.Serialize(new { amount = 9.99m }, MassTransitJson.Options));
+        Assert.NotEmpty(MessageInspector.Validate(typeof(RabbitMcp.Contracts.Orders.OrderSubmitted),
+            System.Text.Json.JsonDocument.Parse("""{"orderId":"8d9e2b8e-1f3a-4f7e-9a51-0b1d7f2a6c11","customerEmail":"ana@example.ge","lines":[{"sku":"ABC-1","quantity":2,"unitPrice":"lots"}]}""").RootElement,
+            MassTransitJson.Options));
+    }
+
     private static MessageInspector Inspector(int maxChars = 16_000) => new(
         ContractRegistry.FromAssemblies(typeof(OrderSubmitted).Assembly),
         Options.Create(new RabbitMcpOptions { MaxPayloadChars = maxChars }));
