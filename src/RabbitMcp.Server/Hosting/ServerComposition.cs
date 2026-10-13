@@ -98,6 +98,7 @@ public static class ServerComposition
         if (!string.IsNullOrWhiteSpace(settings.ManagementUri))
         {
             builder.Services.AddSingleton(sp => new ManagementClient(sp.GetRequiredService<IOptions<RabbitMcpOptions>>()));
+            builder.Services.AddSingleton<TopologyInspector>();
             mcp.WithTools<ManagementTools>(ToolJson.Options);
         }
 

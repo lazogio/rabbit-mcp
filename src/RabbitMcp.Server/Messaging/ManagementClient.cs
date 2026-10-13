@@ -119,10 +119,30 @@ public sealed class ManagementClient : IDisposable
         if (name is not null)
             query.Append("&name=").Append(Uri.EscapeDataString(name)).Append("&use_regex=").Append(regex ? "true" : "false");
 
+        return await GetAsync<ManagementPage>(query.ToString(), notFound: NotFoundIs.VhostError, ct)
+            ?? throw new McpException("The Management API returned an empty response.");
+    }
+
+    /// <summary>Bindings whose source is this exchange; null if the exchange does not exist.</summary>
+    public Task<IReadOnlyList<ManagementBinding>?> GetSourceBindingsAsync(string exchange, CancellationToken ct) =>
+        GetAsync<IReadOnlyList<ManagementBinding>>(
+            $"api/exchanges/{Uri.EscapeDataString(_vhost)}/{Uri.EscapeDataString(exchange)}/bindings/source",
+            NotFoundIs.Null, ct);
+
+    /// <summary>One queue's statistics; null if it does not exist.</summary>
+    public Task<ManagementQueue?> GetQueueAsync(string queue, CancellationToken ct) =>
+        GetAsync<ManagementQueue>(
+            $"api/queues/{Uri.EscapeDataString(_vhost)}/{Uri.EscapeDataString(queue)}?columns={Columns}",
+            NotFoundIs.Null, ct);
+
+    private enum NotFoundIs { Null, VhostError }
+
+    private async Task<T?> GetAsync<T>(string path, NotFoundIs notFound, CancellationToken ct) where T : class
+    {
         HttpResponseMessage response;
         try
         {
-            response = await _http.GetAsync(query.ToString(), ct);
+            response = await _http.GetAsync(path, ct);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
@@ -138,14 +158,15 @@ public sealed class ManagementClient : IDisposable
                     throw new McpException(
                         $"The Management API at {_describe} rejected the credentials (HTTP {(int)response.StatusCode}). " +
                         "The user needs the 'monitoring' (or 'management') tag.");
+                case HttpStatusCode.NotFound when notFound == NotFoundIs.Null:
+                    return null;
                 case HttpStatusCode.NotFound:
                     throw new McpException($"Virtual host '{_vhost}' was not found by the Management API at {_describe}.");
             }
             if (!response.IsSuccessStatusCode)
                 throw new McpException($"The Management API at {_describe} answered HTTP {(int)response.StatusCode}.");
 
-            return await response.Content.ReadFromJsonAsync<ManagementPage>(Json, ct)
-                ?? throw new McpException("The Management API returned an empty response.");
+            return await response.Content.ReadFromJsonAsync<T>(Json, ct);
         }
     }
 
@@ -174,3 +195,10 @@ public sealed record ManagementQueue(
     [property: JsonPropertyName("messages_ready")] long? MessagesReady,
     [property: JsonPropertyName("messages_unacknowledged")] long? MessagesUnacknowledged,
     [property: JsonPropertyName("consumers")] long? Consumers);
+
+/// <summary>One item of GET /api/exchanges/{vhost}/{name}/bindings/source.</summary>
+public sealed record ManagementBinding(
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("destination")] string Destination,
+    [property: JsonPropertyName("destination_type")] string DestinationType,
+    [property: JsonPropertyName("routing_key")] string? RoutingKey);

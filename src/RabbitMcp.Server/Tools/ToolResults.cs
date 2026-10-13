@@ -163,3 +163,27 @@ public sealed record ReplyResult(
     string MessageId,
     [property: Description("The requester's reply exchange.")] string Exchange,
     [property: Description("Time between receiving the request and answering it.")] long ElapsedMs);
+
+public sealed record ConsumerQueue(
+    string Queue,
+    [property: Description("Exchanges the message passes through, from the contract exchange to this queue.")] IReadOnlyList<string> Via,
+    long? Consumers,
+    long? MessagesReady,
+    [property: Description("Ready messages in <queue>_error (faults); null if that queue does not exist.")] long? ErrorQueueMessages,
+    [property: Description("Ready messages in <queue>_skipped (no consumer for the type); null if it does not exist.")] long? SkippedQueueMessages);
+
+public sealed record ContractConsumers(
+    string Contract,
+    [property: Description("event or request")] string Kind,
+    string Exchange,
+    bool ExchangeExists,
+    [property: Description("ok | no-consumers (queues but nobody consuming) | no-queue (unroutable) | no-exchange (never consumed or published)")] string Status,
+    IReadOnlyList<ConsumerQueue> Queues,
+    long TotalConsumers,
+    IReadOnlyList<string> Warnings);
+
+public sealed record ContractConsumersReport(
+    IReadOnlyList<ContractConsumers> Contracts,
+    int Ok,
+    [property: Description("Contracts whose status is not ok.")] int WithProblems,
+    string Note);
