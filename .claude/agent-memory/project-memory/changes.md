@@ -1,5 +1,15 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Configurable permissions — roles for HTTP callers (feature/roles) — commits 20f8a96, 574e3b6
+- What: `Security/AccessControl` (Roles → grants read/publish/request/republish/respond/*, contract or error-queue
+  `*` patterns; UserRoles by API key name / preferred_username / email / sub; JWT roles claim `JwtRolesClaim`;
+  DefaultRoles) and `Security/ToolAccess` (tool → rule). MCP list-tools filter hides tools, call-tool filter
+  re-checks with arguments (errorQueue, pending request's contract) and audits `access denied`.
+- Decision: off until a role is configured (backward compatible; HTTP prints a startup note); once on, unknown
+  tools and users without roles get nothing (deny by default); stdio stays unrestricted (single local user).
+- Decision: Enable*/PublishAllow/PublishDeny remain the server-wide ceiling; roles only narrow.
+- Gotcha: tool error text in JSON-RPC is escaped (`'` → \u0027) — tests must read `result.content[].text`.
+
 ### 2026-10-13 Phase 6: review, responder HA, contract_consumers, contracts diff, Docker, NuGet (phase-6/all)
 - Review of phase 5 → BUG-008/009 fixed; cancelled reply keeps the request; `Stateless = true` explicit
   (SDK 2.2 already defaults to stateless — SEP-2567). Commit 993e45e.
