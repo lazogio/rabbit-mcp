@@ -115,3 +115,21 @@ public sealed record RequestResult(
     Responder? RespondedBy,
     long ElapsedMs,
     [property: Description("Hint for the next step, e.g. after a timeout.")] string? Note);
+
+public sealed record QueueInfo(
+    string Name,
+    [property: Description("classic, quorum or stream.")] string? Type,
+    string? State,
+    long? MessagesReady,
+    long? MessagesUnacknowledged,
+    long? Consumers,
+    [property: Description("True for MassTransit _error / _skipped queues.")] bool IsErrorQueue,
+    [property: Description("For error queues: the queue the messages faulted on (republish target).")] string? SourceQueue);
+
+public sealed record QueueListing(
+    string Vhost,
+    IReadOnlyList<QueueInfo> Queues,
+    [property: Description("How many queues matched the filters (may be more than returned).")] int Matched,
+    int TotalInVhost,
+    [property: Description("True when more queues matched than were returned.")] bool Truncated,
+    string Note);

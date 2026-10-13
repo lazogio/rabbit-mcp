@@ -38,7 +38,9 @@ public sealed class BrokerFixture : IAsyncLifetime
     public static readonly Guid FailingOrderId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     public static readonly Guid BadReplyOrderId = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
-    private readonly RabbitMqContainer _container = new RabbitMqBuilder("rabbitmq:4-management").Build();
+    private readonly RabbitMqContainer _container = new RabbitMqBuilder("rabbitmq:4-management")
+        .WithPortBinding(15672, true) // Management HTTP API, for list_queues
+        .Build();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource<Received<OrderSubmitted>>> _submitted = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource<Received<OrderCancelled>>> _cancelled = new();
     private readonly ConcurrentDictionary<Guid, int> _cancelAttempts = new();
@@ -48,6 +50,7 @@ public sealed class BrokerFixture : IAsyncLifetime
     public ContractRegistry Registry { get; private set; } = null!;
     public QueueBrowser Browser { get; private set; } = null!;
     public ContractPublisher Publisher { get; private set; } = null!;
+    public ManagementClient Management { get; private set; } = null!;
     private ReplyListener _replies = null!;
 
     public async Task InitializeAsync()
@@ -56,12 +59,17 @@ public sealed class BrokerFixture : IAsyncLifetime
         var amqp = new Uri(_container.GetConnectionString());
 
         // --- rabbit-mcp under test, wired exactly like Program.cs but without the MCP host.
-        var options = Microsoft.Extensions.Options.Options.Create(new RabbitMcpOptions { Uri = amqp.ToString(), ClientName = "rabbit-mcp-it" });
+        var managementUri = $"http://{_container.Hostname}:{_container.GetMappedPublicPort(15672)}";
+        var options = Microsoft.Extensions.Options.Options.Create(new RabbitMcpOptions
+        {
+            Uri = amqp.ToString(), ClientName = "rabbit-mcp-it", ManagementUri = managementUri,
+        });
         Connection = new RabbitConnection(options, TimeProvider.System, NullLogger<RabbitConnection>.Instance);
         Registry = ContractRegistry.FromAssemblies(typeof(OrderSubmitted).Assembly, typeof(NobodyListens).Assembly);
         var inspector = new MessageInspector(Registry, options);
         Browser = new QueueBrowser(Connection, inspector, TimeProvider.System, options, NullLogger<QueueBrowser>.Instance);
         _replies = new ReplyListener(Connection, options, NullLogger<ReplyListener>.Instance);
+        Management = new ManagementClient(options);
         Publisher = new ContractPublisher(Connection, Registry, new EnvelopeFactory(TimeProvider.System), _replies,
             TimeProvider.System, options, NullLogger<ContractPublisher>.Instance);
 
@@ -159,6 +167,7 @@ public sealed class BrokerFixture : IAsyncLifetime
         if (_bus is not null)
             await _bus.StopAsync();
         await _replies.DisposeAsync();
+        Management.Dispose();
         await Connection.DisposeAsync();
         await _container.DisposeAsync();
     }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Protocol;
 using RabbitMcp.Contracts.Orders;
 using RabbitMcp.Server;
@@ -26,6 +27,9 @@ builder.Services.AddOptions<RabbitMcpOptions>()
     .Validate(o => Uri.TryCreate(o.Uri, UriKind.Absolute, out var u) && u.Scheme is "amqp" or "amqps",
         "RabbitMcp:Uri must be an amqp:// or amqps:// URI.")
     .Validate(o => o.MaxMessagesPerCall is >= 1 and <= 1000, "RabbitMcp:MaxMessagesPerCall must be 1-1000.")
+    .Validate(o => string.IsNullOrWhiteSpace(o.ManagementUri)
+                   || (Uri.TryCreate(o.ManagementUri, UriKind.Absolute, out var m) && m.Scheme is "http" or "https"),
+        "RabbitMcp:ManagementUri must be an http:// or https:// URL.")
     .ValidateOnStart();
 
 var settings = builder.Configuration.GetSection(RabbitMcpOptions.Section).Get<RabbitMcpOptions>() ?? new();
@@ -71,6 +75,13 @@ if (settings.EnablePublish)
 
 if (settings.EnableRepublish)
     mcp.WithTools<RepublishTools>(ToolJson.Options);
+
+// list_queues needs the Management HTTP API (AMQP cannot enumerate queues).
+if (!string.IsNullOrWhiteSpace(settings.ManagementUri))
+{
+    builder.Services.AddSingleton(sp => new ManagementClient(sp.GetRequiredService<IOptions<RabbitMcpOptions>>()));
+    mcp.WithTools<ManagementTools>(ToolJson.Options);
+}
 
 await builder.Build().RunAsync();
 return 0;
