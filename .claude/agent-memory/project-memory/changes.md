@@ -1,5 +1,10 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Phase 3 review — branch review/phase-3 (27cb9e4), fast-forwarded into main
+- What: user asked to review phase 3; found and fixed BUG-004..007 (path separator, name clash, load error text,
+  list_queues paging). Not changed (noted): https Management API with self-signed certs has no trust option (by design,
+  no insecure switch); a contracts DLL depending on a *newer* version of an assembly the server ships cannot load.
+
 ### 2026-10-13 Phase 4 control — branch phase-4/control, fast-forwarded into main 2026-10-13
 - What: `PublishPolicy` (PublishAllow/PublishDeny, `*` patterns over name/tool/type/URN, deny wins) applied at tool
   registration and inside `ContractPublisher`; `AuditLog` (stderr + optional JSONL `AuditLogPath`, payload opt-in)

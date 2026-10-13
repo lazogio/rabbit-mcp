@@ -1,6 +1,6 @@
 # rabbit-mcp memory — index
 
-Last updated: 2026-10-13 · Bugs: 3 (0 open) · Next ID: BUG-004
+Last updated: 2026-10-13 · Bugs: 7 (0 open) · Next ID: BUG-008
 
 ## Files
 - `bugs.md` — bug log (symptom, root cause, fix, guard, lesson)
@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 3 (0 open) · Next ID: BUG-004
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-13 review/phase-3: BUG-004..007 fixed (path split, assembly name clash, load errors, list_queues paging)
 - 2026-10-13 phase-4/control: PublishAllow/Deny policy, audit log (stderr + JSONL), client identity in audit
 - 2026-10-13 phase-3/usability: ContractAssemblies option, exchange cache, optional list_queues (Management API)
 - 2026-10-13 phase-2/process: Dependabot, release workflow (5 platforms), MCP stdio smoke test, PR template
