@@ -34,6 +34,9 @@
 - External contract DLLs: load into the default ALC; keep a stable AssemblyVersion on the shared attribute assembly.
 
 ## MCP C# SDK (ModelContextProtocol 2.2)
+- Parameters of type `McpServer`, `RequestContext<CallToolRequestParams>`, `IProgress<ProgressNotificationValue>`,
+  `ClaimsPrincipal` (and DI services) are injected and excluded from the input schema; give them `= null` defaults
+  so direct callers (tests) can omit them. `McpServer.ClientInfo` = the client's initialize name/version.
 - Only `McpException` messages reach the client; other exceptions become a generic "An error occurred invoking '<tool>'".
 - `UseStructuredContent = true` + record return type → `outputSchema` + `structuredContent`.
 - DataAnnotations (`Range`, `StringLength`, `RegularExpression`, `EmailAddress`, `MinLength`) are mapped into the input schema by MEAI.

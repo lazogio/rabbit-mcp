@@ -23,9 +23,11 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
    (default chosen because the question was not answered).
 9. ✅ Exchange-exists cache (30 s, positive only), invalidated on 404 during publish/republish.
 
-## Phase 4 — Control
-10. ⬜ Allowlist of publishable/requestable contracts (`RabbitMcp__Publish__Allow`).
-11. ⬜ Audit log of publish / request / republish (no credentials).
+## Phase 4 — Control (`phase-4/control`) ✅ (merged 2026-10-13)
+10. ✅ `RabbitMcp__PublishAllow` / `PublishDeny` (`*` patterns over name, tool, type, URN; deny wins); denied
+    contracts get no tool and are refused by the publisher; `list_contracts.sendable`; startup warning for unmatched patterns.
+11. ✅ Audit log: publish / request / republish with outcome, ids and MCP client; stderr + optional JSON Lines file
+    (`AuditLogPath`, checked at startup); payload opt-in (`AuditIncludePayload`).
 
 ## Phase 5 — New capabilities (short design first)
 12. ⬜ Responder mode: `pending_requests` + `respond(requestId, response)` — **decision needed: manual vs automatic replies.**

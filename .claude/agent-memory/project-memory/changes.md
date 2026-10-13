@@ -1,5 +1,16 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Phase 4 control — branch phase-4/control, fast-forwarded into main 2026-10-13
+- What: `PublishPolicy` (PublishAllow/PublishDeny, `*` patterns over name/tool/type/URN, deny wins) applied at tool
+  registration and inside `ContractPublisher`; `AuditLog` (stderr + optional JSONL `AuditLogPath`, payload opt-in)
+  for publish/request/republish incl. errors and partial republish; MCP client from injected `McpServer`.
+- Decision: patterns are exact with `*` wildcards (not substring) — "Order" does not allow "OrderSubmitted".
+- Decision: audit file failures after a broker operation are logged, not thrown (the operation already happened);
+  an unwritable audit file is caught at startup instead (fail fast).
+- Decision: payload excluded from audit by default (PII); ids, contract, exchange, client always recorded.
+- Verified: all green first run; CI smoke step proves deny removes request_* tools in the real binary and the audit
+  file is created at startup.
+
 ### 2026-10-13 Phase 3 usability — branch phase-3/usability, fast-forwarded into main 2026-10-13
 - What: `RabbitMcp:ContractAssemblies` (external DLLs, deps probed next to them, samples only when unset,
   readable startup error + exit 1); `ExistenceCache` for exchange checks (30 s, positive only, invalidated on 404);

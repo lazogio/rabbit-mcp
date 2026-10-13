@@ -58,6 +58,9 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 - `RabbitMcp.Contracts` keeps `AssemblyVersion` 1.0.0.0 so external contract DLLs bind to the bundled copy;
   change it only for a breaking change to `[MessageContract]`.
 - Startup configuration errors: one line on stderr, exit code 1 (never a stack trace on stdout).
+- **Every operation that sends or moves messages is audited** (`AuditLog`, action + outcome + ids + client),
+  including failed and refused attempts. New sending tools must write audit events and respect `PublishPolicy`.
+- Tools get the MCP client via an injected `McpServer? server = null` parameter (excluded from the schema).
 - Passive declares (`ExchangeDeclarePassive`/`QueueDeclarePassive`) run on a throwaway channel:
   a 404 closes the channel.
 - Pure logic stays testable without a broker (registry, validator, envelope, fault parsing,

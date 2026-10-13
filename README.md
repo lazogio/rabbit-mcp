@@ -46,6 +46,10 @@ Claude Desktop-ისთვის იგივე ბინარი და env 
 | `RabbitMcp__ContractAssemblies` | — | თქვენი კონტრაქტების DLL-ები (`;`-ით გამოყოფილი). ცარიელისას ნიმუშის კონტრაქტები გამოიყენება |
 | `RabbitMcp__ManagementUri` | — | Management API, მაგ. `http://localhost:15672`. ჩართავს `list_queues`-ს |
 | `RabbitMcp__ExchangeCacheSeconds` | `30` | რამდენ წამს ახსოვს, რომ exchange არსებობს (`0` = გამორთული) |
+| `RabbitMcp__PublishAllow` | — | რომელი კონტრაქტების გაგზავნაა ნებადართული, მაგ. `Order*;Billing.Contracts.*`. ცარიელი = ყველა |
+| `RabbitMcp__PublishDeny` | — | რომლის გაგზავნა არასდროს შეიძლება. უპირატესია `PublishAllow`-ზე |
+| `RabbitMcp__AuditLogPath` | — | audit ფაილი (JSON Lines). ცარიელისას audit მხოლოდ stderr-ზე იწერება |
+| `RabbitMcp__AuditIncludePayload` | `false` | audit-ში შეტყობინების შიგთავსიც ჩაიწეროს (შეიძლება პერსონალურ მონაცემებს შეიცავდეს) |
 
 ## ხელსაწყოები
 
@@ -61,6 +65,16 @@ Claude Desktop-ისთვის იგივე ბინარი და env 
 | `republish_from_error` ** | აბრუნებს შეტყობინებებს `_error`/`_skipped` რიგიდან: ჯერ preview, შემდეგ `confirm=true` |
 
 \* `EnablePublish` · \** `EnableRepublish` · \*** `ManagementUri`. ყველა ხელსაწყო აბრუნებს `structuredContent`-ს და აცხადებს `outputSchema`-ს. შეცდომები `isError: true`-ით და გასაგები ტექსტით ბრუნდება.
+
+## კონტროლი
+
+**რისი გაგზავნა შეიძლება.** `PublishAllow`/`PublishDeny` ნიმუშები (`*` ნებისმიერი სიმბოლოა) ედარება კონტრაქტის სახელს, ხელსაწყოს სახელს, სრულ ტიპს ან URN-ს. რეგისტრი მნიშვნელობას არ აქვს. აკრძალული კონტრაქტის `publish_`/`request_` ხელსაწყო საერთოდ არ რეგისტრირდება, ხოლო სერვერი მას პირდაპირი გამოძახებისასაც უარყოფს. `list_contracts` თითოეულთან აჩვენებს `sendable`-ს. თუ ნიმუში არცერთ კონტრაქტს არ ემთხვევა, გაშვებისას გაფრთხილება ჩნდება. მაგალითად, production-ზე: `RabbitMcp__PublishAllow=Get*` (მხოლოდ შეკითხვები).
+
+**Audit.** ყოველი publish, request და republish იწერება შედეგთან ერთად: `sent`/`error`, `responded`/`faulted`/`timeout`, `republished`/`failed`/`skipped`. ჩანაწერში არის messageId/requestId, კონტრაქტი, exchange/რიგი და MCP კლიენტის სახელი და ვერსია. უარყოფილი მცდელობებიც იწერება. republish-ისას თითოეული შეტყობინება ცალკე იწერება, მაშინაც კი, თუ შუაში შეცდომა მოხდა. `AuditLogPath`-ის მითითებისას სერვერი ფაილის ჩაწერადობას გაშვებისას ამოწმებს და, თუ ჩაწერა შეუძლებელია, არ ეშვება. credentials audit-ში არასდროს ხვდება.
+
+```json
+{"timestamp":"2026-10-13T12:00:00+00:00","action":"publish","outcome":"sent","client":"claude-code 2.1.0","contract":"OrderSubmitted","exchange":"Shop.Contracts:OrderSubmitted","messageId":"…"}
+```
 
 ## კონტრაქტები
 
