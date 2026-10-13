@@ -16,6 +16,7 @@ trap 'rm -f "$OUT" "$ERR"' EXIT
 
 export RabbitMcp__EnablePublish=true
 export RabbitMcp__EnableRepublish=true
+export RabbitMcp__ManagementUri=${RabbitMcp__ManagementUri:-http://localhost:15672}   # registers list_queues; never called
 
 {
   printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"smoke-test","version":"1.0"}}}'
@@ -54,7 +55,7 @@ def names(var, default):
     raw = os.environ.get(var)
     return {n.strip() for n in raw.split(",") if n.strip()} if raw else set(default)
 
-expected = names("SMOKE_EXPECT_TOOLS", ["list_contracts", "validate_message", "queue_stats", "peek_messages",
+expected = names("SMOKE_EXPECT_TOOLS", ["list_contracts", "validate_message", "queue_stats", "peek_messages", "list_queues",
                  "republish_from_error", "publish_order_submitted", "publish_order_cancelled", "request_get_order_status"])
 forbidden = names("SMOKE_FORBID_TOOLS", [])
 missing = expected - tools.keys()

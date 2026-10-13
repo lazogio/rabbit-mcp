@@ -23,6 +23,16 @@
 - MassTransit sends replies to our `responseAddress` even if its host part differs from MassTransit's own host config
   (send transport uses its own connection; only the path/vhost/query of the address matter).
 
+## RabbitMQ Management API
+- Name filter without `use_regex` is a case-insensitive substring match; `page_size` max is 500; pages past
+  `page_count` → 400 "page out of range" (rabbit_mgmt_util.erl). Stats (counts, consumers) lag ~5 s → poll in tests.
+- The user needs the `monitoring` or `management` tag; AMQP-only users get 401.
+- Testcontainers RabbitMqBuilder maps only 5672 — add `.WithPortBinding(15672, true)` for the HTTP API.
+
+## .NET loading
+- Publishing to a deleted exchange with confirms → `OperationInterruptedException` (ReplyCode 404) from `BasicPublishAsync`.
+- External contract DLLs: load into the default ALC; keep a stable AssemblyVersion on the shared attribute assembly.
+
 ## MCP C# SDK (ModelContextProtocol 2.2)
 - Only `McpException` messages reach the client; other exceptions become a generic "An error occurred invoking '<tool>'".
 - `UseStructuredContent = true` + record return type → `outputSchema` + `structuredContent`.

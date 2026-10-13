@@ -9,7 +9,7 @@ RabbitMQ-ის MCP სერვერი, რომელიც **შეტყ�
 
 - **Event-ები:** `publish_<contract>` აქვეყნებს შეტყობინებას გაგზავნამდე ვალიდაციით.
 - **Request/response:** `request_<contract>` აგზავნის მოთხოვნას და ელოდება consumer-ის პასუხს. პასუხიც მოწმდება თავის კონტრაქტზე.
-- **დიაგნოსტიკა:** რიგების სტატისტიკა და შეტყობინებების ნახვა ამოღების გარეშე, MassTransit-ის fault-ის დეტალებით.
+- **დიაგნოსტიკა:** რიგების სია და სტატისტიკა, შეტყობინებების ნახვა ამოღების გარეშე, MassTransit-ის fault-ის დეტალებით.
 - **აღდგენა:** `_error` რიგიდან შეტყობინებების უსაფრთხოდ დაბრუნება საწყის რიგში.
 
 ## სწრაფი დაწყება
@@ -43,6 +43,9 @@ Claude Desktop-ისთვის იგივე ბინარი და env 
 | `RabbitMcp__EnableRepublish` | `false` | ჩართავს `republish_from_error`-ს |
 | `RabbitMcp__MaxMessagesPerCall` | `50` | `count`-ის ზედა ზღვარი |
 | `RabbitMcp__MaxPayloadChars` | `16000` | ამაზე დიდი body ჩვენებისას იკვეცება |
+| `RabbitMcp__ContractAssemblies` | — | თქვენი კონტრაქტების DLL-ები (`;`-ით გამოყოფილი). ცარიელისას ნიმუშის კონტრაქტები გამოიყენება |
+| `RabbitMcp__ManagementUri` | — | Management API, მაგ. `http://localhost:15672`. ჩართავს `list_queues`-ს |
+| `RabbitMcp__ExchangeCacheSeconds` | `30` | რამდენ წამს ახსოვს, რომ exchange არსებობს (`0` = გამორთული) |
 
 ## ხელსაწყოები
 
@@ -50,13 +53,14 @@ Claude Desktop-ისთვის იგივე ბინარი და env 
 |---|---|
 | `list_contracts` | კონტრაქტების სია: event/request, ვერსია, URN, exchange, პასუხის ტიპები |
 | `validate_message` | JSON-ს კონტრაქტზე ამოწმებს გაგზავნის გარეშე |
+| `list_queues` *** | რიგების სია ფილტრებით: სახელით, მხოლოდ error რიგები, მხოლოდ არაცარიელი. error რიგთან ჩანს, რომელ რიგს ეკუთვნის |
 | `queue_stats` | რიგში მზა შეტყობინებების და consumer-ების რაოდენობა |
 | `peek_messages` | აჩვენებს შეტყობინებებს ამოღების გარეშე: payload, კონტრაქტის შემოწმება, fault |
 | `publish_<contract>` * | აქვეყნებს event-ს |
 | `request_<contract>` * | აგზავნის request-ს და აბრუნებს პასუხს |
 | `republish_from_error` ** | აბრუნებს შეტყობინებებს `_error`/`_skipped` რიგიდან: ჯერ preview, შემდეგ `confirm=true` |
 
-\* `EnablePublish` · \** `EnableRepublish`. ყველა ხელსაწყო აბრუნებს `structuredContent`-ს და აცხადებს `outputSchema`-ს. შეცდომები `isError: true`-ით და გასაგები ტექსტით ბრუნდება.
+\* `EnablePublish` · \** `EnableRepublish` · \*** `ManagementUri`. ყველა ხელსაწყო აბრუნებს `structuredContent`-ს და აცხადებს `outputSchema`-ს. შეცდომები `isError: true`-ით და გასაგები ტექსტით ბრუნდება.
 
 ## კონტრაქტები
 
@@ -85,7 +89,7 @@ public sealed record GetOrderStatus
 - **`[Description]`:** ველის ახსნა, რომელსაც მოდელი კითხულობს.
 - **DataAnnotations** (`[Range]`, `[StringLength]`, `[RegularExpression]`, `[EmailAddress]`, `[MinLength]`): ჩანს სქემაში და სერვერიც ამოწმებს, ჩადგმულ ობიექტებსა და სიებშიც.
 - **სახელები:** URN `urn:message:Namespace:Type`, exchange `Namespace:Type`. სხვა namespace-ის კონტრაქტზე მისაბმელად გამოიყენეთ `Urn`/`Exchange`.
-- **სხვა ასამბლეის კონტრაქტები:** დაამატეთ `Program.cs`-ში, `ContractRegistry.FromAssemblies(...)`-ში.
+- **საკუთარი კონტრაქტები სერვერის აწყობის გარეშე:** შექმენით classlib, რომელიც `RabbitMcp.Contracts`-ს (nupkg Release-შია) იყენებს. ააგეთ და მიუთითეთ DLL: `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`. მისი დამოკიდებულებები DLL-ის გვერდით უნდა იდოს. ფარდობითი გზა სერვერის საქაღალდიდან ითვლება. არასწორი გზის შემთხვევაში სერვერი stderr-ზე ერთ გასაგებ სტრიქონს წერს და არ ეშვება. ასეთ შემთხვევაში ნიმუშის კონტრაქტები არ ერევა.
 
 ## Request/response
 
@@ -128,11 +132,13 @@ MassTransit consumer ჩვეულებრივ პასუხობს: `a
 ```
 src/RabbitMcp.Contracts    კონტრაქტები (დამოკიდებულებების გარეშე, სერვისებშიც გამოიყენება)
 src/RabbitMcp.Server       Contracts/ რეესტრი, ვალიდაცია · Messaging/ AMQP, envelope, reply · Tools/ MCP ხელსაწყოები
-tests/RabbitMcp.Tests      unit ტესტები (RabbitMQ არ სჭირდება)
+tests/RabbitMcp.Tests                  unit ტესტები (RabbitMQ არ სჭირდება)
+tests/RabbitMcp.IntegrationTests       ნამდვილი RabbitMQ 4 + MassTransit 8 (Testcontainers)
+tests/RabbitMcp.ExternalContracts      „გარე“ კონტრაქტების ნიმუში, runtime-ში იტვირთება
 ```
 
 **CI:** ყოველ push-სა და PR-ზე GitHub Actions აგებს პროექტს, უშვებს unit ტესტებს, ინტეგრაციულ ტესტებს ნამდვილ RabbitMQ 4-სა და MassTransit 8-ზე და smoke test-ს (`scripts/smoke-test.sh`), რომელიც გამოქვეყნებულ ბინარს stdio-ზე MCP კლიენტივით ესაუბრება. ჩავარდნილი ტესტი PR-ში annotation-ად ჩანს.
 
 **Release:** `git tag v0.2.0 && git push origin v0.2.0` ააგებს ბინარებს ხუთივე პლატფორმისთვის და შექმნის GitHub Release-ს. ვერსია tag-იდან მოდის და MCP კლიენტს `serverInfo.version`-ში უჩანს. `-` შემცველი tag (`v0.2.0-rc.1`) prerelease-ად ქვეყნდება. **Dependabot** NuGet-ისა და Actions-ის განახლებებს ყოველ ორშაბათს გვთავაზობს. MassTransit 9+ გამოთიშულია, რადგან ის კომერციულია.
 
-**შემდეგი ნაბიჯები:** ინტეგრაციული ტესტები Testcontainers-ით, `list_queues` Management API-ით, HTTP ტრანსპორტი ავტორიზაციით.
+**შემდეგი ნაბიჯები:** იხ. [ROADMAP.md](ROADMAP.md).

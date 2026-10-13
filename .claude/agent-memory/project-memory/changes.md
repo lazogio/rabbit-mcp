@@ -1,5 +1,18 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Phase 3 usability — branch phase-3/usability, fast-forwarded into main 2026-10-13
+- What: `RabbitMcp:ContractAssemblies` (external DLLs, deps probed next to them, samples only when unset,
+  readable startup error + exit 1); `ExistenceCache` for exchange checks (30 s, positive only, invalidated on 404);
+  optional `list_queues` via Management API (`ManagementUri`); `RabbitMcp.Contracts` nupkg in releases.
+- Decision: `RabbitMcp.Contracts` AssemblyVersion fixed at 1.0.0.0 — release builds set Version from the tag, and
+  external DLLs compiled against another version would otherwise fail to bind to the bundled copy (single file).
+- Decision: Management API is optional (tool registered only with `ManagementUri`) — user did not answer
+  whether the API is reachable; this works either way.
+- Decision: list_queues uses server-side pagination (500/page, max 20 pages) + the API's case-insensitive name filter;
+  error-queue filter uses `use_regex=true` with `_(error|skipped)$` (verified in rabbit_mgmt_util.erl).
+- Verified: everything green on first CI run; external contracts load in the single-file binary (smoke test);
+  deleted-exchange publish surfaces as OperationInterruptedException 404 against real RabbitMQ.
+
 ### 2026-10-13 Phase 2 process & distribution — branch phase-2/process (70b5c25..), fast-forwarded into main 2026-10-13
 - What: Dependabot (NuGet via Directory.Packages.props + Actions, weekly, grouped); release workflow (`v*` tag →
   self-contained single-file binaries linux-x64/arm64, win-x64, osx-x64/arm64 + SHA256SUMS → GitHub Release);

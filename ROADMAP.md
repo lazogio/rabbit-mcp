@@ -16,10 +16,12 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
    Bonus: `scripts/smoke-test.sh` — MCP stdio session against the published binary, in CI and release.
 6. 🔄 PR template added. Branch protection on `main` + "Automatically delete head branches" — **repo owner** (Settings).
 
-## Phase 3 — Usability
-7. ⬜ Contract assemblies from configuration (`RabbitMcp__ContractAssemblies`), no rebuild needed.
-8. ⬜ `list_queues` via the Management API (optional `ManagementUri`) — **decision needed: is the API reachable?**
-9. ⬜ Short-lived cache for exchange-exists checks.
+## Phase 3 — Usability (`phase-3/usability`) ✅ (merged 2026-10-13)
+7. ✅ Contract assemblies from configuration (`RabbitMcp__ContractAssemblies`), no rebuild needed; fixed
+   `RabbitMcp.Contracts` AssemblyVersion 1.0.0.0; nupkg attached to releases; proven on the single-file binary.
+8. ✅ `list_queues` via the Management API — optional: registered only when `ManagementUri` is set
+   (default chosen because the question was not answered).
+9. ✅ Exchange-exists cache (30 s, positive only), invalidated on 404 during publish/republish.
 
 ## Phase 4 — Control
 10. ⬜ Allowlist of publishable/requestable contracts (`RabbitMcp__Publish__Allow`).

@@ -30,10 +30,11 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 | Path | Responsibility |
 |---|---|
 | `src/RabbitMcp.Contracts` | `[MessageContract]` records. **No package dependencies** — services reference it too. |
-| `src/RabbitMcp.Server/Contracts` | `ContractRegistry` (naming conventions), `ContractValidator` (DataAnnotations, nested paths) |
-| `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish), `ReplyListener` + `ReplyInterpreter` (request/response) |
+| `src/RabbitMcp.Server/Contracts` | `ContractRegistry` (naming conventions), `ContractValidator` (DataAnnotations, nested paths), `ContractAssemblyLoader` (`ContractAssemblies` option) |
+| `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only) |
 | `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas) |
 | `tests/RabbitMcp.Tests` | xUnit unit tests, no broker needed |
+| `tests/RabbitMcp.ExternalContracts` | a user-style contracts DLL, loaded at runtime by loader tests and smoke tests |
 | `tests/RabbitMcp.IntegrationTests` | end-to-end against real RabbitMQ + MassTransit v8 (`BrokerFixture`); test-only contracts in `TestContracts.cs` |
 
 ## Conventions (must not break)
@@ -53,6 +54,10 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   off by default behind `EnablePublish` / `EnableRepublish`.
 - **stdout is the MCP transport**: all logging goes to stderr. Never `Console.WriteLine`.
 - **Secrets**: the AMQP URI contains credentials — only ever log/return `BrokerAddress.Describe(uri)`.
+  The same applies to `ManagementUri` and the Basic auth header.
+- `RabbitMcp.Contracts` keeps `AssemblyVersion` 1.0.0.0 so external contract DLLs bind to the bundled copy;
+  change it only for a breaking change to `[MessageContract]`.
+- Startup configuration errors: one line on stderr, exit code 1 (never a stack trace on stdout).
 - Passive declares (`ExchangeDeclarePassive`/`QueueDeclarePassive`) run on a throwaway channel:
   a 404 closes the channel.
 - Pure logic stays testable without a broker (registry, validator, envelope, fault parsing,
