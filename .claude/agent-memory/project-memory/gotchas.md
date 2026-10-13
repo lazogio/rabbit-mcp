@@ -84,6 +84,10 @@
 - RabbitMQ.Client 7: `AlreadyClosedException : OperationInterruptedException : RabbitMQClientException` — match the
   most derived first; `BrokerUnreachableException : IOException`.
 
+- MassTransit (System.Text.Json) writes `decimal` as a JSON **string** ("1800") and reads number or string.
+- MassTransit creates `<queue>_error` only on the first fault — poll for it, "does not exist" is "not yet".
+- RabbitMQ in docker compose: set RABBITMQ_DEFAULT_USER/PASS; `guest` is meant for localhost connections.
+
 ## Anti-patterns seen in other RabbitMQ MCP servers (do not copy)
 - Republish that consumes with `ack_requeue_false` before publishing → message lost if publish fails.
 - Management API `/get` with `truncate: 50000` used for republish → large bodies republished truncated.

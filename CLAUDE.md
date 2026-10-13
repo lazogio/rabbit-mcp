@@ -38,12 +38,13 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 | `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas) |
 | `tests/RabbitMcp.Tests` | xUnit unit tests, no broker needed |
 | `tests/RabbitMcp.ExternalContracts` | a user-style contracts DLL, loaded at runtime by loader tests and smoke tests |
+| `samples/Shop` | runnable sample (contracts, MassTransit service, compose); CI walks it with `scripts/sample-e2e.py` — keep it working when tools change |
 | `tests/RabbitMcp.IntegrationTests` | end-to-end against real RabbitMQ + MassTransit v8 (`BrokerFixture`); test-only contracts in `TestContracts.cs` |
 
 ## Conventions (must not break)
 
 - **MassTransit wire compatibility**: URN `urn:message:{Namespace}:{Type}`, exchange `{Namespace}:{Type}`,
-  camelCase envelope fields (`messageId`, `requestId`, `responseAddress`, `messageType[]`, `message`, ...),
+  MassTransit writes decimals as JSON strings (read both: `MassTransitDecimalConverter`); camelCase envelope fields (`messageId`, `requestId`, `responseAddress`, `messageType[]`, `message`, ...),
   content type `application/vnd.masstransit+json`, enums as numbers in envelopes.
   Reply exchange/queue: fanout, `durable:false`, `autoDelete:true` (= MassTransit `?temporary=true`).
   Verify changes against MassTransit source (`MassTransit/src`, tag v8.x) before claiming compatibility.

@@ -1,6 +1,15 @@
 # Bugs (newest first)
 
-Next ID: BUG-019
+Next ID: BUG-020
+
+### BUG-019 MassTransit decimals (JSON strings) failed contract validation — fixed (2026-10-13)
+- Symptom (found by the Shop sample e2e): `pending_requests` showed `check.valid=false` for an ApproveLargeOrder sent
+  by MassTransit; the message had `"total": "1800"`.
+- Root cause: MassTransit's `StringDecimalJsonConverter` writes decimals as strings (reads numbers or strings);
+  `MassTransitJson` only read numbers. Affected peek, pending_requests and request reply checks for any decimal.
+- Fix: `MassTransitDecimalConverter` (read number or numeric string, write number); `ContractDiff` clears converters
+  for schema export — commit b2d3fc7. Guard: `Decimals_written_as_strings_by_MassTransit_are_valid_and_written_back_as_numbers`.
+- Lesson: integration tests only sent decimals *to* MassTransit; test every direction of the wire format.
 
 ### BUG-011..018 Security & bug review (2026-10-13) — fixed in commit 34f6e15
 - BUG-011 (security, medium) Responder confused deputy: replies, rejections and automatic "busy" faults went to the

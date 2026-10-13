@@ -1,5 +1,14 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Shop sample (samples/shop) — commits f47f1de..b2d3fc7
+- What: `samples/Shop` — Shop.Contracts (OrderPlaced, GetOrderStatus, ApproveLargeOrder answered via responder),
+  Shop.Service (MassTransit 8; FLAKY-* fails once → _error demo; orders > 1000 ask for approval), Dockerfile targets
+  `service`/`mcp`, docker-compose (RabbitMQ shop/shop, ports on localhost, demo API key), Georgian walkthrough.
+- CI job "Sample (Shop, end to end)": `docker compose up --wait` + `scripts/sample-e2e.py` (MCP over HTTP: consumers,
+  request, publish → error → peek → republish, pending → reply, pending → reject). Failures surface as annotations.
+- Decision: samples are in RabbitMcp.slnx so every build compiles them; the sample builds rabbit-mcp from source
+  (no dependency on a published image).
+
 ### 2026-10-13 Configurable permissions — roles for HTTP callers (feature/roles) — commits 20f8a96, 574e3b6
 - What: `Security/AccessControl` (Roles → grants read/publish/request/republish/respond/*, contract or error-queue
   `*` patterns; UserRoles by API key name / preferred_username / email / sub; JWT roles claim `JwtRolesClaim`;

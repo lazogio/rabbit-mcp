@@ -1,6 +1,6 @@
 # rabbit-mcp memory — index
 
-Last updated: 2026-10-13 · Bugs: 18 (0 open) · Next ID: BUG-019
+Last updated: 2026-10-13 · Bugs: 19 (0 open) · Next ID: BUG-020
 
 ## Files
 - `bugs.md` — bug log (symptom, root cause, fix, guard, lesson)
@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 18 (0 open) · Next ID: BUG-019
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-13 samples/shop: Shop sample (contracts, MassTransit service, compose, CI e2e over MCP); BUG-019 decimals as strings
 - 2026-10-13 feature/roles: configurable permissions (roles, user/JWT assignment, tools/list filter, call enforcement, audit)
 - 2026-10-13 review/security-bugs: BUG-011..018 (responder confused deputy, JWT scopes, spoofed republish target, anonymous on 0.0.0.0, audit gaps, opaque broker errors, log forging), vuln scan in CI
 - 2026-10-13 phase-6/all: review (BUG-008..010), responder HA + long poll, contract_consumers, contracts diff CLI, Docker/GHCR, NuGet
