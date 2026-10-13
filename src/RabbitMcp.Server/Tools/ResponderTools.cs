@@ -4,6 +4,7 @@ using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
+using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
 
 namespace RabbitMcp.Server.Tools;
