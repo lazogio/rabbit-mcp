@@ -47,7 +47,7 @@ public class ManagementClientTests
 
         var request = Assert.Single(handler.Requests);
         var url = request.RequestUri!.ToString();
-        Assert.StartsWith("http://mq.local:15672/api/queues/prod?page=1&page_size=500", url);
+        Assert.StartsWith("http://mq.local:15672/api/queues/prod?page=1&page_size=10", url); // page sized to the limit
         Assert.Contains("columns=name,type,state,messages_ready,messages_unacknowledged,consumers", url);
         Assert.Contains("name=Ord&use_regex=false", url);
         Assert.Equal("Basic", request.Headers.Authorization!.Scheme);
@@ -96,6 +96,23 @@ public class ManagementClientTests
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(new[] { "a", "c" }, result.Queues.Select(q => q.Name));
         Assert.Equal(3, result.Matched);
+        Assert.True(result.Truncated);
+    }
+
+    [Fact]
+    public async Task Server_side_filtering_needs_a_single_request_and_reports_the_server_count()
+    {
+        // 5,000 matching queues: the first page of `limit` items and filtered_count are enough.
+        var json = $$"""{"total_count":9000,"filtered_count":5000,"item_count":2,"page":1,"page_size":2,"page_count":2500,"items":[{{QueueJson("orders-1")}},{{QueueJson("orders-2")}}]}""";
+        var (client, handler) = Create(_ => StubHandler.Json(json));
+
+        var result = await client.ListQueuesAsync("orders", false, false, limit: 2, CancellationToken.None);
+
+        Assert.Single(handler.Requests);
+        Assert.Contains("page_size=2", handler.Requests[0].RequestUri!.Query);
+        Assert.Equal(2, result.Queues.Count);
+        Assert.Equal(5000, result.Matched);
+        Assert.Equal(9000, result.TotalInVhost);
         Assert.True(result.Truncated);
     }
 

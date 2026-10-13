@@ -60,11 +60,21 @@ public sealed class ManagementClient : IDisposable
             ? (nameContains.Trim(), false)
             : onlyErrorQueues ? (ErrorQueueRegex, true) : ((string?)null, false);
 
+        // When the server filters everything (no onlyNonEmpty, error filter done by regex), one page of `limit`
+        // items and the server's filtered_count answer the call: no need to scan every queue in the vhost.
+        if (!onlyNonEmpty && (!onlyErrorQueues || regex))
+        {
+            var first = await GetPageAsync(1, Math.Min(limit, PageSize), nameFilter, regex, ct);
+            var queues = first.Items.Select(ToInfo).Where(q => !onlyErrorQueues || q.IsErrorQueue).ToArray();
+            return new QueueListing(_vhost, queues, Matched: first.FilteredCount, TotalInVhost: first.TotalCount,
+                Truncated: first.FilteredCount > queues.Length, Note: StatsNote);
+        }
+
         var matched = new List<QueueInfo>();
         int totalInVhost = 0, page = 1, pageCount;
         do
         {
-            var response = await GetPageAsync(page, nameFilter, regex, ct);
+            var response = await GetPageAsync(page, PageSize, nameFilter, regex, ct);
             totalInVhost = response.TotalCount;
             pageCount = response.PageCount;
 
@@ -89,9 +99,11 @@ public sealed class ManagementClient : IDisposable
             TotalInVhost: totalInVhost,
             Truncated: matched.Count > limit || !scannedAll,
             Note: scannedAll
-                ? "Message and consumer counts come from management statistics and can lag a few seconds."
+                ? StatsNote
                 : $"Only the first {MaxPages * PageSize} queues were scanned; narrow the search with nameContains.");
     }
+
+    private const string StatsNote = "Message and consumer counts come from management statistics and can lag a few seconds.";
 
     public static QueueInfo ToInfo(ManagementQueue q)
     {
@@ -100,9 +112,9 @@ public sealed class ManagementClient : IDisposable
             IsErrorQueue: source is not null, SourceQueue: source);
     }
 
-    private async Task<ManagementPage> GetPageAsync(int page, string? name, bool regex, CancellationToken ct)
+    private async Task<ManagementPage> GetPageAsync(int page, int pageSize, string? name, bool regex, CancellationToken ct)
     {
-        var query = new StringBuilder($"api/queues/{Uri.EscapeDataString(_vhost)}?page={page}&page_size={PageSize}")
+        var query = new StringBuilder($"api/queues/{Uri.EscapeDataString(_vhost)}?page={page}&page_size={pageSize}")
             .Append("&sort=name&columns=").Append(Columns);
         if (name is not null)
             query.Append("&name=").Append(Uri.EscapeDataString(name)).Append("&use_regex=").Append(regex ? "true" : "false");

@@ -55,7 +55,7 @@ try
 catch (Exception ex) when (ex is InvalidOperationException or ReflectionTypeLoadException or FileNotFoundException or FileLoadException)
 {
     // Startup configuration error: one readable line on stderr (stdout belongs to MCP), non-zero exit.
-    Console.Error.WriteLine($"rabbit-mcp: {ex.Message}");
+    Console.Error.WriteLine($"rabbit-mcp: {ContractAssemblyLoader.Describe(ex)}");
     return 1;
 }
 

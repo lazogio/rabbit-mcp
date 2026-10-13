@@ -24,7 +24,7 @@ public sealed class RabbitMcpOptions
     public int MaxPayloadChars { get; set; } = 16_000;
 
     /// <summary>
-    /// DLLs with your [MessageContract] types, separated by ";" or ",". Relative paths are resolved
+    /// DLLs with your [MessageContract] types, separated by ";" ("," is legal in paths). Relative paths are resolved
     /// against the server's folder. Empty: the built-in sample contracts are used.
     /// </summary>
     public string? ContractAssemblies { get; set; }

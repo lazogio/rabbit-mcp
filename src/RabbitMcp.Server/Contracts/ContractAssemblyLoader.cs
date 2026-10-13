@@ -15,7 +15,7 @@ public static class ContractAssemblyLoader
     private static bool _resolverInstalled;
 
     /// <summary>
-    /// Splits <paramref name="configured"/> (";" or "," separated DLL paths), resolves relative
+    /// Splits <paramref name="configured"/> (";"-separated DLL paths — not ",", which is legal in paths), resolves relative
     /// paths against <paramref name="baseDirectory"/> and loads each assembly into the default
     /// context. Dependencies are probed in each assembly's own folder. Throws a readable
     /// <see cref="InvalidOperationException"/> for missing files or unloadable assemblies.
@@ -51,20 +51,51 @@ public static class ContractAssemblyLoader
         string.IsNullOrWhiteSpace(configured)
             ? Array.Empty<string>()
             : configured
-                .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(p => Path.GetFullPath(Environment.ExpandEnvironmentVariables(p), baseDirectory))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
 
-    /// <summary>Returns the already-loaded assembly with the same identity instead of loading it twice.</summary>
+    /// <summary>
+    /// Loads <paramref name="path"/>, or returns the assembly of the same name that is already loaded when it is
+    /// that very file or the shared RabbitMcp.Contracts. A *different* assembly with the name of one the server
+    /// already uses (e.g. a contracts project called "RabbitMcp.Server") cannot be loaded next to it — the
+    /// default context would silently hand back the server's copy and no contracts would be found.
+    /// </summary>
     private static Assembly LoadOnce(string path)
     {
         var name = AssemblyName.GetAssemblyName(path);
         var loaded = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a =>
-            AssemblyName.ReferenceMatchesDefinition(name, a.GetName()) &&
             string.Equals(a.GetName().Name, name.Name, StringComparison.OrdinalIgnoreCase));
-        return loaded ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+        if (loaded is null)
+            return AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+
+        var samePath = !string.IsNullOrEmpty(loaded.Location) &&
+            string.Equals(Path.GetFullPath(loaded.Location), path,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        if (samePath || loaded == SharedContractsAssembly)
+            return loaded;
+
+        throw new InvalidOperationException(
+            $"RabbitMcp:ContractAssemblies: '{path}' is named '{name.Name}', which the server already uses for its own " +
+            "code. Give your contracts assembly a different name.");
     }
+
+    private static readonly Assembly SharedContractsAssembly = typeof(RabbitMcp.Contracts.MessageContractAttribute).Assembly;
+
+    /// <summary>
+    /// A readable one-line reason for a failed contract load. ReflectionTypeLoadException's own message
+    /// ("Unable to load one or more of the requested types") hides the missing dependency.
+    /// </summary>
+    public static string Describe(Exception ex) => ex switch
+    {
+        ReflectionTypeLoadException rtle when rtle.LoaderExceptions.FirstOrDefault(e => e is not null) is { } first =>
+            $"Contract types could not be loaded: {first.Message} " +
+            "Copy the contracts assembly's dependencies next to it (e.g. with dotnet publish).",
+        FileNotFoundException fnf =>
+            $"A dependency of the contract assemblies is missing: {fnf.Message} Copy it next to the contracts DLL.",
+        _ => ex.Message,
+    };
 
     /// <summary>Lets a contracts DLL bring its own dependencies, located next to it.</summary>
     private static void InstallResolver(string directory)
