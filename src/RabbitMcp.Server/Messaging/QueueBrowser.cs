@@ -12,6 +12,7 @@ public sealed class QueueBrowser(
     RabbitConnection connection,
     MessageInspector inspector,
     TimeProvider time,
+    AuditLog audit,
     IOptions<RabbitMcpOptions> options,
     ILogger<QueueBrowser> logger)
 {
@@ -73,6 +74,39 @@ public sealed class QueueBrowser(
         int count,
         IReadOnlyCollection<string>? onlyMessageIds,
         string? targetExchangeOverride,
+        CancellationToken ct,
+        string? client = null)
+    {
+        // Every per-message outcome is audited, including those reached before a failure.
+        var outcomes = new List<RepublishOutcome>();
+        void AuditOutcomes()
+        {
+            foreach (var o in outcomes)
+                audit.Write(audit.Event(AuditActions.Republish, o.Status, client, exchange: o.TargetExchange,
+                    queue: errorQueue, messageId: o.MessageId, detail: o.Detail));
+        }
+
+        try
+        {
+            var result = await RepublishCoreAsync(errorQueue, count, onlyMessageIds, targetExchangeOverride, outcomes, ct);
+            AuditOutcomes();
+            return result;
+        }
+        catch (McpException ex)
+        {
+            AuditOutcomes();
+            audit.Write(audit.Event(AuditActions.Republish, "error", client, exchange: targetExchangeOverride,
+                queue: errorQueue, detail: ex.Message));
+            throw;
+        }
+    }
+
+    private async Task<RepublishResult> RepublishCoreAsync(
+        string errorQueue,
+        int count,
+        IReadOnlyCollection<string>? onlyMessageIds,
+        string? targetExchangeOverride,
+        List<RepublishOutcome> outcomes,
         CancellationToken ct)
     {
         CheckCount(count);
@@ -82,7 +116,6 @@ public sealed class QueueBrowser(
             ? new HashSet<string>(onlyMessageIds, StringComparer.OrdinalIgnoreCase)
             : null;
         var exchangeExists = new Dictionary<string, bool>(StringComparer.Ordinal);
-        var outcomes = new List<RepublishOutcome>();
         var toRequeue = new List<ulong>();
         var republished = 0;
         var scanned = 0;

@@ -51,6 +51,21 @@ public sealed class BrokerFixture : IAsyncLifetime
     public QueueBrowser Browser { get; private set; } = null!;
     public ContractPublisher Publisher { get; private set; } = null!;
     public ManagementClient Management { get; private set; } = null!;
+    public AuditLog Audit { get; private set; } = null!;
+    public string AuditPath { get; } = Path.Combine(Path.GetTempPath(), $"rabbit-mcp-it-audit-{Guid.NewGuid():N}", "audit.jsonl");
+    private Microsoft.Extensions.Options.IOptions<RabbitMcpOptions> _options = null!;
+
+    /// <summary>A publisher with a different allow/deny policy, sharing everything else.</summary>
+    public ContractPublisher CreatePublisher(PublishPolicy policy) =>
+        new(Connection, Registry, new EnvelopeFactory(TimeProvider.System), _replies, policy, Audit,
+            TimeProvider.System, _options, NullLogger<ContractPublisher>.Instance);
+
+    /// <summary>All audit events written so far (JSON Lines file).</summary>
+    public IReadOnlyList<System.Text.Json.JsonElement> AuditEvents() =>
+        File.ReadAllLines(AuditPath)
+            .Where(l => l.Length > 0)
+            .Select(l => System.Text.Json.JsonDocument.Parse(l).RootElement.Clone())
+            .ToArray();
     private ReplyListener _replies = null!;
 
     public async Task InitializeAsync()
@@ -63,15 +78,18 @@ public sealed class BrokerFixture : IAsyncLifetime
         var options = Microsoft.Extensions.Options.Options.Create(new RabbitMcpOptions
         {
             Uri = amqp.ToString(), ClientName = "rabbit-mcp-it", ManagementUri = managementUri,
+            AuditLogPath = AuditPath, AuditIncludePayload = true,
         });
+        _options = options;
+        Audit = new AuditLog(options, TimeProvider.System, NullLogger<AuditLog>.Instance);
+        Audit.EnsureWritable();
         Connection = new RabbitConnection(options, TimeProvider.System, NullLogger<RabbitConnection>.Instance);
         Registry = ContractRegistry.FromAssemblies(typeof(OrderSubmitted).Assembly, typeof(NobodyListens).Assembly);
         var inspector = new MessageInspector(Registry, options);
-        Browser = new QueueBrowser(Connection, inspector, TimeProvider.System, options, NullLogger<QueueBrowser>.Instance);
+        Browser = new QueueBrowser(Connection, inspector, TimeProvider.System, Audit, options, NullLogger<QueueBrowser>.Instance);
         _replies = new ReplyListener(Connection, options, NullLogger<ReplyListener>.Instance);
         Management = new ManagementClient(options);
-        Publisher = new ContractPublisher(Connection, Registry, new EnvelopeFactory(TimeProvider.System), _replies,
-            TimeProvider.System, options, NullLogger<ContractPublisher>.Instance);
+        Publisher = CreatePublisher(PublishPolicy.AllowAll);
 
         // --- the "services": a plain MassTransit v8 bus, no retries (faults go straight to _error).
         var user = Uri.UnescapeDataString(amqp.UserInfo.Split(':')[0]);

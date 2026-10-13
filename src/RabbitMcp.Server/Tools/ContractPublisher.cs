@@ -23,6 +23,8 @@ public sealed class ContractPublisher(
     ContractRegistry contracts,
     EnvelopeFactory envelopes,
     ReplyListener replies,
+    PublishPolicy policy,
+    AuditLog audit,
     TimeProvider time,
     IOptions<RabbitMcpOptions> options,
     ILogger<ContractPublisher> logger)
@@ -34,18 +36,33 @@ public sealed class ContractPublisher(
         T message,
         [Description("Optional correlation id (GUID) linking this message to an existing workflow.")]
         string? correlationId = null,
+        McpServer? server = null,
         CancellationToken cancellationToken = default)
         where T : class
     {
         var contract = contracts.Get(typeof(T));
-        await EnsureSendableAsync(contract, message, correlationId, cancellationToken);
-
+        var client = AuditLog.ClientOf(server);
         var messageId = Guid.NewGuid();
-        var envelope = envelopes.Create(
-            contract, message, connection.BrokerUri, options.Value.ClientName, messageId, correlationId);
+        MassTransitEnvelope envelope;
+        try
+        {
+            await EnsureSendableAsync(contract, message, correlationId, cancellationToken);
 
-        await SendAsync(contract, envelope, timeToLive: null, cancellationToken);
+            envelope = envelopes.Create(
+                contract, message, connection.BrokerUri, options.Value.ClientName, messageId, correlationId);
+
+            await SendAsync(contract, envelope, timeToLive: null, cancellationToken);
+        }
+        catch (McpException ex)
+        {
+            audit.Write(audit.Event(AuditActions.Publish, "error", client, contract.Name, contract.Exchange,
+                correlationId: correlationId, detail: ex.Message, message: message, messageType: typeof(T)));
+            throw;
+        }
+
         logger.LogInformation("Published {Contract} {MessageId} to {Exchange}", contract.Name, messageId, contract.Exchange);
+        audit.Write(audit.Event(AuditActions.Publish, "sent", client, contract.Name, contract.Exchange,
+            messageId: envelope.MessageId, correlationId: correlationId, message: message, messageType: typeof(T)));
 
         return new PublishResult(
             MessageId: envelope.MessageId!,
@@ -71,17 +88,43 @@ public sealed class ContractPublisher(
         int timeoutSeconds = 30,
         [Description("Optional correlation id (GUID) linking this request to an existing workflow.")]
         string? correlationId = null,
+        McpServer? server = null,
         CancellationToken cancellationToken = default)
         where T : class
     {
         var contract = contracts.Get(typeof(T));
+        var client = AuditLog.ClientOf(server);
+        var messageId = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+
+        void Audit(string outcome, string? detail = null) =>
+            audit.Write(audit.Event(AuditActions.Request, outcome, client, contract.Name, contract.Exchange,
+                messageId: messageId.ToString(), requestId: requestId.ToString(), correlationId: correlationId,
+                detail: detail, message: message, messageType: typeof(T)));
+
+        try
+        {
+            var result = await SendRequestAsync(contract, message, timeoutSeconds, correlationId, messageId, requestId, cancellationToken);
+            Audit(result.Status, result.ResponseType is null ? result.Note : $"reply {result.ResponseType}");
+            return result;
+        }
+        catch (McpException ex)
+        {
+            Audit("error", ex.Message);
+            throw;
+        }
+    }
+
+    private async Task<RequestResult> SendRequestAsync<T>(
+        ContractDescriptor contract, T message, int timeoutSeconds, string? correlationId,
+        Guid messageId, Guid requestId, CancellationToken cancellationToken)
+        where T : class
+    {
         if (timeoutSeconds is < 1 or > MaxTimeoutSeconds)
             throw new McpException($"timeoutSeconds must be between 1 and {MaxTimeoutSeconds}.");
 
         await EnsureSendableAsync(contract, message, correlationId, cancellationToken);
 
-        var messageId = Guid.NewGuid();
-        var requestId = Guid.NewGuid();
         var timeout = TimeSpan.FromSeconds(timeoutSeconds);
 
         // Listen first, then send: a fast reply can never be missed.
@@ -131,6 +174,10 @@ public sealed class ContractPublisher(
 
     private async Task EnsureSendableAsync(ContractDescriptor contract, object message, string? correlationId, CancellationToken ct)
     {
+        // Normally the tool is not even registered; this also covers direct callers.
+        if (!policy.IsAllowed(contract))
+            throw new McpException($"Sending {contract.Name} is not allowed by this server's configuration (RabbitMcp:PublishAllow/PublishDeny).");
+
         // Contract rules (DataAnnotations). Nothing is sent when they fail.
         var errors = ContractValidator.Validate(message);
         if (errors.Count > 0)
@@ -203,8 +250,8 @@ public static class ContractToolFactory
     private static readonly MethodInfo RequestMethod =
         typeof(ContractPublisher).GetMethod(nameof(ContractPublisher.RequestAsync))!;
 
-    public static IEnumerable<McpServerTool> CreateTools(ContractRegistry registry) =>
-        registry.Contracts.Select(CreateTool);
+    public static IEnumerable<McpServerTool> CreateTools(ContractRegistry registry, PublishPolicy? policy = null) =>
+        registry.Contracts.Where(c => (policy ?? PublishPolicy.AllowAll).IsAllowed(c)).Select(CreateTool);
 
     public static McpServerTool CreateTool(ContractDescriptor contract) =>
         McpServerTool.Create(

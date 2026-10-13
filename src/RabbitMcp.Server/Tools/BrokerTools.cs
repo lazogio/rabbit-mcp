@@ -12,6 +12,7 @@ namespace RabbitMcp.Server.Tools;
 [McpServerToolType]
 public sealed class BrokerTools(
     ContractRegistry contracts,
+    PublishPolicy policy,
     RabbitConnection connection,
     QueueBrowser browser,
     IOptions<RabbitMcpOptions> options)
@@ -24,7 +25,8 @@ public sealed class BrokerTools(
             [.. contracts.Contracts.Select(c =>
                 new ContractInfo(
                     c.Name, c.IsRequest ? "request" : "event", c.ToolName, c.Version, c.MessageTypeUrn, c.Exchange,
-                    c.Description, [.. c.Responses.Select(r => r.Name)]))],
+                    c.Description, [.. c.Responses.Select(r => r.Name)],
+                    Sendable: options.Value.EnablePublish && policy.IsAllowed(c)))],
             options.Value.EnablePublish);
 
     [McpServerTool(Name = "validate_message", Title = "Validate a message against a contract",

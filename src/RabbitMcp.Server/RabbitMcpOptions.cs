@@ -38,5 +38,20 @@ public sealed class RabbitMcpOptions
     /// </summary>
     public string? ManagementUri { get; set; }
 
+    /// <summary>
+    /// Contracts that may be sent (publish_*/request_*), ";"-separated patterns with "*" matched against
+    /// contract name, tool name, full type name or URN. Empty: all. Example: "Order*;Billing.Contracts.*".
+    /// </summary>
+    public string? PublishAllow { get; set; }
+
+    /// <summary>Contracts that may never be sent; same pattern syntax; wins over PublishAllow.</summary>
+    public string? PublishDeny { get; set; }
+
+    /// <summary>JSON Lines file for audit events (publish/request/republish). Empty: audit goes to the log only.</summary>
+    public string? AuditLogPath { get; set; }
+
+    /// <summary>Include message bodies in audit events. Off by default: they may contain personal data.</summary>
+    public bool AuditIncludePayload { get; set; }
+
     internal Uri BrokerUri => new(Uri);
 }

@@ -26,7 +26,8 @@ public sealed record ContractInfo(
     string MessageTypeUrn,
     string Exchange,
     string Description,
-    [property: Description("For requests: reply types the consumer may answer with.")] IReadOnlyList<string> Responses);
+    [property: Description("For requests: reply types the consumer may answer with.")] IReadOnlyList<string> Responses,
+    [property: Description("Whether this server exposes its publish_/request_ tool (EnablePublish and PublishAllow/PublishDeny).")] bool Sendable);
 
 public sealed record ContractList(
     IReadOnlyList<ContractInfo> Contracts,

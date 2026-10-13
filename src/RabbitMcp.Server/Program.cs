@@ -37,8 +37,13 @@ var settings = builder.Configuration.GetSection(RabbitMcpOptions.Section).Get<Ra
 // Every [MessageContract] type in the configured assemblies becomes a contract
 // (RabbitMcp:ContractAssemblies); without configuration the built-in samples are used.
 ContractRegistry contracts;
+var policy = new PublishPolicy(settings.PublishAllow, settings.PublishDeny);
 try
 {
+    // The audit file must be writable before anything is sent.
+    new AuditLog(Options.Create(settings), TimeProvider.System,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<AuditLog>.Instance).EnsureWritable();
+
     var assemblies = ContractAssemblyLoader.Load(
         settings.ContractAssemblies, AppContext.BaseDirectory, typeof(OrderSubmitted).Assembly);
     contracts = ContractRegistry.FromAssemblies([.. assemblies]);
@@ -54,8 +59,13 @@ catch (Exception ex) when (ex is InvalidOperationException or ReflectionTypeLoad
     return 1;
 }
 
+foreach (var pattern in policy.UnmatchedPatterns(contracts.Contracts))
+    Console.Error.WriteLine($"rabbit-mcp: warning: PublishAllow/PublishDeny pattern '{pattern}' matches no contract.");
+
 builder.Services
     .AddSingleton(contracts)
+    .AddSingleton(policy)
+    .AddSingleton<AuditLog>()
     .AddSingleton(TimeProvider.System)
     .AddSingleton<RabbitConnection>()
     .AddSingleton<EnvelopeFactory>()
@@ -71,7 +81,7 @@ var mcp = builder.Services
 
 // publish_* for events, request_* for request/response contracts.
 if (settings.EnablePublish)
-    mcp.WithTools(ContractToolFactory.CreateTools(contracts));
+    mcp.WithTools(ContractToolFactory.CreateTools(contracts, policy));
 
 if (settings.EnableRepublish)
     mcp.WithTools<RepublishTools>(ToolJson.Options);

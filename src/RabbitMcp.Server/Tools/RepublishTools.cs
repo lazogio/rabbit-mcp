@@ -22,6 +22,7 @@ public sealed class RepublishTools(QueueBrowser browser)
         [Description("Only republish messages with these MessageIds (from the preview). Others are left in place.")] string[]? messageIds = null,
         [Description("Override the destination exchange. By default it is taken from MT-Fault-InputAddress.")] string? targetExchange = null,
         [Description("Preview even if the error queue has active consumers.")] bool force = false,
+        McpServer? server = null,
         CancellationToken cancellationToken = default)
     {
         if (!confirm)
@@ -30,6 +31,7 @@ public sealed class RepublishTools(QueueBrowser browser)
             return new RepublishResult(errorQueue, Executed: false, preview, Outcomes: [], Republished: 0, Requeued: 0);
         }
 
-        return await browser.RepublishAsync(errorQueue, count, messageIds, targetExchange, cancellationToken);
+        return await browser.RepublishAsync(errorQueue, count, messageIds, targetExchange, cancellationToken,
+            AuditLog.ClientOf(server));
     }
 }
