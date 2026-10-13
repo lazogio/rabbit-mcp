@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    A contracts assembly as a user would write it, in its own namespace. Not referenced by the
+    server: tests and the smoke test load it at runtime through RabbitMcp:ContractAssemblies.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RabbitMcp.Contracts\RabbitMcp.Contracts.csproj" />
+  </ItemGroup>
+</Project>

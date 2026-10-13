@@ -60,6 +60,17 @@ jobs:
         if: matrix.rid == 'linux-x64'
         run: scripts/smoke-test.sh out/rabbit-mcp/rabbit-mcp
 
+      # Proves an external contracts DLL binds to the RabbitMcp.Contracts bundled in the single file.
+      - name: MCP smoke test (single-file binary + external contracts)
+        if: matrix.rid == 'linux-x64'
+        env:
+          SMOKE_EXPECT_TOOLS: list_contracts,publish_invoice_issued,request_get_invoice
+          SMOKE_FORBID_TOOLS: publish_order_submitted
+        run: |
+          dotnet build tests/RabbitMcp.ExternalContracts -c Release -o external
+          RabbitMcp__ContractAssemblies="$PWD/external/RabbitMcp.ExternalContracts.dll" \
+            scripts/smoke-test.sh out/rabbit-mcp/rabbit-mcp
+
       - name: Package
         shell: bash
         run: |
@@ -82,9 +93,33 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  pack:
+    name: Pack RabbitMcp.Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pack
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-ci.${GITHUB_RUN_NUMBER}"; fi
+          dotnet pack src/RabbitMcp.Contracts -c Release -p:Version="$v" -o out
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-contracts-nupkg
+          path: out/*.nupkg
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: GitHub Release
-    needs: build
+    needs: [build, pack]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

@@ -4,6 +4,7 @@
     <Project Path="src/RabbitMcp.Server/RabbitMcp.Server.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/RabbitMcp.ExternalContracts/RabbitMcp.ExternalContracts.csproj" />
     <Project Path="tests/RabbitMcp.Tests/RabbitMcp.Tests.csproj" />
     <Project Path="tests/RabbitMcp.IntegrationTests/RabbitMcp.IntegrationTests.csproj" />
   </Folder>

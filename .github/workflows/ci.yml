@@ -57,6 +57,13 @@ jobs:
       - name: MCP smoke test (stdio, real binary)
         run: scripts/smoke-test.sh out/rabbit-mcp
 
+      - name: MCP smoke test (contracts loaded from an external DLL)
+        env:
+          RabbitMcp__ContractAssemblies: ${{ github.workspace }}/tests/RabbitMcp.ExternalContracts/bin/Release/net10.0/RabbitMcp.ExternalContracts.dll
+          SMOKE_EXPECT_TOOLS: list_contracts,publish_invoice_issued,request_get_invoice
+          SMOKE_FORBID_TOOLS: publish_order_submitted,request_get_order_status
+        run: scripts/smoke-test.sh out/rabbit-mcp
+
       - name: Upload server binary
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v7

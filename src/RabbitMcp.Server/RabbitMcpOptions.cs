@@ -23,5 +23,20 @@ public sealed class RabbitMcpOptions
     /// <summary>Message bodies longer than this are shown truncated (display only, never when republishing).</summary>
     public int MaxPayloadChars { get; set; } = 16_000;
 
+    /// <summary>
+    /// DLLs with your [MessageContract] types, separated by ";" or ",". Relative paths are resolved
+    /// against the server's folder. Empty: the built-in sample contracts are used.
+    /// </summary>
+    public string? ContractAssemblies { get; set; }
+
+    /// <summary>Seconds an "exchange exists" check is cached. 0 disables the cache.</summary>
+    public int ExchangeCacheSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// RabbitMQ Management API base URL, e.g. http://localhost:15672. Enables list_queues.
+    /// Credentials: from this URL if it has user info, otherwise the AMQP URI's.
+    /// </summary>
+    public string? ManagementUri { get; set; }
+
     internal Uri BrokerUri => new(Uri);
 }

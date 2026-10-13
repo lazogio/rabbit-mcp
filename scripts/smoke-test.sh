@@ -5,6 +5,8 @@
 # No broker is needed: the server connects to RabbitMQ lazily on the first tool call.
 #
 # usage: scripts/smoke-test.sh <path-to-binary>
+# env:   SMOKE_EXPECT_TOOLS / SMOKE_FORBID_TOOLS — comma-separated tool names (defaults: the sample contracts)
+#        RabbitMcp__ContractAssemblies etc. are passed through to the server
 set -euo pipefail
 
 BIN=${1:?usage: smoke-test.sh <path-to-binary>}
@@ -47,11 +49,20 @@ else:
     print(f"server: {init['serverInfo']['name']} {init['serverInfo']['version']}, protocol {init['protocolVersion']}")
 
 tools = {t["name"]: t for t in responses.get(2, {}).get("result", {}).get("tools", [])}
-expected = {"list_contracts", "validate_message", "queue_stats", "peek_messages", "republish_from_error",
-            "publish_order_submitted", "publish_order_cancelled", "request_get_order_status"}
+import os
+def names(var, default):
+    raw = os.environ.get(var)
+    return {n.strip() for n in raw.split(",") if n.strip()} if raw else set(default)
+
+expected = names("SMOKE_EXPECT_TOOLS", ["list_contracts", "validate_message", "queue_stats", "peek_messages",
+                 "republish_from_error", "publish_order_submitted", "publish_order_cancelled", "request_get_order_status"])
+forbidden = names("SMOKE_FORBID_TOOLS", [])
 missing = expected - tools.keys()
 if missing:
     problems.append(f"missing tools: {sorted(missing)} (got {sorted(tools)})")
+unexpected = forbidden & tools.keys()
+if unexpected:
+    problems.append(f"tools that must not be present: {sorted(unexpected)}")
 for name in expected & tools.keys():
     if "outputSchema" not in tools[name]:
         problems.append(f"tool {name} has no outputSchema")

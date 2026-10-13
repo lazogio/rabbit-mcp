@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -29,8 +30,25 @@ builder.Services.AddOptions<RabbitMcpOptions>()
 
 var settings = builder.Configuration.GetSection(RabbitMcpOptions.Section).Get<RabbitMcpOptions>() ?? new();
 
-// Every [MessageContract] type in these assemblies becomes a contract. Add your own assemblies here.
-var contracts = ContractRegistry.FromAssemblies(typeof(OrderSubmitted).Assembly);
+// Every [MessageContract] type in the configured assemblies becomes a contract
+// (RabbitMcp:ContractAssemblies); without configuration the built-in samples are used.
+ContractRegistry contracts;
+try
+{
+    var assemblies = ContractAssemblyLoader.Load(
+        settings.ContractAssemblies, AppContext.BaseDirectory, typeof(OrderSubmitted).Assembly);
+    contracts = ContractRegistry.FromAssemblies([.. assemblies]);
+
+    if (contracts.Contracts.Count == 0)
+        throw new InvalidOperationException(
+            $"No [MessageContract] types found in: {string.Join(", ", assemblies.Select(a => a.GetName().Name))}.");
+}
+catch (Exception ex) when (ex is InvalidOperationException or ReflectionTypeLoadException or FileNotFoundException or FileLoadException)
+{
+    // Startup configuration error: one readable line on stderr (stdout belongs to MCP), non-zero exit.
+    Console.Error.WriteLine($"rabbit-mcp: {ex.Message}");
+    return 1;
+}
 
 builder.Services
     .AddSingleton(contracts)
@@ -55,3 +73,4 @@ if (settings.EnableRepublish)
     mcp.WithTools<RepublishTools>(ToolJson.Options);
 
 await builder.Build().RunAsync();
+return 0;

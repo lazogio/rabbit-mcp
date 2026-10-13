@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RabbitMcp.Server\RabbitMcp.Server.csproj" />
+    <!-- Built first, but loaded only at runtime from its own bin folder (like a user's contracts DLL). -->
+    <ProjectReference Include="..\RabbitMcp.ExternalContracts\RabbitMcp.ExternalContracts.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

@@ -6,5 +6,12 @@
   -->
   <PropertyGroup>
     <IsPackable>true</IsPackable>
+    <PackageId>RabbitMcp.Contracts</PackageId>
+    <Description>[MessageContract] attribute for rabbit-mcp contract assemblies.</Description>
+    <!--
+      Fixed assembly version: contract DLLs compiled against any 1.x package bind to whatever
+      RabbitMcp.Contracts the server ships with. Only change on a breaking attribute change.
+    -->
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
   </PropertyGroup>
 </Project>
