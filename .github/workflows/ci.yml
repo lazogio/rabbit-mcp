@@ -52,8 +52,10 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish server
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: dotnet publish src/RabbitMcp.Server -c Release -o out
+        run: dotnet publish src/RabbitMcp.Server -c Release --no-restore -o out
+
+      - name: MCP smoke test (stdio, real binary)
+        run: scripts/smoke-test.sh out/rabbit-mcp
 
       - name: Upload server binary
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

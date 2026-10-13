@@ -56,6 +56,10 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o out/rabbit-mcp
 
+      - name: MCP smoke test (single-file binary)
+        if: matrix.rid == 'linux-x64'
+        run: scripts/smoke-test.sh out/rabbit-mcp/rabbit-mcp
+
       - name: Package
         shell: bash
         run: |
