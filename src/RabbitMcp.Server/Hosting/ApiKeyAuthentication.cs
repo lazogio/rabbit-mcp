@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -24,7 +25,7 @@ public sealed class ApiKeyAuthenticationHandler(
     IOptionsMonitor<ApiKeyAuthenticationOptions> options, ILoggerFactory logger, UrlEncoder encoder)
     : AuthenticationHandler<ApiKeyAuthenticationOptions>(options, logger, encoder)
 {
-    public const string Scheme = "ApiKey";
+    public const string SchemeName = "ApiKey";
     public const string HeaderName = "X-Api-Key";
     public const int MinimumKeyLength = 32;
 
@@ -50,9 +51,9 @@ public sealed class ApiKeyAuthenticationHandler(
         }
 
         var identity = new ClaimsIdentity(
-            new[] { new Claim(ClaimTypes.Name, match.Name), new Claim("auth_method", "api_key") }, Scheme);
+            new[] { new Claim(ClaimTypes.Name, match.Name), new Claim("auth_method", "api_key") }, SchemeName);
         return Task.FromResult(AuthenticateResult.Success(
-            new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme)));
+            new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
     }
 
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)

@@ -96,8 +96,8 @@ public static class HttpHosting
         if (keys.Count > 0)
         {
             auth.AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
-                ApiKeyAuthenticationHandler.Scheme, o => o.Keys = keys);
-            schemes.Add(ApiKeyAuthenticationHandler.Scheme);
+                ApiKeyAuthenticationHandler.SchemeName, o => o.Keys = keys);
+            schemes.Add(ApiKeyAuthenticationHandler.SchemeName);
         }
 
         if (useJwt)

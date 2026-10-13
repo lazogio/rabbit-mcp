@@ -70,9 +70,12 @@ public static class ContractAssemblyLoader
         if (loaded is null)
             return AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
 
+        // Location is "" for assemblies bundled in a single-file app: those never count as "the same file".
+#pragma warning disable IL3000
         var samePath = !string.IsNullOrEmpty(loaded.Location) &&
             string.Equals(Path.GetFullPath(loaded.Location), path,
                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+#pragma warning restore IL3000
         if (samePath || loaded == SharedContractsAssembly)
             return loaded;
 
