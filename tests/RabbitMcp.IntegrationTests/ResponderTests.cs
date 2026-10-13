@@ -49,7 +49,7 @@ public sealed class ResponderTests(BrokerFixture broker)
         Assert.Equal(Guid.Parse(result.MessageId), answer.MessageId);
         Assert.Equal(pending.RequestId, answer.RequestId);
         Assert.Equal("replied", result.Status);
-        Assert.Empty(broker.Responder.Pending().Where(r => r.RequestId == pending.RequestId));
+        Assert.DoesNotContain(broker.Responder.Pending(), r => r.RequestId == pending.RequestId);
 
         var audit = broker.AuditEvents();
         Assert.Contains(audit, e => Field(e, "action") == AuditActions.Receive

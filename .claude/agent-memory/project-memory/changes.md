@@ -1,6 +1,6 @@
 # Changes and decisions (newest first)
 
-### 2026-10-13 Responder mode (phase-5/responder) — commit PENDING
+### 2026-10-13 Responder mode (phase-5/responder) — commits cc7b489, ef4b539
 - What: `RespondTo` (patterns) makes the server a consumer of request contracts: `ResponderService` (BackgroundService,
   exclusive auto-delete queue bound to each contract exchange, fanout durable like MassTransit; retries every 5 s),
   `RequestInbox` (bounded by `MaxPendingRequests`, expiry from envelope `expirationTime`), `ResponderEnvelopes`
