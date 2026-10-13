@@ -60,6 +60,7 @@ jobs:
         if: matrix.rid == 'linux-x64'
         run: scripts/smoke-test.sh out/rabbit-mcp/rabbit-mcp
 
+      # The single file also bundles ASP.NET Core for RabbitMcp:Transport=http — prove it serves and authenticates.
       - name: MCP smoke test (single-file binary over HTTP)
         if: matrix.rid == 'linux-x64'
         run: scripts/smoke-test-http.sh out/rabbit-mcp/rabbit-mcp
