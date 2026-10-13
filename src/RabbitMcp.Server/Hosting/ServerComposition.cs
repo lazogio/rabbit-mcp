@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
@@ -70,6 +71,20 @@ public static class ServerComposition
 
         var mcp = builder.Services
             .AddMcpServer(o => o.ServerInfo = new Implementation { Name = "rabbit-mcp", Version = ServerVersion.Current })
+            .WithRequestFilters(f => f.AddCallToolFilter(next => async (request, cancellationToken) =>
+            {
+                // RabbitMQ errors (403 ACCESS_REFUSED, lost connection ...) become readable tool errors instead of the
+                // SDK's reason-less "An error occurred invoking 'tool'".
+                try
+                {
+                    return await next(request, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not McpException and not OperationCanceledException
+                                           && BrokerErrors.TryDescribe(ex, out var message))
+                {
+                    throw new McpException(message, ex);
+                }
+            }))
             .WithTools<BrokerTools>(ToolJson.Options);
 
         // publish_* for events, request_* for request/response contracts.

@@ -82,4 +82,35 @@ public sealed class ErrorQueueTests(BrokerFixture broker)
         var forced = await broker.Browser.PeekAsync(BrokerFixture.OrderSubmittedQueue, 1, force: true, CancellationToken.None);
         Assert.Equal(BrokerFixture.OrderSubmittedQueue, forced.Queue);
     }
+
+    [Fact]
+    public async Task Spoofed_fault_input_address_is_not_followed_without_an_explicit_target()
+    {
+        // Anyone who can publish into an error queue controls its headers: this one claims to come from it-order-submitted.
+        const string queue = "it-spoof_error";
+        await using (var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None))
+        {
+            await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false);
+            var props = new RabbitMQ.Client.BasicProperties
+            {
+                MessageId = Guid.NewGuid().ToString(),
+                Headers = new Dictionary<string, object?>
+                {
+                    ["MT-Fault-InputAddress"] = $"rabbitmq://localhost/{BrokerFixture.OrderSubmittedQueue}",
+                    ["MT-Reason"] = "fault",
+                },
+            };
+            await channel.BasicPublishAsync("", queue, mandatory: false, props, "{}"u8.ToArray());
+        }
+        await broker.WaitForQueueCount(queue, 1);
+
+        var preview = Assert.Single((await broker.Browser.PeekAsync(queue, 5, false, CancellationToken.None)).Messages);
+        Assert.Contains("targetExchange", preview.RepublishWarning);
+
+        var result = await broker.Browser.RepublishAsync(queue, 5, null, null, CancellationToken.None);
+
+        Assert.Equal(0, result.Republished);
+        Assert.Equal("skipped", Assert.Single(result.Outcomes).Status);
+        await broker.WaitForQueueCount(queue, 1);
+    }
 }

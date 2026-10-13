@@ -173,6 +173,17 @@ public sealed class ResponderService(
             var request = new PendingRequest(requestId, contract, envelope, time.GetUtcNow(), expires,
                 Telemetry.Extract(delivery.BasicProperties.Headers));
 
+            // responseAddress/faultAddress come from the message: whoever can publish the request chooses them. Only
+            // MassTransit-style temporary reply endpoints are answered (or faulted, e.g. "busy"), never other exchanges.
+            if (await UnsafeReplyAddressAsync(request) is { } refusal)
+            {
+                logger.LogWarning("Responder refused {Contract} {RequestId}: {Reason}", contract.Name, requestId, refusal);
+                audit.Write(audit.Event(AuditActions.Receive, "refused", envelope.SourceAddress, contract.Name, contract.Exchange,
+                    queue: QueueName, messageId: envelope.MessageId, requestId: envelope.RequestId,
+                    correlationId: envelope.CorrelationId, detail: refusal));
+                return;
+            }
+
             switch (inbox.TryAdd(request))
             {
                 case InboxAddResult.Duplicate:
@@ -197,6 +208,27 @@ public sealed class ResponderService(
             if (channel.IsOpen)
                 await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false);
         }
+    }
+
+    /// <summary>Null when every reply address of the request is a temporary reply endpoint; otherwise why not.</summary>
+    private async Task<string?> UnsafeReplyAddressAsync(PendingRequest request)
+    {
+        foreach (var address in new[] { request.ResponseAddress, request.FaultAddress }.Distinct(StringComparer.Ordinal))
+        {
+            var exchange = BrokerAddress.GetEntityName(address);
+            if (exchange is null)
+                return $"reply address '{address}' cannot be parsed";
+
+            switch (await connection.CheckTemporaryExchangeAsync(exchange, CancellationToken.None))
+            {
+                case ReplyEndpointCheck.Missing:
+                    return $"reply exchange '{exchange}' does not exist (the requester is gone)";
+                case ReplyEndpointCheck.NotTemporary:
+                    return $"reply address '{exchange}' is not a temporary reply endpoint (fanout, durable:false, autoDelete:true); " +
+                           "answering it would publish into a regular exchange";
+            }
+        }
+        return null;
     }
 
     /// <summary>Answers a pending request with one of its declared reply types.</summary>

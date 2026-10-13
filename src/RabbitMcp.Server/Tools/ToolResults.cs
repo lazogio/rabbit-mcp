@@ -67,6 +67,7 @@ public sealed record PeekedMessage(
     [property: Description("Contract matched by message type, with validation result. Null if no registered contract matches.")] ContractCheck? Contract,
     [property: Description("MassTransit fault details, present for messages in _error/_skipped queues.")] FaultInfo? Fault,
     [property: Description("Exchange republish_from_error would send this message to.")] string? RepublishTarget,
+    [property: Description("Why republish_from_error will not use RepublishTarget without an explicit targetExchange.")] string? RepublishWarning,
     [property: Description("The message (envelope 'message' field, or the whole JSON body).")] JsonElement? Payload,
     [property: Description("Body as text when it is not JSON or is too large (truncated for display only).")] string? RawBody,
     bool Truncated,
@@ -147,6 +148,7 @@ public sealed record PendingRequestInfo(
     [property: Description("Whether the request satisfies its contract.")] ContractCheck Check,
     string? CorrelationId,
     [property: Description("Requester's endpoint (envelope sourceAddress).")] string? From,
+    [property: Description("Exchange the reply is sent to (the requester's temporary reply endpoint).")] string? ReplyTo,
     DateTimeOffset ReceivedAt,
     [property: Description("When the requester gives up; answer before this. Null: no expiration.")] DateTimeOffset? ExpiresAt,
     [property: Description("Seconds left until ExpiresAt.")] int? SecondsLeft);

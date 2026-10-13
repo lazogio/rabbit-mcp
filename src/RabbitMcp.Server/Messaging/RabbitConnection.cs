@@ -9,6 +9,8 @@ using RabbitMQ.Client.Exceptions;
 
 namespace RabbitMcp.Server.Messaging;
 
+public enum ReplyEndpointCheck { Temporary, Missing, NotTemporary }
+
 /// <summary>
 /// One lazily opened, auto-recovering AMQP connection shared by all tools.
 /// Channels are short-lived: one per tool call.
@@ -60,6 +62,38 @@ public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, TimePro
         {
             _exchanges.Invalidate(exchange);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="exchange"/> is a temporary reply endpoint as MassTransit creates them (fanout,
+    /// durable:false, autoDelete:true — the bus / request-client endpoint). Re-declaring it with those flags is a no-op
+    /// for such an exchange and fails with 406 for any other one, so an address taken from an incoming message cannot
+    /// make this server publish into a regular application exchange. Not cached: the answer guards a send.
+    /// </summary>
+    public async Task<ReplyEndpointCheck> CheckTemporaryExchangeAsync(string exchange, CancellationToken ct)
+    {
+        await using (var probe = await CreateChannelAsync(publisherConfirms: false, ct))
+        {
+            try
+            {
+                await probe.ExchangeDeclarePassiveAsync(exchange, ct);
+            }
+            catch (OperationInterruptedException ex) when (IsNotFound(ex))
+            {
+                return ReplyEndpointCheck.Missing;
+            }
+        }
+
+        await using var channel = await CreateChannelAsync(publisherConfirms: false, ct);
+        try
+        {
+            await channel.ExchangeDeclareAsync(exchange, ExchangeType.Fanout, durable: false, autoDelete: true, cancellationToken: ct);
+            return ReplyEndpointCheck.Temporary;
+        }
+        catch (OperationInterruptedException ex) when (ex.ShutdownReason?.ReplyCode is 406 or 403)
+        {
+            return ReplyEndpointCheck.NotTemporary; // different flags/type (406) or a reserved amq.* name (403)
         }
     }
 

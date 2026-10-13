@@ -63,12 +63,17 @@ public sealed class ContractPublisher(
 
             await SendAsync(contract, envelope, timeToLive: null, cancellationToken);
         }
-        catch (McpException ex)
+        catch (Exception ex)
         {
-            Telemetry.Fail(activity, ex.Message);
+            // Every failed attempt is audited — broker errors (403, lost connection) and cancellation included.
+            var error = ex is OperationCanceledException ? null : BrokerErrors.ToMcp(ex);
+            var detail = error?.Message ?? "cancelled (the message may or may not have been sent)";
+            Telemetry.Fail(activity, detail);
             audit.Write(audit.Event(AuditActions.Publish, "error", client, contract.Name, contract.Exchange,
-                correlationId: correlationId, detail: ex.Message, message: message, messageType: typeof(T)));
-            throw;
+                correlationId: correlationId, detail: detail, message: message, messageType: typeof(T)));
+            if (error is null || ReferenceEquals(error, ex))
+                throw;
+            throw error;
         }
 
         logger.LogInformation("Published {Contract} {MessageId} to {Exchange}", contract.Name, messageId, contract.Exchange);
@@ -132,12 +137,16 @@ public sealed class ContractPublisher(
             Audit(result.Status, result.ResponseType is null ? result.Note : $"reply {result.ResponseType}");
             return result;
         }
-        catch (McpException ex)
+        catch (Exception ex)
         {
-            Telemetry.Fail(activity, ex.Message);
+            var error = ex is OperationCanceledException ? null : BrokerErrors.ToMcp(ex);
+            var detail = error?.Message ?? "cancelled (the request may or may not have been sent)";
+            Telemetry.Fail(activity, detail);
             Telemetry.RecordRequestDuration(time.GetElapsedTime(started), contract.Name, "error");
-            Audit("error", ex.Message);
-            throw;
+            Audit("error", detail);
+            if (error is null || ReferenceEquals(error, ex))
+                throw;
+            throw error;
         }
     }
 

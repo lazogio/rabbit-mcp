@@ -201,4 +201,30 @@ public sealed class ResponderTests(BrokerFixture broker)
             await connB.DisposeAsync();
         }
     }
+
+    [Fact]
+    public async Task Request_whose_reply_address_is_a_regular_exchange_is_refused()
+    {
+        // A crafted request that would make rabbit-mcp publish its reply into an application exchange.
+        var id = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+        var contract = broker.Registry.Get(typeof(AskHuman));
+        var target = broker.Registry.Get(typeof(OrderSubmitted)).Exchange; // durable fanout, not a reply endpoint
+        var envelope = new RabbitMcp.Server.Messaging.EnvelopeFactory(TimeProvider.System).Create(
+            contract, Ask(id), broker.Connection.BrokerUri, "attacker", Guid.NewGuid(), null,
+            new RabbitMcp.Server.Messaging.RequestEnvelopeInfo(requestId, $"rabbitmq://localhost/{target}?temporary=true", DateTime.UtcNow.AddMinutes(1)));
+
+        await using (var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None))
+        {
+            await channel.BasicPublishAsync(contract.Exchange, "", mandatory: false,
+                new RabbitMQ.Client.BasicProperties { ContentType = RabbitMcp.Server.Messaging.MassTransitJson.ContentType },
+                RabbitMcp.Server.Messaging.EnvelopeFactory.Serialize(envelope));
+        }
+
+        await WaitUntil(() => broker.AuditEvents().Any(e => Field(e, "action") == AuditActions.Receive
+                                                           && Field(e, "outcome") == "refused"
+                                                           && Field(e, "requestId") == requestId.ToString()),
+            "the crafted request was not refused");
+        Assert.DoesNotContain(broker.Responder.Pending(), r => r.RequestId == requestId);
+    }
 }

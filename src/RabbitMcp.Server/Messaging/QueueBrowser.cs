@@ -53,7 +53,7 @@ public sealed class QueueBrowser(
                 lastTag = delivery.DeliveryTag;
                 remaining = delivery.MessageCount;
                 var peeked = inspector.Inspect(messages.Count, queue, delivery);
-                messages.Add(targetExchangeOverride is null ? peeked : peeked with { RepublishTarget = targetExchangeOverride });
+                messages.Add(targetExchangeOverride is null ? peeked : peeked with { RepublishTarget = targetExchangeOverride, RepublishWarning = null });
             }
         }
         finally
@@ -95,12 +95,19 @@ public sealed class QueueBrowser(
             AuditOutcomes();
             return result;
         }
-        catch (McpException ex)
+        catch (Exception ex)
         {
+            // Messages republished before the failure are audited too: they really were moved.
             AuditOutcomes();
+            var error = ex is OperationCanceledException ? null : BrokerErrors.ToMcp(ex);
+            var moved = outcomes.Count(o => o.Status == "republished");
+            var detail = (error?.Message ?? "cancelled") +
+                         $" {moved} message(s) were republished before that; the others remain in {errorQueue}.";
             audit.Write(audit.Event(AuditActions.Republish, "error", client, exchange: targetExchangeOverride,
-                queue: errorQueue, detail: ex.Message));
-            throw;
+                queue: errorQueue, detail: detail));
+            if (error is null || ReferenceEquals(error, ex))
+                throw;
+            throw new McpException(detail, ex);
         }
     }
 
@@ -145,8 +152,15 @@ public sealed class QueueBrowser(
                     continue;
                 }
 
-                var target = targetExchangeOverride
-                    ?? RepublishTargetResolver.Resolve(errorQueue, props.Headers)?.Exchange;
+                var resolved = targetExchangeOverride is null ? RepublishTargetResolver.Resolve(errorQueue, props.Headers) : null;
+                if (resolved?.Conflict is { } conflict)
+                {
+                    toRequeue.Add(delivery.DeliveryTag);
+                    outcomes.Add(new RepublishOutcome(messageId, "skipped", resolved.Exchange, conflict));
+                    continue;
+                }
+
+                var target = targetExchangeOverride ?? resolved?.Exchange;
                 if (target is null)
                 {
                     toRequeue.Add(delivery.DeliveryTag);

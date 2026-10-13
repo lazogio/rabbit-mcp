@@ -115,6 +115,19 @@ public sealed class AuditLog
                 ? JsonSerializer.SerializeToElement(message, messageType ?? message.GetType(), MassTransitJson.Options)
                 : null);
 
+    /// <summary>
+    /// Values like the MCP client name, a rejection reason or a queue name come from callers or messages; control
+    /// characters are replaced so they cannot forge extra AUDIT lines in a text log. (The JSON file escapes them anyway.)
+    /// </summary>
+    public static string? OneLine(string? value) =>
+        value is null || !value.Any(char.IsControl)
+            ? value
+            : string.Create(value.Length, value, static (span, v) =>
+            {
+                for (var i = 0; i < v.Length; i++)
+                    span[i] = char.IsControl(v[i]) ? ' ' : v[i];
+            });
+
     public void Write(AuditEvent e)
     {
         Telemetry.Count(e);
@@ -122,7 +135,8 @@ public sealed class AuditLog
         _logger.LogInformation(
             "AUDIT {Action} {Outcome} contract={Contract} exchange={Exchange} queue={Queue} messageId={MessageId} " +
             "requestId={RequestId} client={Client} {Detail}",
-            e.Action, e.Outcome, e.Contract, e.Exchange, e.Queue, e.MessageId, e.RequestId, e.Client, e.Detail);
+            e.Action, e.Outcome, OneLine(e.Contract), OneLine(e.Exchange), OneLine(e.Queue), OneLine(e.MessageId),
+            OneLine(e.RequestId), OneLine(e.Client), OneLine(e.Detail));
 
         if (FilePath is null)
             return;

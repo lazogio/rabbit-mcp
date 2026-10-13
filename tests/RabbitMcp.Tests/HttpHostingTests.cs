@@ -5,10 +5,15 @@ using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using RabbitMcp.Server.Hosting;
 using RabbitMcp.Server.Messaging;
 
@@ -169,5 +174,101 @@ public class HttpHostingTests
         Assert.Equal("user-42", AuditLog.ClientOf(null, subjectOnly));
         Assert.Null(AuditLog.ClientOf(null, anonymous));
         Assert.Null(AuditLog.ClientOf(null, null));
+    }
+
+    private const string Authority = "https://login.example.test/realms/shop";
+    private static readonly SymmetricSecurityKey SigningKey = new(Encoding.UTF8.GetBytes("test-signing-key-0123456789abcdef0123456789"));
+
+    /// <summary>JWT mode with a static (offline) issuer configuration, so real signed tokens can be validated.</summary>
+    private static async Task<WebApplication> StartJwtAsync(string? scopes)
+    {
+        var app = HttpHosting.Build([], b =>
+        {
+            b.WebHost.UseTestServer();
+            b.Configuration.AddInMemoryCollection(Config(
+                ("JwtAuthority", Authority), ("JwtAudience", "rabbit-mcp"), ("JwtScopes", scopes), ("ApiKeys", "alice:" + AliceKey)));
+            b.Services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, o =>
+            {
+                o.Configuration = new OpenIdConnectConfiguration { Issuer = Authority };
+                o.Configuration.SigningKeys.Add(SigningKey);
+            });
+        });
+        await app.StartAsync();
+        return app;
+    }
+
+    private static string Token(string? scope) => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+    {
+        Issuer = Authority,
+        Audience = "rabbit-mcp",
+        Expires = DateTime.UtcNow.AddMinutes(5),
+        Claims = scope is null
+            ? new Dictionary<string, object> { ["preferred_username"] = "bob" }
+            : new Dictionary<string, object> { ["preferred_username"] = "bob", ["scope"] = scope },
+        SigningCredentials = new SigningCredentials(SigningKey, SecurityAlgorithms.HmacSha256),
+    });
+
+    [Fact]
+    public async Task Jwt_must_carry_the_configured_scopes()
+    {
+        await using var app = await StartJwtAsync("rabbit-mcp.tools");
+        var client = app.GetTestClient();
+
+        var withScope = await client.SendAsync(Mcp(Initialize, r => r.Headers.Authorization = new("Bearer", Token("openid rabbit-mcp.tools"))));
+        var withoutScope = await client.SendAsync(Mcp(Initialize, r => r.Headers.Authorization = new("Bearer", Token("openid"))));
+        var noScopeClaim = await client.SendAsync(Mcp(Initialize, r => r.Headers.Authorization = new("Bearer", Token(null))));
+        var apiKey = await client.SendAsync(Mcp(Initialize, r => r.Headers.Add("X-Api-Key", AliceKey)));
+
+        Assert.Equal(HttpStatusCode.OK, withScope.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, withoutScope.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, noScopeClaim.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, apiKey.StatusCode); // API keys are not scoped
+    }
+
+    [Fact]
+    public async Task Jwt_without_configured_scopes_needs_only_a_valid_token()
+    {
+        await using var app = await StartJwtAsync(null);
+        var response = await app.GetTestClient().SendAsync(Mcp(Initialize, r => r.Headers.Authorization = new("Bearer", Token(null))));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("scope", "a b", true)]
+    [InlineData("scp", "b a", true)]
+    [InlineData("scope", "a", false)]
+    public void Scope_claims_are_read_from_scope_or_scp(string claim, string value, bool allowed)
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(claim, value) }, "Bearer"));
+        Assert.Equal(allowed, HttpHosting.HasRequiredScopes(user, ["a", "b"]));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:5080", true)]
+    [InlineData("http://127.0.0.1:5080", true)]
+    [InlineData("http://[::1]:5080", true)]
+    [InlineData("http://0.0.0.0:5080", false)]
+    [InlineData("http://+:5080", false)]
+    [InlineData("http://*:5080", false)]
+    [InlineData("http://mcp.example.test:5080", false)]
+    public void Loopback_detection(string url, bool loopback) => Assert.Equal(loopback, HttpHosting.IsLoopback(url));
+
+    [Fact]
+    public void Anonymous_access_is_refused_beyond_loopback()
+    {
+        var ex = Assert.Throws<StartupException>(() => HttpHosting.Build([], b =>
+        {
+            b.WebHost.UseTestServer();
+            b.Configuration.AddInMemoryCollection(Config(("HttpAllowAnonymous", "true"), ("HttpUrls", "http://0.0.0.0:5080")));
+        }));
+        Assert.Contains("loopback", ex.Message);
+    }
+
+    [Fact]
+    public void Audit_log_lines_cannot_be_forged_with_control_characters()
+    {
+        Assert.Equal("evil  AUDIT publish sent", AuditLog.OneLine("evil\r\nAUDIT publish sent"));
+        Assert.Equal("plain", AuditLog.OneLine("plain"));
+        Assert.Null(AuditLog.OneLine(null));
     }
 }

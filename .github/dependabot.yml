@@ -33,3 +33,12 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # Base images of the Dockerfile (SDK and ASP.NET runtime) — security patches arrive as new image digests/tags.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: docker

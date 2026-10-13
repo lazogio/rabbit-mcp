@@ -1,6 +1,7 @@
 // Copyright (c) 2026 lazogio
 // SPDX-License-Identifier: MIT
 
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -85,6 +86,11 @@ public static class HttpHosting
                     "RabbitMcp:Transport=http needs authentication: set RabbitMcp:ApiKeys and/or RabbitMcp:JwtAuthority " +
                     "(+ JwtAudience). For a local experiment only: RabbitMcp:HttpAllowAnonymous=true.");
 
+            // "Only for local experiments" is enforced: anonymous access never listens beyond this machine.
+            if (SplitList(settings.HttpUrls).FirstOrDefault(u => !IsLoopback(u)) is { } exposed)
+                throw new StartupException(
+                    $"RabbitMcp:HttpAllowAnonymous=true is only allowed on loopback addresses, but HttpUrls contains '{exposed}'. " +
+                    "Configure RabbitMcp:ApiKeys or RabbitMcp:JwtAuthority instead.");
             Console.Error.WriteLine("rabbit-mcp: warning: HTTP transport WITHOUT authentication (HttpAllowAnonymous=true).");
             builder.Services.AddAuthorization();
             return [];
@@ -127,17 +133,47 @@ public static class HttpHosting
             {
                 Resource = settings.HttpPublicUrl ?? DefaultPublicUrl(settings),
                 AuthorizationServers = { authority },
-                ScopesSupported = (settings.JwtScopes ?? "")
-                    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                ScopesSupported = [.. SplitList(settings.JwtScopes)],
             });
             schemes.Add(McpAuthenticationDefaults.AuthenticationScheme); // authenticates via "Bearer", challenges with metadata
         }
 
+        var requiredScopes = SplitList(settings.JwtScopes);
         builder.Services.AddAuthorization(o => o.AddPolicy(PolicyName, p => p
             .AddAuthenticationSchemes([.. schemes])
-            .RequireAuthenticatedUser()));
+            .RequireAuthenticatedUser()
+            // The scopes advertised in the resource metadata are also enforced: a token for the right audience
+            // but without them (e.g. issued for another purpose) is refused with 403.
+            .RequireAssertion(ctx => HasRequiredScopes(ctx.User, requiredScopes))));
         return schemes;
     }
+
+    /// <summary>
+    /// API-key callers are not scoped. A JWT must carry every configured scope, in "scope" (space-separated, RFC 8693)
+    /// or "scp" (Entra ID, one claim or space-separated).
+    /// </summary>
+    public static bool HasRequiredScopes(ClaimsPrincipal user, IReadOnlyCollection<string> required)
+    {
+        if (required.Count == 0 || user.HasClaim("auth_method", "api_key"))
+            return true;
+
+        var granted = user.FindAll("scope").Concat(user.FindAll("scp"))
+            .SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .ToHashSet(StringComparer.Ordinal);
+        return required.All(granted.Contains);
+    }
+
+    /// <summary>localhost, 127.0.0.0/8 or ::1. Wildcards (+, *, 0.0.0.0) and host names are not loopback.</summary>
+    public static bool IsLoopback(string url)
+    {
+        var normalized = url.Replace("://+", "://wildcard.invalid").Replace("://*", "://wildcard.invalid");
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+            return false;
+        return uri.IsLoopback; // true for localhost, 127.x.x.x and [::1]
+    }
+
+    private static string[] SplitList(string? value) =>
+        (value ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static string DefaultPublicUrl(RabbitMcpOptions settings)
     {

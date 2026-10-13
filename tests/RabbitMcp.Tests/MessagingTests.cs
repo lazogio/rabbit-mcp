@@ -155,6 +155,17 @@ public class FaultHeaderTests
 
         Assert.Equal(expected, RepublishTargetResolver.Resolve(queue, headers)?.Exchange);
     }
+
+    [Fact]
+    public void RepublishTarget_header_that_disagrees_with_the_error_queue_is_a_conflict()
+    {
+        var spoofed = new Dictionary<string, object?> { ["MT-Fault-InputAddress"] = B("rabbitmq://localhost/payments") };
+        var genuine = new Dictionary<string, object?> { ["MT-Fault-InputAddress"] = B("rabbitmq://localhost/submit-order") };
+
+        Assert.Contains("targetExchange", RepublishTargetResolver.Resolve("submit-order_error", spoofed)!.Conflict);
+        Assert.Null(RepublishTargetResolver.Resolve("submit-order_error", genuine)!.Conflict);
+        Assert.Null(RepublishTargetResolver.Resolve("custom-dead-letters", spoofed)!.Conflict); // no owner to compare with
+    }
 }
 
 public class MessageInspectorTests

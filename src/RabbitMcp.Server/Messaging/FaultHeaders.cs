@@ -131,8 +131,12 @@ public static class FaultHeaders
     }
 }
 
-/// <summary>Where a faulted message goes back to.</summary>
-public sealed record RepublishTarget(string Exchange, string ResolvedFrom);
+/// <summary>
+/// Where a faulted message goes back to. <see cref="Conflict"/> is set when the message's own MT-Fault-InputAddress
+/// header disagrees with the queue the error queue belongs to: headers are written by whoever published the message,
+/// so such a target is not used without an explicit targetExchange.
+/// </summary>
+public sealed record RepublishTarget(string Exchange, string ResolvedFrom, string? Conflict = null);
 
 public static class RepublishTargetResolver
 {
@@ -146,16 +150,30 @@ public static class RepublishTargetResolver
     /// </summary>
     public static RepublishTarget? Resolve(string errorQueue, IDictionary<string, object?>? headers)
     {
+        var fromName = OwnerOf(errorQueue);
         var fromHeader = BrokerAddress.GetEntityName(FaultHeaders.GetString(headers, HeaderNames.FaultInputAddress));
-        if (!string.IsNullOrEmpty(fromHeader))
-            return new RepublishTarget(fromHeader, HeaderNames.FaultInputAddress);
 
+        if (!string.IsNullOrEmpty(fromHeader))
+        {
+            var conflict = fromName is not null && !string.Equals(fromHeader, fromName.Value.Queue, StringComparison.Ordinal)
+                ? $"MT-Fault-InputAddress names '{fromHeader}', but '{errorQueue}' belongs to '{fromName.Value.Queue}'. " +
+                  "Message headers can be set by whoever published the message, so pass targetExchange to choose explicitly."
+                : null;
+            return new RepublishTarget(fromHeader, HeaderNames.FaultInputAddress, conflict);
+        }
+
+        return fromName is { } owner
+            ? new RepublishTarget(owner.Queue, $"queue name without '{owner.Suffix}'")
+            : null;
+    }
+
+    private static (string Queue, string Suffix)? OwnerOf(string errorQueue)
+    {
         foreach (var suffix in Suffixes)
         {
             if (errorQueue.EndsWith(suffix, StringComparison.Ordinal) && errorQueue.Length > suffix.Length)
-                return new RepublishTarget(errorQueue[..^suffix.Length], $"queue name without '{suffix}'");
+                return (errorQueue[..^suffix.Length], suffix);
         }
-
         return null;
     }
 }

@@ -36,6 +36,14 @@ jobs:
       - name: Build
         run: dotnet build RabbitMcp.slnx -c Release --no-restore
 
+      # Known-vulnerable NuGet packages (direct or transitive) fail the build.
+      - name: Vulnerable packages
+        run: |
+          dotnet list RabbitMcp.slnx package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -q "has the following vulnerable packages" vulnerable.txt; then
+            echo "::error::Vulnerable NuGet packages found (see above)"; exit 1
+          fi
+
       - name: Unit tests
         run: >
           dotnet test tests/RabbitMcp.Tests -c Release --no-build

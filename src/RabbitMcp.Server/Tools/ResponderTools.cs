@@ -49,7 +49,8 @@ public sealed class ResponderTools(ResponderService responder, TimeProvider time
                 [.. r.Contract.Responses.Select(ResponderContracts.ReplyToolName)],
                 r.Envelope.Message,
                 new ContractCheck(r.Contract.Name, r.Contract.Version, errors.Count == 0, errors),
-                r.Envelope.CorrelationId, r.Envelope.SourceAddress, r.ReceivedAt, r.ExpiresAt,
+                r.Envelope.CorrelationId, r.Envelope.SourceAddress, BrokerAddress.GetEntityName(r.ResponseAddress),
+                r.ReceivedAt, r.ExpiresAt,
                 r.ExpiresAt is { } at ? Math.Max(0, (int)(at - now).TotalSeconds) : null);
         }).ToArray();
 

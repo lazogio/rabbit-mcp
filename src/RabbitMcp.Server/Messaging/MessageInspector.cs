@@ -22,6 +22,7 @@ public sealed class MessageInspector(ContractRegistry contracts, IOptions<Rabbit
         var maxChars = options.Value.MaxPayloadChars;
         var headers = props.Headers;
         var envelope = MassTransitEnvelope.TryParse(body);
+        var target = RepublishTargetResolver.Resolve(queue, headers);
 
         JsonElement? payload = null;
         string? rawBody = null;
@@ -56,7 +57,8 @@ public sealed class MessageInspector(ContractRegistry contracts, IOptions<Rabbit
             SentTimeUtc: envelope?.SentTime,
             Contract: CheckContract(envelope),
             Fault: FaultHeaders.Parse(headers),
-            RepublishTarget: RepublishTargetResolver.Resolve(queue, headers)?.Exchange,
+            RepublishTarget: target?.Exchange,
+            RepublishWarning: target?.Conflict,
             Payload: payload,
             RawBody: rawBody,
             Truncated: truncated,
@@ -90,6 +92,11 @@ public sealed class MessageInspector(ContractRegistry contracts, IOptions<Rabbit
         catch (JsonException ex)
         {
             return [$"{(string.IsNullOrEmpty(ex.Path) || ex.Path == "$" ? "message" : ex.Path.TrimStart('$', '.'))}: {ex.Message}"];
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException)
+        {
+            // A contract System.Text.Json cannot handle (e.g. an interface-typed property) must not break peeking.
+            return [$"message: cannot be read as {type.Name} ({ex.Message})"];
         }
 
         return ContractValidator.Validate(instance);
