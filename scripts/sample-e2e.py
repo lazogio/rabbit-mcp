@@ -113,9 +113,10 @@ def main():
     # --- 2. _error queue and republish
     flaky = str(uuid.uuid4())
     place(flaky, "FLAKY-LAMP", 1, 20)
-    peeked = eventually("FLAKY order in order-placed_error", lambda: next((
+    # The error queue only exists after MassTransit's first fault, so "does not exist" just means "not yet".
+    peeked = eventually("FLAKY order in order-placed_error", ready(lambda: next((
         m for m in call("peek_messages", queue="order-placed_error", count=10)["messages"]
-        if (m.get("payload") or {}).get("orderId") == flaky), None))
+        if (m.get("payload") or {}).get("orderId") == flaky), None)))
     assert "Inventory service unavailable" in (peeked.get("fault") or {}).get("exceptionMessage", ""), peeked
     step("FLAKY order failed and is in order-placed_error with the exception")
 
