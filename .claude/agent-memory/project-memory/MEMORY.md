@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 7 (0 open) · Next ID: BUG-008
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-13 phase-5/telemetry: spans + MT-Activity-Id/traceparent (MassTransit joins traces), metrics, OTLP
 - 2026-10-13 review/phase-3: BUG-004..007 fixed (path split, assembly name clash, load errors, list_queues paging)
 - 2026-10-13 phase-4/control: PublishAllow/Deny policy, audit log (stderr + JSONL), client identity in audit
 - 2026-10-13 phase-3/usability: ContractAssemblies option, exchange cache, optional list_queues (Management API)
@@ -29,6 +30,7 @@ Last updated: 2026-10-13 · Bugs: 7 (0 open) · Next ID: BUG-008
 8. Release = push a `vX.Y.Z` tag; the smoke test must pass on the single-file binary.
 9. Keep RabbitMcp.Contracts AssemblyVersion 1.0.0.0 (external contract DLLs bind to it).
 10. Anything that sends/moves messages must respect PublishPolicy and write AuditLog events (incl. failures).
+11. Every send: Telemetry.StartSend + Telemetry.Inject (MassTransit needs MT-Activity-Id, not traceparent).
 
 ## Open ideas (not bugs)
 - Server as responder/consumer for requests from other services.

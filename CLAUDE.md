@@ -61,6 +61,9 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 - **Every operation that sends or moves messages is audited** (`AuditLog`, action + outcome + ids + client),
   including failed and refused attempts. New sending tools must write audit events and respect `PublishPolicy`.
 - Tools get the MCP client via an injected `McpServer? server = null` parameter (excluded from the schema).
+- **Tracing**: every send starts a `Telemetry.StartSend` span and injects it (`Telemetry.Inject`) — MassTransit 8
+  reads `MT-Activity-Id` (W3C id) from the AMQP headers, other consumers `traceparent`. Metrics come from
+  `AuditLog.Write`, so new operations get metrics by auditing. Never add a console exporter.
 - Passive declares (`ExchangeDeclarePassive`/`QueueDeclarePassive`) run on a throwaway channel:
   a 404 closes the channel.
 - Pure logic stays testable without a broker (registry, validator, envelope, fault parsing,

@@ -1,5 +1,14 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Phase 5 / OpenTelemetry — branch phase-5/telemetry, fast-forwarded into main
+- What: `Telemetry` (ActivitySource + Meter "RabbitMcp"); spans publish/request/republish with messaging.* tags;
+  headers `traceparent`/`tracestate` + `MT-Activity-Id`; metrics `rabbitmcp.operations` (from audit events) and
+  `rabbitmcp.request.duration`; OTLP (traces + metrics, incl. MCP SDK "Experimental.ModelContextProtocol") when
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set (OpenTelemetry 1.19.1, `UseOtlpExporter`).
+- Decision: republish = new trace with a link to the original send (not a child of it) — retries are separate work.
+- Decision: telemetry only via System.Diagnostics in core code; OTel SDK wired in Program.cs only.
+- Verified (first run green): MassTransit consume span shares the trace for publish, request, and republish.
+
 ### 2026-10-13 Phase 3 review — branch review/phase-3 (27cb9e4), fast-forwarded into main
 - What: user asked to review phase 3; found and fixed BUG-004..007 (path separator, name clash, load error text,
   list_queues paging). Not changed (noted): https Management API with self-signed certs has no trust option (by design,

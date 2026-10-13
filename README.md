@@ -76,6 +76,14 @@ Claude Desktop-ისთვის იგივე ბინარი და env 
 {"timestamp":"2026-10-13T12:00:00+00:00","action":"publish","outcome":"sent","client":"claude-code 2.1.0","contract":"OrderSubmitted","exchange":"Shop.Contracts:OrderSubmitted","messageId":"…"}
 ```
 
+## OpenTelemetry
+
+ჩაირთვება სტანდარტული ცვლადით `OTEL_EXPORTER_OTLP_ENDPOINT` (მაგ. `http://localhost:4317`). სერვისის სახელი `OTEL_SERVICE_NAME`-ით იცვლება, ნაგულისხმევად `rabbit-mcp`. სხვა `OTEL_*` ცვლადებიც ჩვეულებრივ მუშაობს. ექსპორტი მხოლოდ OTLP-ით ხდება და stdout-ს არ ეხება.
+
+- **Trace:** სერვერი ქმნის span-ებს `publish {exchange}`, `request {exchange}` (შედეგით) და `republish {exchange}`. ისინი MCP SDK-ის tool-call span-ის შვილებია. ყოველ შეტყობინებას თან ახლავს `traceparent` და `MT-Activity-Id`. MassTransit 8 სწორედ ამ ორს კითხულობს, ამიტომ consumer-ის span იმავე trace-ში ჩნდება. ეს ინტეგრაციულ ტესტში დადასტურებულია.
+- **Republish:** ახალ trace-ს იწყებს, რომელიც თავდაპირველ გაგზავნას **link**-ით უკავშირდება. ამიტომ განმეორებითი დამუშავება ცალკე ჩანს, თავდაპირველი შეცდომა კი ერთი დაწკაპუნებით ხელმისაწვდომია.
+- **მეტრიკები:** `rabbitmcp.operations` (action/outcome/contract) და `rabbitmcp.request.duration`. მრიცხველი audit-ის ყოველი ჩანაწერიდან იზრდება, ამიტომ audit და მეტრიკები ერთმანეთს ყოველთვის ემთხვევა.
+
 ## კონტრაქტები
 
 ```csharp

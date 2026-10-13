@@ -33,6 +33,12 @@
 - Publishing to a deleted exchange with confirms → `OperationInterruptedException` (ReplyCode 404) from `BasicPublishAsync`.
 - External contract DLLs: load into the default ALC; keep a stable AssemblyVersion on the shared attribute assembly.
 
+## Tracing
+- MassTransit 8.5 does NOT read `traceparent`: it parents its receive span from the AMQP header `MT-Activity-Id`
+  (a W3C id string) and writes the same header on send (`LogContextActivityExtensions.cs`). Write both headers.
+- MassTransit only creates spans when someone listens to ActivitySource "MassTransit" (tests add an ActivityListener).
+- MCP SDK ActivitySource/Meter name: "Experimental.ModelContextProtocol".
+
 ## MCP C# SDK (ModelContextProtocol 2.2)
 - Parameters of type `McpServer`, `RequestContext<CallToolRequestParams>`, `IProgress<ProgressNotificationValue>`,
   `ClaimsPrincipal` (and DI services) are injected and excluded from the input schema; give them `= null` defaults
