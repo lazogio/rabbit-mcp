@@ -74,6 +74,13 @@ jobs:
           OTEL_SERVICE_NAME: rabbit-mcp-smoke
         run: scripts/smoke-test.sh out/rabbit-mcp
 
+      # Responder mode with no broker: the listener keeps retrying in the background, MCP still works.
+      - name: MCP smoke test (responder mode)
+        env:
+          RabbitMcp__RespondTo: GetOrderStatus
+          SMOKE_EXPECT_TOOLS: list_contracts,pending_requests,reject_request,reply_order_status,reply_order_not_found
+        run: scripts/smoke-test.sh out/rabbit-mcp
+
       - name: MCP smoke test (HTTP transport + API key)
         run: scripts/smoke-test-http.sh out/rabbit-mcp
 

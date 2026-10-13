@@ -53,6 +53,13 @@ public sealed class BrokerFixture : IAsyncLifetime
     public ContractPublisher Publisher { get; private set; } = null!;
     public ManagementClient Management { get; private set; } = null!;
     public AuditLog Audit { get; private set; } = null!;
+
+    /// <summary>Responder mode for <see cref="AskHuman"/>, consuming since InitializeAsync.</summary>
+    public ResponderService Responder { get; private set; } = null!;
+
+    /// <summary>A MassTransit request client, like a service asking rabbit-mcp.</summary>
+    public IRequestClient<AskHuman> AskClient(TimeSpan timeout) =>
+        _bus!.CreateRequestClient<AskHuman>(RequestTimeout.After(ms: (int)timeout.TotalMilliseconds));
     public string AuditPath { get; } = Path.Combine(Path.GetTempPath(), $"rabbit-mcp-it-audit-{Guid.NewGuid():N}", "audit.jsonl");
     private Microsoft.Extensions.Options.IOptions<RabbitMcpOptions> _options = null!;
 
@@ -156,6 +163,13 @@ public sealed class BrokerFixture : IAsyncLifetime
         });
         await _bus.StartAsync();
 
+        // --- responder mode: answers AskHuman requests from the bus.
+        Responder = new ResponderService(Connection, ResponderContracts.From(Registry, "AskHuman"),
+            new RequestInbox(TimeProvider.System, capacity: 100), Audit, TimeProvider.System, options,
+            NullLogger<ResponderService>.Instance);
+        await Responder.StartAsync(CancellationToken.None);
+        await Responder.Ready.WaitAsync(TimeSpan.FromSeconds(30));
+
         // --- topology for situations MassTransit would never create.
         await using var channel = await Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
         var unbound = Registry.Get(typeof(UnboundEvent)).Exchange;
@@ -207,6 +221,8 @@ public sealed class BrokerFixture : IAsyncLifetime
     public async Task DisposeAsync()
     {
         _listener?.Dispose();
+        if (Responder is not null)
+            await Responder.StopAsync(CancellationToken.None);
         if (_bus is not null)
             await _bus.StopAsync();
         await _replies.DisposeAsync();

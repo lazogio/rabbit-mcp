@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using RabbitMcp.Contracts;
 
 namespace RabbitMcp.IntegrationTests.Contracts;
@@ -30,6 +31,29 @@ public sealed record Pong
 
 [MessageContract("Its exchange is created and deleted by the test, to exercise the exchange cache.")]
 public sealed record VolatileEvent
+{
+    public required Guid Id { get; init; }
+}
+
+[MessageContract("A service asks rabbit-mcp (the model) a question: answered in responder mode.",
+    Responses = new[] { typeof(HumanAnswer), typeof(HumanDeclined) })]
+public sealed record AskHuman
+{
+    public required Guid Id { get; init; }
+
+    [Required]
+    public required string Question { get; init; }
+}
+
+public sealed record HumanAnswer
+{
+    public required Guid Id { get; init; }
+
+    [Required, StringLength(200, MinimumLength = 1)]
+    public required string Answer { get; init; }
+}
+
+public sealed record HumanDeclined
 {
     public required Guid Id { get; init; }
 }

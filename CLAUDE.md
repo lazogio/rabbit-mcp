@@ -31,7 +31,7 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 |---|---|
 | `src/RabbitMcp.Contracts` | `[MessageContract]` records. **No package dependencies** — services reference it too. |
 | `src/RabbitMcp.Server/Contracts` | `ContractRegistry` (naming conventions), `ContractValidator` (DataAnnotations, nested paths), `ContractAssemblyLoader` (`ContractAssemblies` option) |
-| `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only) |
+| `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only), responder mode (`ResponderService`, `RequestInbox`, `ResponderEnvelopes`) |
 | `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas) |
 | `tests/RabbitMcp.Tests` | xUnit unit tests, no broker needed |
 | `tests/RabbitMcp.ExternalContracts` | a user-style contracts DLL, loaded at runtime by loader tests and smoke tests |
@@ -62,6 +62,9 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   TestServer). HTTP must never run unauthenticated unless `HttpAllowAnonymous`; keep the Origin check.
 - **Every operation that sends or moves messages is audited** (`AuditLog`, action + outcome + ids + client),
   including failed and refused attempts. New sending tools must write audit events and respect `PublishPolicy`.
+- Responder mode (`RespondTo`) is manual: requests are acked on arrival and kept in memory until the model answers
+  (`reply_*`) or rejects (`Fault<T>`). Replies go to `responseAddress`, faults to `faultAddress ?? responseAddress`;
+  a reply that fails validation is not sent and the request stays pending.
 - Tools get the MCP client via an injected `McpServer? server = null` parameter (excluded from the schema).
 - **Tracing**: every send starts a `Telemetry.StartSend` span and injects it (`Telemetry.Inject`) — MassTransit 8
   reads `MT-Activity-Id` (W3C id) from the AMQP headers, other consumers `traceparent`. Metrics come from

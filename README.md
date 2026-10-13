@@ -69,6 +69,8 @@ Audit-ში ჩანს, ვინ რა გააგზავნა: `"clien
 | `RabbitMcp__HttpPublicUrl` | — | საჯარო URL, რომელიც OAuth metadata-ში ჩანს (proxy-ს უკან) |
 | `RabbitMcp__HttpAllowedOrigins` | — | ბრაუზერის origin-ები (`;`) |
 | `RabbitMcp__HttpAllowAnonymous` | `false` | ავტორიზაციის გარეშე, მხოლოდ ლოკალური ცდისთვის |
+| `RabbitMcp__RespondTo` | — | responder რეჟიმი: request კონტრაქტები, რომლებსაც სერვერი თავად პასუხობს (ნიმუშები, როგორც `PublishAllow`-ში) |
+| `RabbitMcp__MaxPendingRequests` | `100` | რამდენი request შეიძლება ელოდოს პასუხს. დანარჩენი მაშინვე Fault-ით უარიყოფა |
 | `RabbitMcp__AuditIncludePayload` | `false` | audit-ში შეტყობინების შიგთავსიც ჩაიწეროს (შეიძლება პერსონალურ მონაცემებს შეიცავდეს) |
 
 ## ხელსაწყოები
@@ -83,8 +85,11 @@ Audit-ში ჩანს, ვინ რა გააგზავნა: `"clien
 | `publish_<contract>` * | აქვეყნებს event-ს |
 | `request_<contract>` * | აგზავნის request-ს და აბრუნებს პასუხს |
 | `republish_from_error` ** | აბრუნებს შეტყობინებებს `_error`/`_skipped` რიგიდან: ჯერ preview, შემდეგ `confirm=true` |
+| `pending_requests` † | სერვისებიდან შემოსული request-ები, რომლებიც პასუხს ელოდება |
+| `reply_<response>` † | პასუხობს request-ს ერთ-ერთი დეკლარირებული პასუხის ტიპით |
+| `reject_request` † | უარყოფს request-ს: მომთხოვნი მიზეზით Fault-ს იღებს |
 
-\* `EnablePublish` · \** `EnableRepublish` · \*** `ManagementUri`. ყველა ხელსაწყო აბრუნებს `structuredContent`-ს და აცხადებს `outputSchema`-ს. შეცდომები `isError: true`-ით და გასაგები ტექსტით ბრუნდება.
+\* `EnablePublish` · \** `EnableRepublish` · \*** `ManagementUri` · † `RespondTo`. ყველა ხელსაწყო აბრუნებს `structuredContent`-ს და აცხადებს `outputSchema`-ს. შეცდომები `isError: true`-ით და გასაგები ტექსტით ბრუნდება.
 
 ## კონტროლი
 
@@ -145,6 +150,17 @@ MassTransit consumer ჩვეულებრივ პასუხობს: `a
    - `responseCheck`: აკმაყოფილებს თუ არა პასუხი თავის კონტრაქტს;
    - `respondedBy`: endpoint, მანქანა, პროცესი.
 4. consumer-ის exception MassTransit-ის `Fault<T>`-ის სახით მოდის: ტიპი, შეტყობინება, stack trace.
+
+### Responder რეჟიმი: მოდელი პასუხობს
+
+სერვერს შეუძლია consumer-ის როლიც შეასრულოს: `RabbitMcp__RespondTo=AskHuman` (ან `Get*`). ასეთ შემთხვევაში სერვისი ჩვეულებრივ ეკითხება, მაგ. `GetResponse<HumanAnswer, HumanDeclined>(new AskHuman { ... })`, ხოლო პასუხს მოდელი (ან მისი მეშვეობით ადამიანი) იძლევა:
+
+1. სერვერი ქმნის exclusive რიგს და აბამს კონტრაქტების exchange-ებზე (fanout, durable, როგორც MassTransit-ში).
+2. შემოსული request ჩანს `pending_requests`-ში: `requestId`, შეტყობინება, კონტრაქტის შემოწმება, `replyTools` და `expiresAt`.
+3. მოდელი პასუხობს `reply_<response>`-ით (პასუხი ჯერ კონტრაქტზე მოწმდება) ან `reject_request`-ით. უარყოფისას მომთხოვნის `GetResponse` მაშინვე `RequestFaultException`-ით სრულდება.
+4. ვადაგასული request ქრება, რადგან მომთხოვნმა უკვე timeout მიიღო. თუ request-ები `MaxPendingRequests`-ს გადააჭარბებს, ახლები მაშინვე Fault-ით უარიყოფა.
+
+request-ები მეხსიერებაში ინახება: სერვერის გადატვირთვისას მოლოდინში მყოფი request-ები იკარგება და მომთხოვნი timeout-ს იღებს. მიღება და პასუხი audit-ში იწერება (`receive`, `respond`), პასუხის span კი request-ის trace-ს უკავშირდება. რეჟიმი პასუხისმგებლობის გამო ხელით მუშაობს: ავტომატური პასუხი არ არსებობს.
 
 **Responder MassTransit-ის გარეშე** პასუხს აქვეყნებს exchange-ზე, რომლის სახელიც `responseAddress`-ის ბოლო სეგმენტია, routing key `""`-ით. envelope-ში უნდა იყოს იგივე `requestId`, `messageType: ["urn:message:Ns:Type"]` და `message`, content type კი `application/vnd.masstransit+json`.
 

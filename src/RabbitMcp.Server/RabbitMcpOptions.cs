@@ -53,6 +53,15 @@ public sealed class RabbitMcpOptions
     /// <summary>Include message bodies in audit events. Off by default: they may contain personal data.</summary>
     public bool AuditIncludePayload { get; set; }
 
+    /// <summary>
+    /// Responder mode: request contracts this server answers itself ("*" patterns like PublishAllow, ";"-separated).
+    /// Incoming requests wait in pending_requests until the model replies (reply_*) or rejects them. Empty: off.
+    /// </summary>
+    public string? RespondTo { get; set; }
+
+    /// <summary>Responder: maximum requests waiting for an answer; further requests are rejected with a Fault.</summary>
+    public int MaxPendingRequests { get; set; } = 100;
+
     /// <summary>"stdio" (default: one client, started by it) or "http" (shared server, Streamable HTTP + authorization).</summary>
     public string Transport { get; set; } = "stdio";
 

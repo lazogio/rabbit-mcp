@@ -30,7 +30,10 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
     (`AuditLogPath`, checked at startup); payload opt-in (`AuditIncludePayload`).
 
 ## Phase 5 — New capabilities (short design first)
-12. ⬜ Responder mode: `pending_requests` + `respond(requestId, response)` — **decision needed: manual vs automatic replies.**
+12. ✅ Responder mode (`phase-5/responder`): `RespondTo` contracts are consumed on an exclusive queue; requests wait in
+    `pending_requests` (bounded by `MaxPendingRequests`, expire with the requester's TTL); the model answers with typed
+    `reply_<response>` tools or `reject_request` (MassTransit `Fault<T>`); audited (`receive`/`respond`) and traced.
+    Default chosen (no answer): manual replies only — no automatic answers.
 13. ✅ OpenTelemetry (`phase-5/telemetry`, merged 2026-10-13): publish/request/republish spans; `traceparent` + `MT-Activity-Id`
     (MassTransit 8 joins the trace — proven by integration tests); republish = new trace linked to the original;
     `rabbitmcp.operations` + `rabbitmcp.request.duration`; OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.

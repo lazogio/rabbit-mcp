@@ -76,6 +76,24 @@ public static class ServerComposition
         if (settings.EnableRepublish)
             mcp.WithTools<RepublishTools>(ToolJson.Options);
 
+        // Responder mode: answer requests of RespondTo contracts via pending_requests + reply_* / reject_request.
+        if (!string.IsNullOrWhiteSpace(settings.RespondTo))
+        {
+            if (settings.MaxPendingRequests is < 1 or > 10_000)
+                throw new StartupException("RabbitMcp:MaxPendingRequests must be 1-10000.");
+
+            var responder = ResponderContracts.From(contracts, settings.RespondTo);
+            builder.Services
+                .AddSingleton(responder)
+                .AddSingleton(sp => new RequestInbox(sp.GetRequiredService<TimeProvider>(), settings.MaxPendingRequests))
+                .AddSingleton<ResponderService>()
+                .AddHostedService(sp => sp.GetRequiredService<ResponderService>())
+                .AddSingleton<ReplyTools>();
+
+            mcp.WithTools<ResponderTools>(ToolJson.Options);
+            mcp.WithTools(ReplyToolFactory.CreateTools(responder));
+        }
+
         // list_queues needs the Management HTTP API (AMQP cannot enumerate queues).
         if (!string.IsNullOrWhiteSpace(settings.ManagementUri))
         {

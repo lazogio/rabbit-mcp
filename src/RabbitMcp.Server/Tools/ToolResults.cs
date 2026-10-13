@@ -134,3 +134,31 @@ public sealed record QueueListing(
     int TotalInVhost,
     [property: Description("True when more queues matched than were returned.")] bool Truncated,
     string Note);
+
+public sealed record PendingRequestInfo(
+    [property: Description("Pass this to reply_* or reject_request.")] string RequestId,
+    string Contract,
+    int ContractVersion,
+    [property: Description("Tools that answer this request (one per declared reply type).")] IReadOnlyList<string> ReplyTools,
+    [property: Description("The request message.")] JsonElement? Message,
+    [property: Description("Whether the request satisfies its contract.")] ContractCheck Check,
+    string? CorrelationId,
+    [property: Description("Requester's endpoint (envelope sourceAddress).")] string? From,
+    DateTimeOffset ReceivedAt,
+    [property: Description("When the requester gives up; answer before this. Null: no expiration.")] DateTimeOffset? ExpiresAt,
+    [property: Description("Seconds left until ExpiresAt.")] int? SecondsLeft);
+
+public sealed record PendingRequestList(
+    IReadOnlyList<PendingRequestInfo> Requests,
+    [property: Description("All pending requests (may be more than returned).")] int Total,
+    [property: Description("Request contracts this server answers.")] IReadOnlyList<string> AnsweredContracts,
+    [property: Description("Exclusive queue the responder consumes from; null while not connected.")] string? Queue);
+
+public sealed record ReplyResult(
+    string RequestId,
+    string Contract,
+    [property: Description("replied | rejected")] string Status,
+    [property: Description("Reply type sent, or Fault for a rejection.")] string ResponseType,
+    string MessageId,
+    [property: Description("The requester's reply exchange.")] string Exchange,
+    [property: Description("Time between receiving the request and answering it.")] long ElapsedMs);

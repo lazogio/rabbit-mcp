@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 7 (0 open) · Next ID: BUG-008
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-13 phase-5/responder: responder mode — pending_requests, reply_<response>, reject_request (Fault<T>), manual only
 - 2026-10-13 phase-5/http: HTTP transport, API keys + JWT/OIDC, MCP resource metadata, Origin check, user in audit
 - 2026-10-13 phase-5/telemetry: spans + MT-Activity-Id/traceparent (MassTransit joins traces), metrics, OTLP
 - 2026-10-13 review/phase-3: BUG-004..007 fixed (path split, assembly name clash, load errors, list_queues paging)

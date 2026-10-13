@@ -1,5 +1,19 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Responder mode (phase-5/responder) — commit PENDING
+- What: `RespondTo` (patterns) makes the server a consumer of request contracts: `ResponderService` (BackgroundService,
+  exclusive auto-delete queue bound to each contract exchange, fanout durable like MassTransit; retries every 5 s),
+  `RequestInbox` (bounded by `MaxPendingRequests`, expiry from envelope `expirationTime`), `ResponderEnvelopes`
+  (reply like `RespondAsync`; `Fault<T>` with URN `urn:message:MassTransit:Fault[[Ns:Type]]`).
+  Tools: `pending_requests`, one `reply_<response>` per reply type (typed schema), `reject_request`.
+- Decision (default, user did not choose): manual replies only — no automatic answers.
+- Decision: requests are acked on arrival and kept in memory; a restart loses them (requester times out).
+  Inbox full → immediate Fault "busy" instead of leaving the requester to time out.
+- Decision: invalid or wrong-type reply is not sent, request stays pending; "requester gone" (mandatory return /
+  404) is not retried; other send failures put the request back.
+- Decision: class named `ResponderService` because `Tools.Responder` (RequestResult.RespondedBy) already exists.
+- Impact: audit actions `receive` / `respond`; reply span linked to the request's trace; CI smoke step for responder mode.
+
 ### 2026-10-13 Phase 5 / HTTP transport — branch phase-5/http, fast-forwarded into main
 - What: `RabbitMcp:Transport=http` (ModelContextProtocol.AspNetCore 2.2, stateless), API-key scheme (SHA-256 +
   FixedTimeEquals, ≥ 32 chars, `name:KEY`), JwtBearer + SDK `AddMcp` protected resource metadata, Origin check,

@@ -28,6 +28,8 @@ public static class AuditActions
     public const string Publish = "publish";
     public const string Request = "request";
     public const string Republish = "republish";
+    public const string Receive = "receive";   // responder: a request arrived
+    public const string Respond = "respond";   // responder: reply or rejection sent
 }
 
 /// <summary>
