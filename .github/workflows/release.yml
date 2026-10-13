@@ -1,0 +1,108 @@
+name: Release
+
+# A `v*` tag (e.g. v0.2.0) builds self-contained binaries for every platform and publishes a
+# GitHub Release. Pushing a change to this workflow file only builds (no release), so the
+# packaging is verified before the first tag is ever pushed.
+on:
+  push:
+    tags: ['v*']
+    branches: ['**']
+    paths: ['.github/workflows/release.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [linux-x64, linux-arm64, win-x64, osx-x64, osx-arm64]
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Self-contained single file: users need no .NET runtime. Not trimmed: the MCP SDK and
+      # System.Text.Json rely on reflection over the contract types.
+      - name: Publish
+        run: >
+          dotnet publish src/RabbitMcp.Server -c Release -r ${{ matrix.rid }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=none
+          -p:Version=${{ steps.version.outputs.version }}
+          -o out/rabbit-mcp
+
+      - name: Package
+        shell: bash
+        run: |
+          name="rabbit-mcp-${{ steps.version.outputs.version }}-${{ matrix.rid }}"
+          cp README.md out/rabbit-mcp/
+          cd out
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            zip -qr "$name.zip" rabbit-mcp
+          else
+            tar -czf "$name.tar.gz" rabbit-mcp
+          fi
+          ls -la
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.rid }}
+          path: |
+            out/*.zip
+            out/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: dist
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --title "$GITHUB_REF_NAME"
+          --generate-notes
+          $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)

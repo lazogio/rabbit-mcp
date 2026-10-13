@@ -114,3 +114,19 @@ public class ContractValidatorTests
     public void Null_message_is_an_error() =>
         Assert.Equal(new[] { "message: is required." }, ContractValidator.Validate(null));
 }
+
+public class ServerVersionTests
+{
+    [Theory]
+    [InlineData("1.2.3+0a1b2c3d", "1.2.3")]
+    [InlineData("0.2.0-rc.1+abc", "0.2.0-rc.1")]
+    [InlineData("1.0.0", "1.0.0")]
+    [InlineData(null, "0.0.0")]
+    [InlineData("", "0.0.0")]
+    public void Build_metadata_is_stripped(string? informational, string expected) =>
+        Assert.Equal(expected, RabbitMcp.Server.ServerVersion.FromInformational(informational));
+
+    [Fact]
+    public void Current_version_is_semver_like() =>
+        Assert.Matches(@"^\d+\.\d+\.\d+", RabbitMcp.Server.ServerVersion.Current);
+}

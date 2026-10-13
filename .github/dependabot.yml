@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # NuGet: versions are centrally managed in Directory.Packages.props.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
+    groups:
+      mcp-and-rabbitmq:
+        patterns: ["ModelContextProtocol*", "RabbitMQ.Client", "Microsoft.Extensions.*"]
+      test-tooling:
+        patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "GitHubActionsTestLogger", "Testcontainers*"]
+      masstransit:
+        patterns: ["MassTransit*"]
+    ignore:
+      # MassTransit 9+ is commercial; it is a test-only dependency and must stay on v8.
+      - dependency-name: "MassTransit*"
+        versions: ["[9.0.0,)"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]

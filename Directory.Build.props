@@ -5,5 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <AnalysisLevel>latest</AnalysisLevel>
+    <!-- Overridden by the release workflow from the git tag (v1.2.3 -> 1.2.3). -->
+    <Version>0.1.0</Version>
   </PropertyGroup>
 </Project>

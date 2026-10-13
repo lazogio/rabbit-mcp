@@ -43,7 +43,7 @@ builder.Services
     .AddSingleton<ContractPublisher>();
 
 var mcp = builder.Services
-    .AddMcpServer(o => o.ServerInfo = new Implementation { Name = "rabbit-mcp", Version = "0.1.0" })
+    .AddMcpServer(o => o.ServerInfo = new Implementation { Name = "rabbit-mcp", Version = ServerVersion.Current })
     .WithStdioServerTransport()
     .WithTools<BrokerTools>(ToolJson.Options);
 
