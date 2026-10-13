@@ -138,3 +138,16 @@ jobs:
           name: integration-test-results
           path: TestResults
           if-no-files-found: ignore
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build -t rabbit-mcp:ci .
+
+      - name: MCP smoke test (container, HTTP + API key)
+        run: scripts/smoke-test-http.sh docker:rabbit-mcp:ci

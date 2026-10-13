@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts a published rabbit-mcp binary with the HTTP transport and talks MCP to it like a remote client:
 # health check, 401 without credentials, initialize + tools/list with an API key.
-# usage: scripts/smoke-test-http.sh <path-to-binary>
+# usage: scripts/smoke-test-http.sh <path-to-binary>   or   scripts/smoke-test-http.sh docker:<image>
 set -euo pipefail
 
 BIN=${1:?usage: smoke-test-http.sh <path-to-binary>}
@@ -9,13 +9,18 @@ PORT=${SMOKE_HTTP_PORT:-5089}
 KEY="smoke-key-$(head -c 24 /dev/urandom | base64 | tr -d '/+=')"
 LOG=$(mktemp)
 
-RabbitMcp__Transport=http \
-RabbitMcp__HttpUrls="http://127.0.0.1:$PORT" \
-RabbitMcp__ApiKeys="smoke:$KEY" \
-RabbitMcp__EnablePublish=true \
+export RabbitMcp__Transport=http RabbitMcp__HttpUrls="http://127.0.0.1:$PORT" \
+       RabbitMcp__ApiKeys="smoke:$KEY" RabbitMcp__EnablePublish=true
+if [[ "$BIN" == docker:* ]]; then
+  CONTAINER="rabbit-mcp-smoke-$$"
+  docker run --rm --name "$CONTAINER" --network host \
+    -e RabbitMcp__Transport -e RabbitMcp__HttpUrls -e RabbitMcp__ApiKeys -e RabbitMcp__EnablePublish \
+    "${BIN#docker:}" >"$LOG" 2>&1 &
+else
   "$BIN" >"$LOG" 2>&1 &
+fi
 PID=$!
-trap 'kill $PID 2>/dev/null || true; rm -f "$LOG"' EXIT
+trap 'kill $PID 2>/dev/null || true; [ -n "${CONTAINER:-}" ] && docker rm -f "$CONTAINER" >/dev/null 2>&1; rm -f "$LOG"' EXIT
 
 for _ in $(seq 1 60); do
   curl -fs "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break

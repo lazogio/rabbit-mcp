@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+out/
+external/
+.git/
+.github/
+.claude/
+tests/
+*.md
