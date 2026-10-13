@@ -189,15 +189,20 @@ jobs:
         working-directory: dist
         run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
 
-      - name: Create release
+      # Works for a pushed tag and for a release drafted in the GitHub UI (which creates the tag itself):
+      # an existing release just gets the assets attached.
+      - name: Create release (or attach to an existing one)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" dist/*
-          --repo "$GITHUB_REPOSITORY"
-          --title "$GITHUB_REF_NAME"
-          --generate-notes
-          $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" --generate-notes \
+              $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)
+          fi
 
       - name: Publish RabbitMcp.Contracts to nuget.org
         if: env.NUGET_API_KEY != ''
