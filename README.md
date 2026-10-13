@@ -57,6 +57,35 @@ docker run -d -p 5080:5080 \
 
 stdio-სთვის: `docker run -i --rm -e RabbitMcp__Transport=stdio … ghcr.io/lazogio/rabbit-mcp`.
 
+### უფლებები (როლები)
+
+ნაგულისხმევად ყველა ავტორიზებულ მომხმარებელს ყველა ჩართული ხელსაწყოს გამოყენება შეუძლია. როგორც კი ერთი როლი მაინც განისაზღვრება, თითოეულს მხოლოდ მისი როლების უფლებები აქვს:
+
+| უფლება | ხელსაწყოები | შეზღუდვა ნიმუშით |
+|---|---|---|
+| `read` | `list_contracts`, `validate_message`, `queue_stats`, `peek_messages`, `list_queues`, `contract_consumers` | — |
+| `publish` | `publish_*` | კონტრაქტით: `publish:Billing.*,Order*` |
+| `request` | `request_*` | კონტრაქტით: `request:Get*` |
+| `republish` | `republish_from_error` | error რიგით: `republish:orders-*_error` |
+| `respond` | `pending_requests`, `reply_*`, `reject_request` | request კონტრაქტით: `respond:AskHuman` |
+| `*` | ყველაფერი | — |
+
+```bash
+RabbitMcp__Roles__viewer="read"
+RabbitMcp__Roles__operator="read;publish:Order*;request;republish:*_error"
+RabbitMcp__Roles__admin="*"
+RabbitMcp__UserRoles="alice=operator;ci=viewer;bob@example.com=admin"
+RabbitMcp__DefaultRoles="viewer"
+```
+
+- **როლის მინიჭება:** როლი ენიჭება API key-ის სახელს (`ApiKeys`-ში `alice:KEY` → `alice`) ან token-ის მომხმარებელს (`preferred_username`, `email` ან `sub`). JWT-ის `roles` claim-ში ჩაწერილი როლებიც მოქმედებს (Entra ID app roles, Keycloak roles mapper). claim-ის სახელს `JwtRolesClaim` ცვლის.
+- **როლის გარეშე მომხმარებელი** იღებს `DefaultRoles`-ს. თუ ის ცარიელია, უფლება არ აქვს და ხელსაწყოების სიაც ცარიელია.
+- **შემოწმება ორ ეტაპად ხდება.** `tools/list`-ში მხოლოდ ნებადართული ხელსაწყოები ჩანს. `tools/call` კი არგუმენტებით ხელახლა მოწმდება: error რიგის სახელი, pending request-ის კონტრაქტი. უარყოფილი გამოძახება audit-ში იწერება (`action: "access"`, `outcome: "denied"`), მოდელი კი ხედავს, რომელი უფლება აკლია.
+- **`list_contracts.sendable`** და **`pending_requests`** მომხმარებლის როლებს ითვალისწინებს.
+- **`Enable*` და `PublishAllow`/`PublishDeny` ზედა ზღვარია:** როლი მხოლოდ ჩართული ხელსაწყოებიდან არჩევს და გამორთულს ვერ ჩართავს.
+- **stdio-ში** ერთი ლოკალური მომხმარებელია, ამიტომ როლები მხოლოდ HTTP-ზე მოქმედებს.
+- **კონფიგურაციის შეცდომისას** (უცნობი უფლება, განუსაზღვრელი როლი) სერვერი ერთ გასაგებ სტრიქონს წერს და არ ეშვება.
+
 Audit-ში ჩანს, ვინ რა გააგზავნა: `"client": "alice (claude-code 2.1.0)"`. ბრაუზერიდან მოსული მოთხოვნები, ანუ `Origin` header-ით, უარყოფილია, თუ წყარო `HttpAllowedOrigins`-ში არ არის. ეს MCP-ის სპეციფიკაციით მოთხოვნილი დაცვაა DNS rebinding-ისგან. TLS-ისთვის სერვერი reverse proxy-ის (nginx, Traefik, ingress) უკან დააყენეთ.
 
 ## კონფიგურაცია
@@ -83,6 +112,10 @@ Audit-ში ჩანს, ვინ რა გააგზავნა: `"clien
 | `RabbitMcp__JwtAuthority` / `JwtAudience` / `JwtScopes` | — | OIDC ავტორიზაცია. `JwtScopes` (`;`) token-ში სავალდებულოა, მის გარეშე 403 |
 | `RabbitMcp__HttpPublicUrl` | — | საჯარო URL, რომელიც OAuth metadata-ში ჩანს (proxy-ს უკან) |
 | `RabbitMcp__HttpAllowedOrigins` | — | ბრაუზერის origin-ები (`;`) |
+| `RabbitMcp__Roles__<role>` | — | როლის უფლებები, მაგ. `read;publish:Order*`. იხ. [უფლებები](#უფლებები-როლები) |
+| `RabbitMcp__UserRoles` | — | ვის რა როლი აქვს: `alice=operator;bob@example.com=viewer` |
+| `RabbitMcp__DefaultRoles` | — | როლი მათთვის, ვისაც როლი არ მინიჭებია. ცარიელი = უფლებების გარეშე |
+| `RabbitMcp__JwtRolesClaim` | `roles` | JWT claim, რომლის მნიშვნელობები როლის სახელებია |
 | `RabbitMcp__HttpAllowAnonymous` | `false` | ავტორიზაციის გარეშე, მხოლოდ loopback მისამართზე (`localhost`/`127.0.0.1`); სხვაგან სერვერი არ ეშვება |
 | `RabbitMcp__RespondTo` | — | responder რეჟიმი: request კონტრაქტები, რომლებსაც სერვერი თავად პასუხობს (ნიმუშები, როგორც `PublishAllow`-ში) |
 | `RabbitMcp__MaxPendingRequests` | `100` | რამდენი request შეიძლება ელოდოს პასუხს. დანარჩენი მაშინვე Fault-ით უარიყოფა |
@@ -223,7 +256,7 @@ INFO     OrderPlaced coupon: New optional property.
 ## უსაფრთხოება
 
 - **საიდუმლოები:** AMQP და Management URI-ის პაროლი არც ლოგში, არც შეცდომებში, არც audit-ში ჩანს, მხოლოდ `host:port`. API key-ები მეხსიერებაში მხოლოდ SHA-256-ით ინახება და constant-time შედარებით მოწმდება.
-- **HTTP:** ავტორიზაციის გარეშე სერვერი არ ეშვება, `HttpAllowAnonymous` კი მხოლოდ loopback-ზე მუშაობს. JWT უნდა შეიცავდეს `JwtScopes`-ის ყველა scope-ს. უცხო `Origin` უარიყოფა. Docker image non-root მომხმარებლით ეშვება.
+- **HTTP:** ავტორიზაციის გარეშე სერვერი არ ეშვება, `HttpAllowAnonymous` კი მხოლოდ loopback-ზე მუშაობს. [როლები](#უფლებები-როლები) ზღუდავს, ვის რა ხელსაწყო აქვს. JWT უნდა შეიცავდეს `JwtScopes`-ის ყველა scope-ს. უცხო `Origin` უარიყოფა. Docker image non-root მომხმარებლით ეშვება.
 - **გაგზავნა:** `publish_*`/`request_*`/`republish_from_error` ნაგულისხმევად გამორთულია. `PublishAllow`/`PublishDeny` ზღუდავს კონტრაქტებს, ყოველი მცდელობა კი (ჩავარდნილიც) audit-ში იწერება.
 - **შეტყობინების შიგთავსს არ ენდობა:** header-ები და envelope-ის მისამართები ნებისმიერ გამომგზავნს შეუძლია ჩაწეროს.
   - Responder პასუხობს მხოლოდ MassTransit-ის დროებით reply endpoint-ს (fanout, `durable:false`, `autoDelete:true`). request, რომლის `responseAddress` ჩვეულებრივ exchange-ზე მიუთითებს, უარიყოფა (audit: `receive refused`).

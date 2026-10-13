@@ -287,6 +287,10 @@ public class HttpHostingTests
         jsonrpc = "2.0", id = 3, method = "tools/call", @params = new { name = tool, arguments },
     });
 
+    /// <summary>The text of a tools/call result (JSON-unescaped).</summary>
+    private static string Text(JsonElement rpc) =>
+        string.Join("\n", rpc.GetProperty("result").GetProperty("content").EnumerateArray().Select(c => c.GetProperty("text").GetString()));
+
     private const string ListTools = """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""";
 
     [Fact]
@@ -323,11 +327,11 @@ public class HttpHostingTests
         var bobPublish = await Rpc(await client.SendAsync(Mcp(
             Call("publish_order_submitted", new { message = new { orderId = Guid.NewGuid() } }), r => r.Headers.Add("X-Api-Key", BobKey))));
         Assert.True(bobPublish.GetProperty("result").GetProperty("isError").GetBoolean());
-        Assert.Contains("Permission 'publish'", bobPublish.GetRawText());
+        Assert.Contains("Permission 'publish'", Text(bobPublish));
 
         var aliceRepublish = await Rpc(await client.SendAsync(Mcp(
             Call("republish_from_error", new { errorQueue = "payments" }), r => r.Headers.Add("X-Api-Key", AliceKey))));
-        Assert.Contains("on queue 'payments'", aliceRepublish.GetRawText());
+        Assert.Contains("on queue 'payments'", Text(aliceRepublish));
 
         var denials = File.ReadAllLines(auditPath)
             .Select(l => JsonDocument.Parse(l).RootElement)

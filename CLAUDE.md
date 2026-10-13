@@ -77,6 +77,10 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   them into readable `McpException`s (`BrokerErrors`). Sending paths still catch `Exception` themselves to audit.
 - `contracts diff` compares the System.Text.Json schema with `MassTransitJson` naming; keep it in sync if the
   envelope serialization options change. The CLI writes to stdout — it is never run as an MCP server.
+- **Roles** (`Security/AccessControl`, `ToolAccess`): HTTP callers get permissions read/publish/request/republish/respond
+  from `Roles`/`UserRoles`/`DefaultRoles`/JWT roles claim. The MCP filters in `ServerComposition` hide tools in
+  tools/list and re-check tools/call (audited as `access denied`). **Every new tool needs a rule in `ToolAccess`**
+  (unknown tools are denied once roles are on). Stdio is unrestricted; Enable*/PublishAllow stay the ceiling.
 - Tools get the MCP client via an injected `McpServer? server = null` parameter (excluded from the schema).
 - **Tracing**: every send starts a `Telemetry.StartSend` span and injects it (`Telemetry.Inject`) — MassTransit 8
   reads `MT-Activity-Id` (W3C id) from the AMQP headers, other consumers `traceparent`. Metrics come from

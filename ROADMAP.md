@@ -51,3 +51,7 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
 19. ✅ Docker image `ghcr.io/lazogio/rabbit-mcp` (amd64/arm64) and nuget.org publishing (when `NUGET_API_KEY` exists).
 20. ⏸ Scheduled/delayed messages — not done: needs the rabbitmq_delayed_message_exchange plugin (not in standard
     RabbitMQ images) or an external scheduler (Quartz/Hangfire); revisit if a broker with the plugin is used.
+
+## Phase 7 — Access control (`feature/roles`) ✅
+21. ✅ Configurable permissions for HTTP callers: roles (read/publish/request/republish/respond/*, contract and
+    error-queue patterns), user and JWT-claim assignment, default roles; tools/list filtered, tools/call enforced and audited.
