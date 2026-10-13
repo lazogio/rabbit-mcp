@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Security.Claims;
 using System.Globalization;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,11 +39,12 @@ public sealed class ContractPublisher(
         [Description("Optional correlation id (GUID) linking this message to an existing workflow.")]
         string? correlationId = null,
         McpServer? server = null,
+        ClaimsPrincipal? user = null,
         CancellationToken cancellationToken = default)
         where T : class
     {
         var contract = contracts.Get(typeof(T));
-        var client = AuditLog.ClientOf(server);
+        var client = AuditLog.ClientOf(server, user);
         var messageId = Guid.NewGuid();
         using var activity = Telemetry.StartSend("publish", contract.Exchange);
         activity?.SetTag("messaging.message.id", messageId.ToString());
@@ -95,11 +97,12 @@ public sealed class ContractPublisher(
         [Description("Optional correlation id (GUID) linking this request to an existing workflow.")]
         string? correlationId = null,
         McpServer? server = null,
+        ClaimsPrincipal? user = null,
         CancellationToken cancellationToken = default)
         where T : class
     {
         var contract = contracts.Get(typeof(T));
-        var client = AuditLog.ClientOf(server);
+        var client = AuditLog.ClientOf(server, user);
         var messageId = Guid.NewGuid();
         var requestId = Guid.NewGuid();
 

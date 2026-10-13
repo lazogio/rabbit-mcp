@@ -74,6 +74,9 @@ jobs:
           OTEL_SERVICE_NAME: rabbit-mcp-smoke
         run: scripts/smoke-test.sh out/rabbit-mcp
 
+      - name: MCP smoke test (HTTP transport + API key)
+        run: scripts/smoke-test-http.sh out/rabbit-mcp
+
       - name: MCP smoke test (contracts loaded from an external DLL)
         env:
           RabbitMcp__ContractAssemblies: ${{ github.workspace }}/tests/RabbitMcp.ExternalContracts/bin/Release/net10.0/RabbitMcp.ExternalContracts.dll

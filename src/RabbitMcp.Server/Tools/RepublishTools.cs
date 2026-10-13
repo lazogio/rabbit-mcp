@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Security.Claims;
 using ModelContextProtocol.Server;
 using RabbitMcp.Server.Messaging;
 
@@ -23,6 +24,7 @@ public sealed class RepublishTools(QueueBrowser browser)
         [Description("Override the destination exchange. By default it is taken from MT-Fault-InputAddress.")] string? targetExchange = null,
         [Description("Preview even if the error queue has active consumers.")] bool force = false,
         McpServer? server = null,
+        ClaimsPrincipal? user = null,
         CancellationToken cancellationToken = default)
     {
         if (!confirm)
@@ -32,6 +34,6 @@ public sealed class RepublishTools(QueueBrowser browser)
         }
 
         return await browser.RepublishAsync(errorQueue, count, messageIds, targetExchange, cancellationToken,
-            AuditLog.ClientOf(server));
+            AuditLog.ClientOf(server, user));
     }
 }

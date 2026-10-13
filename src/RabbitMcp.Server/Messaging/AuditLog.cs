@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -80,9 +81,24 @@ public sealed class AuditLog
         }
     }
 
-    /// <summary>"Claude Code 2.1.0" from the MCP initialize handshake; null outside an MCP call.</summary>
-    public static string? ClientOf(McpServer? server) =>
-        server?.ClientInfo is { } info ? $"{info.Name} {info.Version}".Trim() : null;
+    /// <summary>
+    /// Who asked: the authenticated user (HTTP: API key name or token's preferred_username/email/sub) and the
+    /// MCP client from the initialize handshake, e.g. "alice (claude-code 2.1.0)". Null outside an MCP call.
+    /// </summary>
+    public static string? ClientOf(McpServer? server, ClaimsPrincipal? user = null)
+    {
+        var app = server?.ClientInfo is { } info ? $"{info.Name} {info.Version}".Trim() : null;
+        var who = user?.Identity is { IsAuthenticated: true } id
+            ? id.Name ?? user.FindFirst("email")?.Value ?? user.FindFirst("sub")?.Value ?? "authenticated"
+            : null;
+        return (who, app) switch
+        {
+            (null, null) => null,
+            (null, _) => app,
+            (_, null) => who,
+            _ => $"{who} ({app})",
+        };
+    }
 
     public AuditEvent Event(
         string action, string outcome, string? client,

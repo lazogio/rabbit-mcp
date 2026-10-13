@@ -11,7 +11,7 @@ updates:
       prefix: deps
     groups:
       mcp-and-rabbitmq:
-        patterns: ["ModelContextProtocol*", "RabbitMQ.Client", "Microsoft.Extensions.*"]
+        patterns: ["ModelContextProtocol*", "RabbitMQ.Client", "Microsoft.Extensions.*", "Microsoft.AspNetCore.*"]
       opentelemetry:
         patterns: ["OpenTelemetry*"]
       test-tooling:

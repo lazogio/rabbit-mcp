@@ -60,6 +60,10 @@ jobs:
         if: matrix.rid == 'linux-x64'
         run: scripts/smoke-test.sh out/rabbit-mcp/rabbit-mcp
 
+      - name: MCP smoke test (single-file binary over HTTP)
+        if: matrix.rid == 'linux-x64'
+        run: scripts/smoke-test-http.sh out/rabbit-mcp/rabbit-mcp
+
       # Proves an external contracts DLL binds to the RabbitMcp.Contracts bundled in the single file.
       - name: MCP smoke test (single-file binary + external contracts)
         if: matrix.rid == 'linux-x64'

@@ -53,5 +53,35 @@ public sealed class RabbitMcpOptions
     /// <summary>Include message bodies in audit events. Off by default: they may contain personal data.</summary>
     public bool AuditIncludePayload { get; set; }
 
+    /// <summary>"stdio" (default: one client, started by it) or "http" (shared server, Streamable HTTP + authorization).</summary>
+    public string Transport { get; set; } = "stdio";
+
+    /// <summary>HTTP: listen URLs, ";"-separated. Default loopback only; use http://0.0.0.0:5080 in containers.</summary>
+    public string HttpUrls { get; set; } = "http://localhost:5080";
+
+    /// <summary>HTTP: path of the MCP endpoint.</summary>
+    public string HttpPath { get; set; } = "/mcp";
+
+    /// <summary>HTTP: API keys, ";"-separated, optionally named: "alice:KEY;ci:KEY". Keys must be at least 32 characters.</summary>
+    public string? ApiKeys { get; set; }
+
+    /// <summary>HTTP: OpenID Connect authority for JWT bearer tokens (Entra ID, Keycloak, Auth0 ...).</summary>
+    public string? JwtAuthority { get; set; }
+
+    /// <summary>HTTP: required token audience when JwtAuthority is set.</summary>
+    public string? JwtAudience { get; set; }
+
+    /// <summary>HTTP: scopes advertised in the protected resource metadata, ";"-separated.</summary>
+    public string? JwtScopes { get; set; }
+
+    /// <summary>HTTP: public URL of the MCP endpoint (resource id in OAuth metadata). Default: first HttpUrls + HttpPath.</summary>
+    public string? HttpPublicUrl { get; set; }
+
+    /// <summary>HTTP: browser origins allowed to call the server (";"-separated). Default: none — requests with an Origin header are refused.</summary>
+    public string? HttpAllowedOrigins { get; set; }
+
+    /// <summary>HTTP: run without any authentication. Only for local experiments.</summary>
+    public bool HttpAllowAnonymous { get; set; }
+
     internal Uri BrokerUri => new(Uri);
 }
