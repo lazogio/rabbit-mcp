@@ -5,7 +5,8 @@ Every `[MessageContract]` record becomes a typed MCP tool; messages use the Mass
 format but the server does **not** reference MassTransit packages.
 
 The user writes in Georgian: answer in Georgian, keep code, identifiers, commit messages and
-code comments in English. README.md is in Georgian.
+code comments in English. README.md (for users: install, tools, configuration, security) and CONTRIBUTING.md
+(for maintainers: build, tests, CI, release, agents) are in Georgian — keep maintainer material out of the README.
 
 ## Commands
 
