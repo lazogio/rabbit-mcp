@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 7 (0 open) · Next ID: BUG-008
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-13 phase-5/http: HTTP transport, API keys + JWT/OIDC, MCP resource metadata, Origin check, user in audit
 - 2026-10-13 phase-5/telemetry: spans + MT-Activity-Id/traceparent (MassTransit joins traces), metrics, OTLP
 - 2026-10-13 review/phase-3: BUG-004..007 fixed (path split, assembly name clash, load errors, list_queues paging)
 - 2026-10-13 phase-4/control: PublishAllow/Deny policy, audit log (stderr + JSONL), client identity in audit
@@ -34,4 +35,3 @@ Last updated: 2026-10-13 · Bugs: 7 (0 open) · Next ID: BUG-008
 
 ## Open ideas (not bugs)
 - Server as responder/consumer for requests from other services.
-- HTTP transport with authorization for shared deployments.

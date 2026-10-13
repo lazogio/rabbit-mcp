@@ -34,4 +34,6 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
 13. ✅ OpenTelemetry (`phase-5/telemetry`, merged 2026-10-13): publish/request/republish spans; `traceparent` + `MT-Activity-Id`
     (MassTransit 8 joins the trace — proven by integration tests); republish = new trace linked to the original;
     `rabbitmcp.operations` + `rabbitmcp.request.duration`; OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
-14. ⬜ HTTP transport with authorization.
+14. ✅ HTTP transport (`phase-5/http`, merged 2026-10-13): `Transport=http`, stateless Streamable HTTP, `/healthz`;
+    API keys and/or JWT (any OIDC authority) with MCP protected resource metadata; Origin check; refuses to start
+    without auth; audit records the user. Default chosen (no answer): support both auth kinds.

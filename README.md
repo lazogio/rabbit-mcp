@@ -31,6 +31,19 @@ Claude Desktop-ისთვის იგივე ბინარი და env 
 
 **მზა ბინარი:** [Releases](https://github.com/lazogio/rabbit-mcp/releases)-ში ყველა ვერსიისთვის დევს self-contained ფაილი Linux-ის (x64/arm64), Windows-ის (x64) და macOS-ის (x64/arm64) პლატფორმებისთვის, `SHA256SUMS.txt`-თან ერთად. .NET-ის დაყენება არ სჭირდება. ჩამოტვირთეთ, გახსენით და დაარეგისტრირეთ `rabbit-mcp` (Windows-ზე `rabbit-mcp.exe`). macOS-ზე ბინარი ხელმოწერილი არ არის, ამიტომ პირველ გაშვებამდე: `xattr -d com.apple.quarantine rabbit-mcp`.
 
+## გუნდისთვის: HTTP სერვერი
+
+ერთი სერვერი შეიძლება მთელმა გუნდმა გამოიყენოს: `RabbitMcp__Transport=http`. სერვერი უსმენს `HttpUrls`-ზე (ნაგულისხმევად `http://localhost:5080`, კონტეინერში `http://0.0.0.0:5080`), MCP endpoint არის `/mcp`, health check კი `/healthz`. **ავტორიზაციის გარეშე სერვერი არ ეშვება.** ავტორიზაციისთვის ერთი ან ორივე გზა ირჩევა:
+
+- **API key:** `RabbitMcp__ApiKeys="alice:KEY1;ci:KEY2"`. გასაღები მინიმუმ 32 სიმბოლოა (`openssl rand -base64 32`). კლიენტი აგზავნის `X-Api-Key: KEY`-ს ან `Authorization: Bearer KEY`-ს.
+- **JWT / OIDC** (Entra ID, Keycloak, Auth0 ...): `RabbitMcp__JwtAuthority=https://login.example.com/realms/shop` და `RabbitMcp__JwtAudience=rabbit-mcp`. 401-ის შემთხვევაში სერვერი MCP-ის სპეციფიკაციის მიხედვით მიუთითებს `/.well-known/oauth-protected-resource`-ზე, ამიტომ Claude და სხვა კლიენტები ავტორიზაციის სერვერს თავად პოულობენ.
+
+```bash
+claude mcp add --transport http rabbit-mcp https://mcp.example.com/mcp --header "X-Api-Key: KEY1"
+```
+
+Audit-ში ჩანს, ვინ რა გააგზავნა: `"client": "alice (claude-code 2.1.0)"`. ბრაუზერიდან მოსული მოთხოვნები, ანუ `Origin` header-ით, უარყოფილია, თუ წყარო `HttpAllowedOrigins`-ში არ არის. ეს MCP-ის სპეციფიკაციით მოთხოვნილი დაცვაა DNS rebinding-ისგან. TLS-ისთვის სერვერი reverse proxy-ის (nginx, Traefik, ingress) უკან დააყენეთ.
+
 ## კონფიგურაცია
 
 პარამეტრები `appsettings.json`-ში ან env ცვლადებში იწერება.
@@ -49,6 +62,13 @@ Claude Desktop-ისთვის იგივე ბინარი და env 
 | `RabbitMcp__PublishAllow` | — | რომელი კონტრაქტების გაგზავნაა ნებადართული, მაგ. `Order*;Billing.Contracts.*`. ცარიელი = ყველა |
 | `RabbitMcp__PublishDeny` | — | რომლის გაგზავნა არასდროს შეიძლება. უპირატესია `PublishAllow`-ზე |
 | `RabbitMcp__AuditLogPath` | — | audit ფაილი (JSON Lines). ცარიელისას audit მხოლოდ stderr-ზე იწერება |
+| `RabbitMcp__Transport` | `stdio` | `stdio` ან `http` |
+| `RabbitMcp__HttpUrls` / `HttpPath` | `http://localhost:5080` / `/mcp` | HTTP მისამართი და MCP endpoint |
+| `RabbitMcp__ApiKeys` | — | `name:KEY;…` (≥ 32 სიმბოლო) |
+| `RabbitMcp__JwtAuthority` / `JwtAudience` / `JwtScopes` | — | OIDC ავტორიზაცია |
+| `RabbitMcp__HttpPublicUrl` | — | საჯარო URL, რომელიც OAuth metadata-ში ჩანს (proxy-ს უკან) |
+| `RabbitMcp__HttpAllowedOrigins` | — | ბრაუზერის origin-ები (`;`) |
+| `RabbitMcp__HttpAllowAnonymous` | `false` | ავტორიზაციის გარეშე, მხოლოდ ლოკალური ცდისთვის |
 | `RabbitMcp__AuditIncludePayload` | `false` | audit-ში შეტყობინების შიგთავსიც ჩაიწეროს (შეიძლება პერსონალურ მონაცემებს შეიცავდეს) |
 
 ## ხელსაწყოები

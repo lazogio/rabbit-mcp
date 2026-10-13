@@ -48,6 +48,9 @@
 - DataAnnotations (`Range`, `StringLength`, `RegularExpression`, `EmailAddress`, `MinLength`) are mapped into the input schema by MEAI.
 
 ## Environment / tooling
+- `IHeaderDictionary.Append(key, value)` is an extension in `Microsoft.AspNetCore.Http` — add the using in auth handlers.
+- An `AuthenticationHandler` subclass must not declare its own `Scheme` member (hides the inherited one) → `SchemeName`.
+- The release workflow only runs on branch pushes that touch release.yml — don't wait for 2 runs otherwise.
 - Release workflow's `paths:` filter applies to branch pushes only; tag pushes always run (GitHub ignores path filters for tags).
 - Deleting a remote branch via `git push --delete` is cut off by the session git proxy ("unexpected disconnect");
   pushes work. Ask the repo owner to delete branches (or enable "Automatically delete head branches").

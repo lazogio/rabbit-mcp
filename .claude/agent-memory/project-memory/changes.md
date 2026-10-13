@@ -1,5 +1,15 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Phase 5 / HTTP transport — branch phase-5/http, fast-forwarded into main
+- What: `RabbitMcp:Transport=http` (ModelContextProtocol.AspNetCore 2.2, stateless), API-key scheme (SHA-256 +
+  FixedTimeEquals, ≥ 32 chars, `name:KEY`), JwtBearer + SDK `AddMcp` protected resource metadata, Origin check,
+  `/healthz`, audit client = "user (mcp client)"; `ServerComposition` shared by both hosts; HTTP smoke test.
+- Decision: auth kind not chosen by the user → support API keys and JWT/OIDC side by side (policy over both schemes;
+  an unknown bearer value falls through from the API-key scheme to JWT).
+- Decision: key names use ':' ("alice:KEY") because base64 keys end with '='.
+- Decision: refuse to start without auth (HttpAllowAnonymous only for local experiments); TLS via reverse proxy.
+- Cost: single-file packages grew ~33 → ~45 MB (ASP.NET Core bundled).
+
 ### 2026-10-13 Phase 5 / OpenTelemetry — branch phase-5/telemetry, fast-forwarded into main
 - What: `Telemetry` (ActivitySource + Meter "RabbitMcp"); spans publish/request/republish with messaging.* tags;
   headers `traceparent`/`tracestate` + `MT-Activity-Id`; metrics `rabbitmcp.operations` (from audit events) and
