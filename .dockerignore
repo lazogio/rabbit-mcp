@@ -7,3 +7,4 @@ external/
 .claude/
 tests/
 *.md
+!LICENSE

@@ -13,6 +13,8 @@
     <PackageProjectUrl>https://github.com/lazogio/rabbit-mcp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/lazogio/rabbit-mcp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Copyright>Copyright (c) 2026 lazogio</Copyright>
     <!--
       Fixed assembly version: contract DLLs compiled against any 1.x package bind to whatever
       RabbitMcp.Contracts the server ships with. Only change on a breaking attribute change.

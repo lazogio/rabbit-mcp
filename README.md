@@ -1,6 +1,6 @@
 # rabbit-mcp
 
-[![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 RabbitMQ-ის MCP სერვერი, რომელიც **შეტყობინებების კონტრაქტებზეა** აგებული (.NET 10).
 თითო C# record კონტრაქტი ცალკე ტიპიზებულ ხელსაწყოდ იქცევა, რომლის `inputSchema` თავად კონტრაქტია. შეტყობინებები MassTransit-ის ფორმატშია, ამიტომ MassTransit v8/v9 სერვისები მათ კონფიგურაციის გარეშე იღებენ. თავად სერვერი MassTransit-ზე დამოკიდებული არ არის, იყენებს მხოლოდ `RabbitMQ.Client`-ს.
@@ -250,3 +250,7 @@ tests/RabbitMcp.ExternalContracts      „გარე“ კონტრაქ�
 **Release:** `git tag v0.2.0 && git push origin v0.2.0` ააგებს ბინარებს ხუთივე პლატფორმისთვის, Docker image-ს (`ghcr.io/lazogio/rabbit-mcp`) და შექმნის GitHub Release-ს. თუ რეპოზიტორიაში `NUGET_API_KEY` secret არის, `RabbitMcp.Contracts` nuget.org-ზეც ქვეყნდება. ვერსია tag-იდან მოდის და MCP კლიენტს `serverInfo.version`-ში უჩანს. `-` შემცველი tag (`v0.2.0-rc.1`) prerelease-ად ქვეყნდება. **Dependabot** NuGet-ისა და Actions-ის განახლებებს ყოველ ორშაბათს გვთავაზობს. MassTransit 9+ გამოთიშულია, რადგან ის კომერციულია.
 
 **შემდეგი ნაბიჯები:** იხ. [ROADMAP.md](ROADMAP.md).
+
+## ლიცენზია
+
+[MIT](LICENSE). MassTransit-ის პაკეტი მხოლოდ ტესტებში გამოიყენება (v8, Apache-2.0) და გამოქვეყნებულ ბინარში არ შედის.

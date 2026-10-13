@@ -19,6 +19,7 @@ RUN dotnet publish src/RabbitMcp.Server -c Release -r "$(cat /rid)" --self-conta
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /app .
+COPY LICENSE /app/LICENSE
 
 # Listen on all interfaces inside the container; authentication is still required (ApiKeys / JwtAuthority).
 ENV RabbitMcp__Transport=http \
