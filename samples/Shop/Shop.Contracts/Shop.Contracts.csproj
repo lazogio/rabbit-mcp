@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The shop's message contracts. The service references this project; rabbit-mcp loads the built DLL
+    (RabbitMcp:ContractAssemblies). In your own repository reference the RabbitMcp.Contracts NuGet package instead.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\RabbitMcp.Contracts\RabbitMcp.Contracts.csproj" />
+  </ItemGroup>
+</Project>

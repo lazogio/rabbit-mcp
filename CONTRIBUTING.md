@@ -26,6 +26,7 @@ src/RabbitMcp.Server/Tools           MCP ხელსაწყოები დ�
 tests/RabbitMcp.Tests                unit ტესტები
 tests/RabbitMcp.IntegrationTests     ნამდვილი RabbitMQ + MassTransit
 tests/RabbitMcp.ExternalContracts    „გარე“ კონტრაქტების DLL-ის ნიმუში
+samples/Shop                         სრული ნიმუში: კონტრაქტები, MassTransit სერვისი, docker compose
 ```
 
 წესები, რომლებიც არ უნდა დაირღვეს (MassTransit-თან თავსებადობა, შეტყობინების დაუკარგაობა, audit, საიდუმლოები, უფლებები), [CLAUDE.md](CLAUDE.md)-შია.
@@ -35,7 +36,8 @@ tests/RabbitMcp.ExternalContracts    „გარე“ კონტრაქტ
 ყოველ push-სა და PR-ზე CI:
 - აგებს პროექტს და ამოწმებს მოწყვლად NuGet პაკეტებს;
 - უშვებს unit და ინტეგრაციულ ტესტებს;
-- უშვებს smoke test-ებს: stdio, HTTP, Docker image, responder, გარე კონტრაქტები, `contracts diff`.
+- უშვებს smoke test-ებს: stdio, HTTP, Docker image, responder, გარე კონტრაქტები, `contracts diff`;
+- უშვებს Shop ნიმუშს docker compose-ით და MCP-ით ბოლომდე გადის (`scripts/sample-e2e.py`).
 
 ჩავარდნილი ტესტი PR-ში annotation-ად ჩანს.
 

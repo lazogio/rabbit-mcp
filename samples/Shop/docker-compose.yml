@@ -1,0 +1,56 @@
+# The whole sample: RabbitMQ, the shop service and rabbit-mcp over HTTP.
+#   docker compose -f samples/Shop/docker-compose.yml up -d --build
+#   claude mcp add --transport http shop http://localhost:5080/mcp --header "X-Api-Key: shop-demo-key-change-me-0123456789abcdef"
+# Ports are bound to localhost only. RabbitMQ UI: http://localhost:15672 (shop/shop).
+name: rabbit-mcp-shop
+
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    environment:
+      RABBITMQ_DEFAULT_USER: shop
+      RABBITMQ_DEFAULT_PASS: shop
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  shop:
+    build:
+      context: ../..
+      dockerfile: samples/Shop/Dockerfile
+      target: service
+    environment:
+      RABBITMQ_URI: amqp://shop:shop@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  mcp:
+    build:
+      context: ../..
+      dockerfile: samples/Shop/Dockerfile
+      target: mcp
+    environment:
+      RabbitMcp__Uri: amqp://shop:shop@rabbitmq:5672/
+      RabbitMcp__ManagementUri: http://rabbitmq:15672
+      RabbitMcp__EnablePublish: "true"
+      RabbitMcp__EnableRepublish: "true"
+      # The model answers the shop's approval requests ...
+      RabbitMcp__RespondTo: ApproveLargeOrder
+      # ... but never sends them itself.
+      RabbitMcp__PublishDeny: ApproveLargeOrder
+      RabbitMcp__ApiKeys: "demo:${SHOP_MCP_KEY:-shop-demo-key-change-me-0123456789abcdef}"
+      # Optional roles, e.g. a read-only key for a second person:
+      # RabbitMcp__Roles__viewer: read
+      # RabbitMcp__Roles__operator: "*"
+      # RabbitMcp__UserRoles: demo=operator
+    ports:
+      - "127.0.0.1:5080:5080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy

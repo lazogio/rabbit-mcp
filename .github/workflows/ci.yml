@@ -159,3 +159,25 @@ jobs:
 
       - name: MCP smoke test (container, HTTP + API key)
         run: scripts/smoke-test-http.sh docker:rabbit-mcp:ci
+
+  # The Shop sample as a user runs it (docker compose), walked through over MCP like a model would.
+  sample:
+    name: Sample (Shop, end to end)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Start the sample
+        run: docker compose -f samples/Shop/docker-compose.yml up -d --build --wait
+
+      - name: Walk through it over MCP
+        run: python3 scripts/sample-e2e.py http://127.0.0.1:5080/mcp shop-demo-key-change-me-0123456789abcdef
+
+      - name: Logs
+        if: failure()
+        run: docker compose -f samples/Shop/docker-compose.yml logs --no-color
+
+      - name: Stop
+        if: always()
+        run: docker compose -f samples/Shop/docker-compose.yml down -v

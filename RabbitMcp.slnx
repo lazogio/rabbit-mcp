@@ -3,6 +3,10 @@
     <Project Path="src/RabbitMcp.Contracts/RabbitMcp.Contracts.csproj" />
     <Project Path="src/RabbitMcp.Server/RabbitMcp.Server.csproj" />
   </Folder>
+  <Folder Name="/samples/Shop/">
+    <Project Path="samples/Shop/Shop.Contracts/Shop.Contracts.csproj" />
+    <Project Path="samples/Shop/Shop.Service/Shop.Service.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/RabbitMcp.ExternalContracts/RabbitMcp.ExternalContracts.csproj" />
     <Project Path="tests/RabbitMcp.Tests/RabbitMcp.Tests.csproj" />

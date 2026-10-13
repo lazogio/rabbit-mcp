@@ -42,6 +42,8 @@ claude mcp add rabbit-mcp \
 
 ლოკალური RabbitMQ: `docker compose up -d` (UI: http://localhost:15672, guest/guest).
 
+**სცადეთ ნიმუშზე.** [samples/Shop](samples/Shop) ერთი ბრძანებით უშვებს RabbitMQ-ს, MassTransit-ის მაღაზიის სერვისს და rabbit-mcp-ს. მასში ნაჩვენებია შეკვეთა, სტატუსის მოთხოვნა, error რიგის აღდგენა და დიდი შეკვეთის დამტკიცება მოდელის მიერ.
+
 ## ხელსაწყოები
 
 | ხელსაწყო | რას აკეთებს | ჩაირთვება |
