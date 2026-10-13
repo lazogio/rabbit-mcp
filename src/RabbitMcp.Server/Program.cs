@@ -2,7 +2,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RabbitMcp.Server;
+using RabbitMcp.Server.Cli;
 using RabbitMcp.Server.Hosting;
+
+// Command-line tools (not MCP): rabbit-mcp contracts diff OLD.dll NEW.dll
+if (args is ["contracts", ..])
+    return ContractsCommand.Run(args[1..], Console.Out, Console.Error);
 
 // Transport is decided before building a host: stdio (default) or http.
 var transport = new ConfigurationBuilder()
