@@ -176,7 +176,12 @@ jobs:
 
       - name: Logs
         if: failure()
-        run: docker compose -f samples/Shop/docker-compose.yml logs --no-color
+        run: |
+          docker compose -f samples/Shop/docker-compose.yml logs --no-color
+          for service in shop mcp; do
+            docker compose -f samples/Shop/docker-compose.yml logs --no-color --tail 25 "$service" | tail -c 3000 |
+              python3 -c "import sys; print('::error title=$service logs::' + sys.stdin.read().replace('%','%25').replace('\n','%0A'))"
+          done
 
       - name: Stop
         if: always()

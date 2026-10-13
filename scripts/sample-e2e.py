@@ -85,70 +85,83 @@ def step(text):
     print(f"• {text}", flush=True)
 
 
-# --- 0. the stack is up
-eventually("MCP endpoint", ready(lambda: rpc("initialize", {
-    "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "sample-e2e", "version": "1"}})), 180)
-tools = {t["name"] for t in rpc("tools/list")["tools"]}
-expected = {"publish_order_placed", "request_get_order_status", "peek_messages", "republish_from_error",
-            "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request"}
-assert expected <= tools, f"missing tools: {expected - tools}"
-assert "request_approve_large_order" not in tools, "PublishDeny should hide request_approve_large_order"
-step(f"{len(tools)} tools, including the shop's contracts")
+def main():
+    # --- 0. the stack is up
+    eventually("MCP endpoint", ready(lambda: rpc("initialize", {
+        "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "sample-e2e", "version": "1"}})), 180)
+    tools = {t["name"] for t in rpc("tools/list")["tools"]}
+    expected = {"publish_order_placed", "request_get_order_status", "peek_messages", "republish_from_error",
+                "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request"}
+    assert expected <= tools, f"missing tools: {expected - tools}"
+    assert "request_approve_large_order" not in tools, "PublishDeny should hide request_approve_large_order"
+    step(f"{len(tools)} tools, including the shop's contracts")
 
-def shop_consuming():
-    statuses = {c["contract"]: c["status"] for c in call("contract_consumers")["contracts"]}
-    return statuses.get("OrderPlaced") == "ok" and statuses.get("GetOrderStatus") == "ok"
+    def shop_consuming():
+        statuses = {c["contract"]: c["status"] for c in call("contract_consumers")["contracts"]}
+        return statuses.get("OrderPlaced") == "ok" and statuses.get("GetOrderStatus") == "ok"
 
 
-eventually("shop service consuming OrderPlaced and GetOrderStatus", shop_consuming, 120)
-eventually("responder listening", lambda: call("pending_requests")["status"] == "listening")
-step("shop service is consuming, responder is listening")
+    eventually("shop service consuming OrderPlaced and GetOrderStatus", shop_consuming, 120)
+    eventually("responder listening", lambda: call("pending_requests")["status"] == "listening")
+    step("shop service is consuming, responder is listening")
 
-# --- 1. request/response
-demo = eventually("demo order", lambda: status_of(DEMO_ORDER))
-assert demo["status"] == "Shipped", demo
-step(f"request_get_order_status: demo order is {demo['status']}")
+    # --- 1. request/response
+    demo = eventually("demo order", lambda: status_of(DEMO_ORDER))
+    assert demo["status"] == "Shipped", demo
+    step(f"request_get_order_status: demo order is {demo['status']}")
 
-# --- 2. _error queue and republish
-flaky = str(uuid.uuid4())
-place(flaky, "FLAKY-LAMP", 1, 20)
-peeked = eventually("FLAKY order in order-placed_error", lambda: next((
-    m for m in call("peek_messages", queue="order-placed_error", count=10)["messages"]
-    if (m.get("payload") or {}).get("orderId") == flaky), None))
-assert "Inventory service unavailable" in (peeked.get("fault") or {}).get("exceptionMessage", ""), peeked
-step("FLAKY order failed and is in order-placed_error with the exception")
+    # --- 2. _error queue and republish
+    flaky = str(uuid.uuid4())
+    place(flaky, "FLAKY-LAMP", 1, 20)
+    peeked = eventually("FLAKY order in order-placed_error", lambda: next((
+        m for m in call("peek_messages", queue="order-placed_error", count=10)["messages"]
+        if (m.get("payload") or {}).get("orderId") == flaky), None))
+    assert "Inventory service unavailable" in (peeked.get("fault") or {}).get("exceptionMessage", ""), peeked
+    step("FLAKY order failed and is in order-placed_error with the exception")
 
-republished = call("republish_from_error", errorQueue="order-placed_error", count=10, confirm=True,
-                   messageIds=[peeked["messageId"]])
-assert republished["republished"] == 1, republished
-order = eventually("republished order approved", lambda: (s := status_of(flaky)) and s["status"] == "Approved" and s)
-step(f"republish_from_error: the order was processed again → {order['status']}")
+    republished = call("republish_from_error", errorQueue="order-placed_error", count=10, confirm=True,
+                       messageIds=[peeked["messageId"]])
+    assert republished["republished"] == 1, republished
+    order = eventually("republished order approved", lambda: (s := status_of(flaky)) and s["status"] == "Approved" and s)
+    step(f"republish_from_error: the order was processed again → {order['status']}")
 
-# --- 3. responder: the shop asks, the model answers
-large = str(uuid.uuid4())
-place(large, "TV-55", 2, 900)
-pending = eventually("approval request", lambda: next((
-    r for r in call("pending_requests", contract="ApproveLargeOrder", waitSeconds=10)["requests"]
-    if r["message"]["orderId"] == large), None))
-assert pending["check"]["valid"] and "reply_order_approved" in pending["replyTools"], pending
-step(f"pending_requests: the shop asks to approve {pending['message']['total']} for {large[:8]}…")
+    # --- 3. responder: the shop asks, the model answers
+    large = str(uuid.uuid4())
+    place(large, "TV-55", 2, 900)
+    pending = eventually("approval request", lambda: next((
+        r for r in call("pending_requests", contract="ApproveLargeOrder", waitSeconds=10)["requests"]
+        if r["message"]["orderId"] == large), None))
+    assert pending["check"]["valid"] and "reply_order_approved" in pending["replyTools"], pending
+    step(f"pending_requests: the shop asks to approve {pending['message']['total']} for {large[:8]}…")
 
-reply = call("reply_order_approved", requestId=pending["requestId"],
-             response={"orderId": large, "approvedBy": "sample-e2e"})
-assert reply["status"] == "replied", reply
-order = eventually("large order approved", lambda: (s := status_of(large)) and s["status"] == "Approved" and s)
-assert "sample-e2e" in order.get("note", ""), order
-step(f"reply_order_approved → shop stored: {order['note']}")
+    reply = call("reply_order_approved", requestId=pending["requestId"],
+                 response={"orderId": large, "approvedBy": "sample-e2e"})
+    assert reply["status"] == "replied", reply
+    order = eventually("large order approved", lambda: (s := status_of(large)) and s["status"] == "Approved" and s)
+    assert "sample-e2e" in order.get("note", ""), order
+    step(f"reply_order_approved → shop stored: {order['note']}")
 
-# --- 4. reject
-rejected = str(uuid.uuid4())
-place(rejected, "SOFA-3", 1, 2500)
-pending = eventually("second approval request", lambda: next((
-    r for r in call("pending_requests", contract="ApproveLargeOrder", waitSeconds=10)["requests"]
-    if r["message"]["orderId"] == rejected), None))
-call("reject_request", requestId=pending["requestId"], reason="Customer is over the credit limit")
-order = eventually("order rejected", lambda: (s := status_of(rejected)) and s["status"] == "Rejected" and s)
-assert "credit limit" in order.get("note", ""), order
-step(f"reject_request → shop stored: {order['status']} ({order['note']})")
+    # --- 4. reject
+    rejected = str(uuid.uuid4())
+    place(rejected, "SOFA-3", 1, 2500)
+    pending = eventually("second approval request", lambda: next((
+        r for r in call("pending_requests", contract="ApproveLargeOrder", waitSeconds=10)["requests"]
+        if r["message"]["orderId"] == rejected), None))
+    call("reject_request", requestId=pending["requestId"], reason="Customer is over the credit limit")
+    order = eventually("order rejected", lambda: (s := status_of(rejected)) and s["status"] == "Rejected" and s)
+    assert "credit limit" in order.get("note", ""), order
+    step(f"reject_request → shop stored: {order['status']} ({order['note']})")
 
-print("ok: the Shop sample works end to end over MCP")
+    print("ok: the Shop sample works end to end over MCP")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (SystemExit, AssertionError, OSError) as failure:
+        if isinstance(failure, SystemExit) and failure.code in (0, None):
+            raise
+        message = str(failure) or type(failure).__name__
+        # GitHub Actions annotation, so the reason is visible without opening the log.
+        print(f"::error title=sample-e2e::{message[:3000]}".replace("\n", "%0A"))
+        sys.exit(1)
