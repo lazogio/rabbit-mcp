@@ -1,0 +1,10 @@
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+
+[*.cs]
+# Every C# file starts with the license header (IDE0073); the IDE adds it to new files automatically.
+file_header_template = Copyright (c) 2026 lazogio\nSPDX-License-Identifier: MIT
+dotnet_diagnostic.IDE0073.severity = warning

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 lazogio
+// SPDX-License-Identifier: MIT
+
 namespace RabbitMcp.Server;
 
 /// <summary>Bound from the "RabbitMcp" configuration section (env: RabbitMcp__Uri, ...).</summary>

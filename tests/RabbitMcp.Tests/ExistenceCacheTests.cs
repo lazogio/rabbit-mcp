@@ -1,3 +1,6 @@
+// Copyright (c) 2026 lazogio
+// SPDX-License-Identifier: MIT
+
 using RabbitMcp.Server.Messaging;
 
 namespace RabbitMcp.Tests;

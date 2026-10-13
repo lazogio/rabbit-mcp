@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 lazogio
+# SPDX-License-Identifier: MIT
 # Starts a published rabbit-mcp binary with the HTTP transport and talks MCP to it like a remote client:
 # health check, 401 without credentials, initialize + tools/list with an API key.
 # usage: scripts/smoke-test-http.sh <path-to-binary>   or   scripts/smoke-test-http.sh docker:<image>

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 lazogio
+// SPDX-License-Identifier: MIT
+
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;

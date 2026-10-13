@@ -1,3 +1,6 @@
+// Copyright (c) 2026 lazogio
+// SPDX-License-Identifier: MIT
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol;

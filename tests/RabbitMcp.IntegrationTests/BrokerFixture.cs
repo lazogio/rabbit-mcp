@@ -1,3 +1,6 @@
+// Copyright (c) 2026 lazogio
+// SPDX-License-Identifier: MIT
+
 using System.Collections.Concurrent;
 using MassTransit;
 using Microsoft.Extensions.Logging.Abstractions;

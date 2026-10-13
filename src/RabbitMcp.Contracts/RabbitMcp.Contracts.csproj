@@ -8,13 +8,7 @@
     <IsPackable>true</IsPackable>
     <PackageId>RabbitMcp.Contracts</PackageId>
     <Description>[MessageContract] attribute for rabbit-mcp contract assemblies: every contract becomes a typed MCP tool for RabbitMQ / MassTransit.</Description>
-    <Authors>lazogio</Authors>
     <PackageTags>rabbitmq;masstransit;mcp;contracts;messaging</PackageTags>
-    <PackageProjectUrl>https://github.com/lazogio/rabbit-mcp</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/lazogio/rabbit-mcp</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Copyright>Copyright (c) 2026 lazogio</Copyright>
     <!--
       Fixed assembly version: contract DLLs compiled against any 1.x package bind to whatever
       RabbitMcp.Contracts the server ships with. Only change on a breaking attribute change.

@@ -59,6 +59,8 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   The same applies to `ManagementUri` and the Basic auth header.
 - `RabbitMcp.Contracts` keeps `AssemblyVersion` 1.0.0.0 so external contract DLLs bind to the bundled copy;
   change it only for a breaking change to `[MessageContract]`.
+- License: MIT for the whole repository. Every `.cs` file (and scripts/Dockerfile) starts with
+  `// Copyright (c) 2026 lazogio` + `// SPDX-License-Identifier: MIT` (IDE0073 warns otherwise).
 - Startup configuration errors: throw `StartupException` → one line on stderr, exit code 1 (never a stack trace on stdout).
 - Two hosts share `ServerComposition.Compose`: stdio (`Program.cs`) and HTTP (`HttpHosting.Build`, testable with
   TestServer). HTTP must never run unauthenticated unless `HttpAllowAnonymous`; keep the Origin check.

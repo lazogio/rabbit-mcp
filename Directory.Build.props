@@ -8,4 +8,18 @@
     <!-- Overridden by the release workflow from the git tag (v1.2.3 -> 1.2.3). -->
     <Version>0.1.0</Version>
   </PropertyGroup>
+
+  <!-- License and ownership for every assembly (file properties) and package in the repository. -->
+  <PropertyGroup>
+    <Authors>lazogio</Authors>
+    <Company>lazogio</Company>
+    <Product>rabbit-mcp</Product>
+    <Copyright>Copyright (c) 2026 lazogio</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/lazogio/rabbit-mcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/lazogio/rabbit-mcp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- Report source files without the license header (IDE0073, template in .editorconfig). -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
 </Project>

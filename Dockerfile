@@ -1,3 +1,5 @@
+# Copyright (c) 2026 lazogio
+# SPDX-License-Identifier: MIT
 # rabbit-mcp as a shared HTTP server (RabbitMcp:Transport=http). Multi-arch (amd64, arm64): the SDK stage runs on
 # the build machine and cross-publishes, so no emulation is needed.
 #   docker run -p 5080:5080 -e RabbitMcp__Uri=amqp://user:pass@rabbit:5672/ -e RabbitMcp__ApiKeys="team:KEY" ghcr.io/lazogio/rabbit-mcp

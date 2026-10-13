@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 lazogio
+# SPDX-License-Identifier: MIT
 # Starts a published rabbit-mcp binary and talks MCP to it over stdio, like a real client:
 # initialize -> initialized -> tools/list. Fails if stdout contains anything that is not
 # JSON-RPC (stdout corruption breaks every MCP client) or expected tools are missing.

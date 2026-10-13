@@ -1,3 +1,6 @@
+// Copyright (c) 2026 lazogio
+// SPDX-License-Identifier: MIT
+
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text;

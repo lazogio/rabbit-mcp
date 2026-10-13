@@ -1,3 +1,6 @@
+// Copyright (c) 2026 lazogio
+// SPDX-License-Identifier: MIT
+
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;

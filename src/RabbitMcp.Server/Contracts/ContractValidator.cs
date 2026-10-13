@@ -1,3 +1,6 @@
+// Copyright (c) 2026 lazogio
+// SPDX-License-Identifier: MIT
+
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
