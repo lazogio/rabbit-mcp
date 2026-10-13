@@ -96,6 +96,8 @@ public sealed class AuditLog
 
     public void Write(AuditEvent e)
     {
+        Telemetry.Count(e);
+
         _logger.LogInformation(
             "AUDIT {Action} {Outcome} contract={Contract} exchange={Exchange} queue={Queue} messageId={MessageId} " +
             "requestId={RequestId} client={Client} {Detail}",

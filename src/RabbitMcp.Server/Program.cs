@@ -4,6 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using ModelContextProtocol.Protocol;
 using RabbitMcp.Contracts.Orders;
 using RabbitMcp.Server;
@@ -73,6 +77,19 @@ builder.Services
     .AddSingleton<QueueBrowser>()
     .AddSingleton<ReplyListener>()
     .AddSingleton<ContractPublisher>();
+
+// OpenTelemetry: on when the standard OTEL_EXPORTER_OTLP_ENDPOINT is set (OTLP only — never a console
+// exporter: stdout belongs to MCP). OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_PROTOCOL/HEADERS etc. apply as usual.
+if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")))
+{
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(r => r.AddService(
+            serviceName: Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") ?? "rabbit-mcp",
+            serviceVersion: ServerVersion.Current))
+        .WithTracing(t => t.AddSource(Telemetry.Name, Telemetry.McpSdkName))
+        .WithMetrics(m => m.AddMeter(Telemetry.Name, Telemetry.McpSdkName))
+        .UseOtlpExporter();
+}
 
 var mcp = builder.Services
     .AddMcpServer(o => o.ServerInfo = new Implementation { Name = "rabbit-mcp", Version = ServerVersion.Current })

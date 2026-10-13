@@ -21,7 +21,8 @@ public sealed record Received<T>(
     T Message,
     Guid? MessageId,
     IReadOnlyDictionary<string, object?> Headers,
-    IReadOnlyDictionary<string, object?> TransportHeaders);
+    IReadOnlyDictionary<string, object?> TransportHeaders,
+    System.Diagnostics.ActivityTraceId? TraceId);
 
 /// <summary>
 /// One RabbitMQ container + one MassTransit bus (the "services") + the rabbit-mcp components
@@ -68,8 +69,27 @@ public sealed class BrokerFixture : IAsyncLifetime
             .ToArray();
     private ReplyListener _replies = null!;
 
+    /// <summary>Trace of MassTransit's consume span for GetOrderStatus requests of unknown orders.</summary>
+    public ConcurrentDictionary<Guid, System.Diagnostics.ActivityTraceId?> StatusTraces { get; } = new();
+
+    /// <summary>Every finished span from rabbit-mcp and MassTransit (like an OpenTelemetry exporter would see).</summary>
+    public ConcurrentQueue<System.Diagnostics.Activity> Spans { get; } = new();
+    private System.Diagnostics.ActivityListener? _listener;
+
+    public System.Diagnostics.Activity Span(string source, Func<System.Diagnostics.Activity, bool> match) =>
+        Spans.Single(a => a.Source.Name == source && match(a));
+
     public async Task InitializeAsync()
     {
+        _listener = new System.Diagnostics.ActivityListener
+        {
+            ShouldListenTo = s => s.Name is RabbitMcp.Server.Messaging.Telemetry.Name or "MassTransit",
+            Sample = (ref System.Diagnostics.ActivityCreationOptions<System.Diagnostics.ActivityContext> _) =>
+                System.Diagnostics.ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = Spans.Enqueue,
+        };
+        System.Diagnostics.ActivitySource.AddActivityListener(_listener);
+
         await _container.StartAsync();
         var amqp = new Uri(_container.GetConnectionString());
 
@@ -128,7 +148,10 @@ public sealed class BrokerFixture : IAsyncLifetime
                 else if (id == FailingOrderId)
                     throw new InvalidOperationException("Order database unavailable");
                 else
+                {
+                    StatusTraces[id] = System.Diagnostics.Activity.Current?.TraceId;
                     await ctx.RespondAsync(new OrderNotFound { OrderId = id });
+                }
             }));
         });
         await _bus.StartAsync();
@@ -170,7 +193,8 @@ public sealed class BrokerFixture : IAsyncLifetime
     private static Received<T> Capture<T>(ConsumeContext<T> ctx) where T : class =>
         new(ctx.Message, ctx.MessageId,
             ctx.Headers.GetAll().ToDictionary(h => h.Key, h => (object?)h.Value),
-            ctx.ReceiveContext.TransportHeaders.GetAll().ToDictionary(h => h.Key, h => (object?)h.Value));
+            ctx.ReceiveContext.TransportHeaders.GetAll().ToDictionary(h => h.Key, h => (object?)h.Value),
+            System.Diagnostics.Activity.Current?.TraceId); // MassTransit's consume span
 
     private static TaskCompletionSource<Received<T>> Get<T>(
         ConcurrentDictionary<Guid, TaskCompletionSource<Received<T>>> map, Guid id) =>
@@ -182,6 +206,7 @@ public sealed class BrokerFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        _listener?.Dispose();
         if (_bus is not null)
             await _bus.StopAsync();
         await _replies.DisposeAsync();

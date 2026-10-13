@@ -67,6 +67,13 @@ jobs:
           scripts/smoke-test.sh out/rabbit-mcp
           test -f "$RabbitMcp__AuditLogPath"   # created at startup (writability check)
 
+      # OTLP endpoint with nothing listening: the server must start, answer MCP and keep stdout clean.
+      - name: MCP smoke test (OpenTelemetry enabled)
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
+          OTEL_SERVICE_NAME: rabbit-mcp-smoke
+        run: scripts/smoke-test.sh out/rabbit-mcp
+
       - name: MCP smoke test (contracts loaded from an external DLL)
         env:
           RabbitMcp__ContractAssemblies: ${{ github.workspace }}/tests/RabbitMcp.ExternalContracts/bin/Release/net10.0/RabbitMcp.ExternalContracts.dll

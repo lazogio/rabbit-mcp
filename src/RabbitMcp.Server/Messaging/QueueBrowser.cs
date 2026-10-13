@@ -166,6 +166,13 @@ public sealed class QueueBrowser(
                 headers[HeaderNames.RepublishedFrom] = errorQueue;
                 headers[HeaderNames.RepublishedAt] = time.GetUtcNow().ToString("O");
 
+                // A new span for the retry, linked (not parented) to the original send's trace: the consumer
+                // processes it as part of this republish, and the original trace stays one click away.
+                using var activity = Telemetry.StartSend("republish", target, linkTo: Telemetry.Extract(props.Headers));
+                activity?.SetTag("messaging.message.id", messageId);
+                activity?.SetTag("rabbitmcp.source_queue", errorQueue);
+                Telemetry.Inject(activity, headers);
+
                 var newProps = new BasicProperties(props)
                 {
                     DeliveryMode = DeliveryModes.Persistent,
@@ -179,6 +186,7 @@ public sealed class QueueBrowser(
                 }
                 catch (OperationInterruptedException ex) when (RabbitConnection.IsNotFound(ex))
                 {
+                    Telemetry.Fail(activity, "exchange deleted");
                     // The broker closed the channel: every message not yet acked goes back to the error queue.
                     connection.InvalidateExchange(target);
                     throw new McpException(
@@ -187,6 +195,7 @@ public sealed class QueueBrowser(
                 }
                 catch (PublishException ex)
                 {
+                    Telemetry.Fail(activity, ex.IsReturn ? "not routed" : "rejected");
                     toRequeue.Add(delivery.DeliveryTag);
                     outcomes.Add(new RepublishOutcome(messageId, "failed", target, ex.IsReturn
                         ? $"Not routed: no queue is bound to exchange '{target}'. Message kept in {errorQueue}."

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,6 +44,10 @@ public sealed class ContractPublisher(
         var contract = contracts.Get(typeof(T));
         var client = AuditLog.ClientOf(server);
         var messageId = Guid.NewGuid();
+        using var activity = Telemetry.StartSend("publish", contract.Exchange);
+        activity?.SetTag("messaging.message.id", messageId.ToString());
+        activity?.SetTag("rabbitmcp.contract", contract.Name);
+        activity?.SetTag("rabbitmcp.client", client);
         MassTransitEnvelope envelope;
         try
         {
@@ -55,6 +60,7 @@ public sealed class ContractPublisher(
         }
         catch (McpException ex)
         {
+            Telemetry.Fail(activity, ex.Message);
             audit.Write(audit.Event(AuditActions.Publish, "error", client, contract.Name, contract.Exchange,
                 correlationId: correlationId, detail: ex.Message, message: message, messageType: typeof(T)));
             throw;
@@ -102,14 +108,28 @@ public sealed class ContractPublisher(
                 messageId: messageId.ToString(), requestId: requestId.ToString(), correlationId: correlationId,
                 detail: detail, message: message, messageType: typeof(T)));
 
+        using var activity = Telemetry.StartSend("request", contract.Exchange, ActivityKind.Client);
+        activity?.SetTag("messaging.message.id", messageId.ToString());
+        activity?.SetTag("rabbitmcp.request_id", requestId.ToString());
+        activity?.SetTag("rabbitmcp.contract", contract.Name);
+        activity?.SetTag("rabbitmcp.client", client);
+        var started = time.GetTimestamp();
+
         try
         {
             var result = await SendRequestAsync(contract, message, timeoutSeconds, correlationId, messageId, requestId, cancellationToken);
+            activity?.SetTag("rabbitmcp.outcome", result.Status);
+            activity?.SetTag("rabbitmcp.response_type", result.ResponseType);
+            if (result.Status != "responded")
+                Telemetry.Fail(activity, result.Status);
+            Telemetry.RecordRequestDuration(time.GetElapsedTime(started), contract.Name, result.Status);
             Audit(result.Status, result.ResponseType is null ? result.Note : $"reply {result.ResponseType}");
             return result;
         }
         catch (McpException ex)
         {
+            Telemetry.Fail(activity, ex.Message);
+            Telemetry.RecordRequestDuration(time.GetElapsedTime(started), contract.Name, "error");
             Audit("error", ex.Message);
             throw;
         }
@@ -214,6 +234,8 @@ public sealed class ContractPublisher(
                 [HeaderNames.PublishedBy] = options.Value.ClientName,
             },
         };
+        // The consumer's span becomes a child of ours (traceparent + MassTransit's MT-Activity-Id).
+        Telemetry.Inject(Activity.Current, props.Headers!);
 
         await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
         try

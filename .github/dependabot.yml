@@ -12,6 +12,8 @@ updates:
     groups:
       mcp-and-rabbitmq:
         patterns: ["ModelContextProtocol*", "RabbitMQ.Client", "Microsoft.Extensions.*"]
+      opentelemetry:
+        patterns: ["OpenTelemetry*"]
       test-tooling:
         patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "GitHubActionsTestLogger", "Testcontainers*"]
       masstransit:
