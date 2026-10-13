@@ -18,16 +18,23 @@ public sealed class ResponderTools(ResponderService responder, TimeProvider time
     [Description(
         "Requests other services sent to this server (responder mode) that are waiting for an answer, oldest first. " +
         "Answer each with one of its replyTools (reply_*) or with reject_request before expiresAt: after that the " +
-        "requester has given up and the request disappears. The message is checked against its contract.")]
-    public PendingRequestList PendingRequests(
+        "requester has given up and the request disappears. The message is checked against its contract. " +
+        "To wait for the next request instead of polling, pass waitSeconds: the call returns as soon as one arrives.")]
+    public async Task<PendingRequestList> PendingRequestsAsync(
         [Description("Only requests of this contract (name, e.g. GetOrderStatus).")] string? contract = null,
-        [Description("Maximum requests to return, 1-100 (default 20).")] int limit = 20)
+        [Description("Maximum requests to return, 1-100 (default 20).")] int limit = 20,
+        [Description("If nothing is pending, wait up to this many seconds (0-50, default 0) for a request to arrive.")] int waitSeconds = 0,
+        CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 100);
+        bool Matches(PendingRequest r) =>
+            contract is null || string.Equals(r.Contract.Name, contract, StringComparison.OrdinalIgnoreCase);
+
+        if (waitSeconds > 0)
+            await responder.WaitForPendingAsync(Matches, TimeSpan.FromSeconds(Math.Min(waitSeconds, 50)), cancellationToken);
+
         var now = time.GetUtcNow();
-        var all = responder.Pending()
-            .Where(r => contract is null || string.Equals(r.Contract.Name, contract, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+        var all = responder.Pending().Where(Matches).ToArray();
 
         var items = all.Take(limit).Select(r =>
         {
@@ -44,7 +51,7 @@ public sealed class ResponderTools(ResponderService responder, TimeProvider time
         }).ToArray();
 
         return new PendingRequestList(items, all.Length,
-            [.. responder.Contracts.Requests.Select(c => c.Name)], responder.QueueName);
+            [.. responder.Contracts.Requests.Select(c => c.Name)], responder.QueueName, responder.Status);
     }
 
     [McpServerTool(Name = "reject_request", Title = "Reject a pending request",

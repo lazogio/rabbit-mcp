@@ -133,4 +133,69 @@ public sealed class ResponderTests(BrokerFixture broker)
             broker.Responder.RejectAsync(Guid.NewGuid(), "no", "it", CancellationToken.None));
         Assert.Contains("No pending request", ex.Message);
     }
+
+    private static async Task WaitUntil(Func<bool> condition, string what)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException(what);
+            await Task.Delay(200);
+        }
+    }
+
+    [Fact]
+    public async Task Responder_listens_again_after_the_connection_is_lost()
+    {
+        var before = broker.Responder.Listens;
+
+        await broker.CloseConnectionsAsync("rabbit-mcp-it");
+        await WaitUntil(() => broker.Responder.Listens > before, "responder did not listen again");
+        Assert.Equal("listening", broker.Responder.Status);
+
+        var id = Guid.NewGuid();
+        var response = broker.AskClient(TimeSpan.FromSeconds(30)).GetResponse<HumanAnswer, HumanDeclined>(Ask(id));
+        var pending = await WaitForPending(id);
+        await broker.Responder.ReplyAsync(pending.RequestId, new HumanAnswer { Id = id, Answer = "Back" }, "it", CancellationToken.None);
+        Assert.True((await response.WaitAsync(TimeSpan.FromSeconds(15))).Is(out Response<HumanAnswer>? _));
+    }
+
+    [Fact]
+    public async Task Second_instance_stands_by_and_takes_over()
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new RabbitMcp.Server.RabbitMcpOptions
+        {
+            Uri = broker.Options.Value.Uri,
+            ClientName = "rabbit-mcp-ha-" + Guid.NewGuid().ToString("N")[..8],
+        });
+        ResponderService Create(RabbitConnection c) => new(c, ResponderContracts.From(broker.Registry, "AskHuman"),
+            new RequestInbox(TimeProvider.System, 10), broker.Audit, TimeProvider.System, options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ResponderService>.Instance);
+
+        var connA = new RabbitConnection(options, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<RabbitConnection>.Instance);
+        var connB = new RabbitConnection(options, TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<RabbitConnection>.Instance);
+        var active = Create(connA);
+        var standby = Create(connB);
+        try
+        {
+            await active.StartAsync(CancellationToken.None);
+            await active.Ready.WaitAsync(TimeSpan.FromSeconds(30));
+            await standby.StartAsync(CancellationToken.None);
+            await WaitUntil(() => standby.Status == "standby", "second instance did not stand by");
+            Assert.Null(standby.QueueName);
+
+            // The active instance goes away: its exclusive queue disappears and the standby takes over.
+            await active.StopAsync(CancellationToken.None);
+            await connA.DisposeAsync();
+            await standby.Ready.WaitAsync(TimeSpan.FromSeconds(30));
+            Assert.Equal("listening", standby.Status);
+            Assert.Equal(ReplyEndpoint.ResponderQueueName(options.Value.ClientName), standby.QueueName);
+        }
+        finally
+        {
+            await standby.StopAsync(CancellationToken.None);
+            await connB.DisposeAsync();
+        }
+    }
 }

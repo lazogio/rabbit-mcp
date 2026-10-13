@@ -152,7 +152,8 @@ public sealed record PendingRequestList(
     IReadOnlyList<PendingRequestInfo> Requests,
     [property: Description("All pending requests (may be more than returned).")] int Total,
     [property: Description("Request contracts this server answers.")] IReadOnlyList<string> AnsweredContracts,
-    [property: Description("Exclusive queue the responder consumes from; null while not connected.")] string? Queue);
+    [property: Description("Exclusive queue the responder consumes from; null while not listening.")] string? Queue,
+    [property: Description("listening | standby (another instance answers) | disconnected | starting")] string Status);
 
 public sealed record ReplyResult(
     string RequestId,

@@ -45,6 +45,12 @@ public static class ReplyEndpoint
     public static string CreateName(string clientName) =>
         $"{Sanitize(clientName)}_{Sanitize(Environment.MachineName)}_{Guid.NewGuid():N}";
 
+    /// <summary>
+    /// The responder's queue: the same name for every instance with this ClientName, declared exclusive, so only one
+    /// instance consumes at a time and the others stand by (RESOURCE_LOCKED) until it goes away.
+    /// </summary>
+    public static string ResponderQueueName(string clientName) => $"{Sanitize(clientName)}-responder";
+
     private static string Sanitize(string value)
     {
         var sb = new StringBuilder(value.Length);

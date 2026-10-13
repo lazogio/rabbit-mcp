@@ -20,6 +20,8 @@ public sealed record PendingRequest(
     public string FaultAddress => Envelope.FaultAddress ?? Envelope.ResponseAddress!;
 }
 
+public enum InboxAddResult { Added, Duplicate, Full }
+
 /// <summary>
 /// In-memory inbox of unanswered requests. Bounded, and expired requests disappear: their requester has
 /// already timed out, so an answer would go nowhere.
@@ -27,14 +29,50 @@ public sealed record PendingRequest(
 public sealed class RequestInbox(TimeProvider time, int capacity)
 {
     private readonly ConcurrentDictionary<Guid, PendingRequest> _pending = new();
+    private TaskCompletionSource _added = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public int Capacity { get; } = capacity;
 
-    /// <summary>False when the inbox is full (the caller rejects the request) or the id is already pending.</summary>
-    public bool TryAdd(PendingRequest request)
+    /// <summary>Full: the caller rejects the request. Duplicate: the same request arrived twice; keep the first.</summary>
+    public InboxAddResult TryAdd(PendingRequest request)
     {
         Prune();
-        return _pending.Count < Capacity && _pending.TryAdd(request.RequestId, request);
+        if (_pending.ContainsKey(request.RequestId))
+            return InboxAddResult.Duplicate;
+        if (_pending.Count >= Capacity)
+            return InboxAddResult.Full;
+        if (!_pending.TryAdd(request.RequestId, request))
+            return InboxAddResult.Duplicate;
+
+        Interlocked.Exchange(ref _added, new(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+        return InboxAddResult.Added;
+    }
+
+    /// <summary>
+    /// Long poll: completes as soon as an unexpired request matching <paramref name="match"/> is pending,
+    /// or after <paramref name="timeout"/>. Returns whether one is pending.
+    /// </summary>
+    public async Task<bool> WaitForAsync(Func<PendingRequest, bool> match, TimeSpan timeout, CancellationToken ct)
+    {
+        var deadline = time.GetUtcNow() + timeout;
+        while (true)
+        {
+            var signal = Volatile.Read(ref _added).Task; // read before checking, so no add is missed
+            if (List().Any(match))
+                return true;
+
+            var left = deadline - time.GetUtcNow();
+            if (left <= TimeSpan.Zero)
+                return false;
+            try
+            {
+                await signal.WaitAsync(left, time, ct);
+            }
+            catch (TimeoutException)
+            {
+                return List().Any(match);
+            }
+        }
     }
 
     /// <summary>Removes and returns the request; null if unknown or expired.</summary>

@@ -58,6 +58,42 @@ public sealed class BrokerFixture : IAsyncLifetime
     public ResponderService Responder { get; private set; } = null!;
 
     /// <summary>A MassTransit request client, like a service asking rabbit-mcp.</summary>
+    /// <summary>Options of the rabbit-mcp components (for creating more of them in a test).</summary>
+    public Microsoft.Extensions.Options.IOptions<RabbitMcpOptions> Options => _options;
+
+    /// <summary>Force-closes every broker connection with this client name, like a network failure or an operator would.</summary>
+    public async Task CloseConnectionsAsync(string clientName)
+    {
+        using var http = ManagementHttp();
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            var list = System.Text.Json.JsonDocument.Parse(await http.GetStringAsync("api/connections")).RootElement;
+            var names = list.EnumerateArray()
+                .Where(c => c.TryGetProperty("client_properties", out var p) && p.TryGetProperty("connection_name", out var n)
+                            && n.GetString() == clientName)
+                .Select(c => c.GetProperty("name").GetString()!)
+                .ToArray();
+            if (names.Length > 0)
+            {
+                foreach (var name in names)
+                    (await http.DeleteAsync("api/connections/" + Uri.EscapeDataString(name))).EnsureSuccessStatusCode();
+                return;
+            }
+            await Task.Delay(500); // the management API lists new connections after a short delay
+        }
+        throw new TimeoutException($"No broker connection named {clientName}.");
+    }
+
+    private HttpClient ManagementHttp()
+    {
+        var amqp = new Uri(_options.Value.Uri);
+        var http = new HttpClient { BaseAddress = new Uri(_options.Value.ManagementUri!.TrimEnd('/') + "/") };
+        http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic",
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(Uri.UnescapeDataString(amqp.UserInfo))));
+        return http;
+    }
+
     public IRequestClient<AskHuman> AskClient(TimeSpan timeout) =>
         _bus!.CreateRequestClient<AskHuman>(RequestTimeout.After(ms: (int)timeout.TotalMilliseconds));
     public string AuditPath { get; } = Path.Combine(Path.GetTempPath(), $"rabbit-mcp-it-audit-{Guid.NewGuid():N}", "audit.jsonl");

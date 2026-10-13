@@ -33,7 +33,7 @@ public static class HttpHosting
         var settings = ServerComposition.ReadOptions(builder.Configuration);
 
         // Stateless: no session affinity needed, scales horizontally; our tools need no server-to-client requests.
-        mcp.WithHttpTransport();
+        mcp.WithHttpTransport(o => o.Stateless = true); // explicit, so a future SDK default cannot change it
 
         builder.WebHost.UseUrls(settings.HttpUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         var schemes = ConfigureAuthentication(builder, settings);

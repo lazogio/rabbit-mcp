@@ -47,41 +47,71 @@ public sealed class ResponderService(
     ILogger<ResponderService> logger) : BackgroundService
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
+    private const ushort ResourceLocked = 405;
     private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _listens;
 
     public ResponderContracts Contracts => contracts;
 
-    /// <summary>Completes once the queue is bound and consuming.</summary>
+    /// <summary>Completes the first time the queue is bound and consuming.</summary>
     public Task Ready => _ready.Task;
 
+    /// <summary>The queue being consumed; null while not listening.</summary>
     public string? QueueName { get; private set; }
+
+    /// <summary>starting | listening | standby (another instance holds the queue) | disconnected</summary>
+    public string Status { get; private set; } = "starting";
+
+    /// <summary>How many times listening (re)started — grows after every reconnect.</summary>
+    public int Listens => Volatile.Read(ref _listens);
 
     public IReadOnlyList<PendingRequest> Pending() => inbox.List();
 
+    /// <summary>Long poll for a pending request (see <see cref="RequestInbox.WaitForAsync"/>).</summary>
+    public Task<bool> WaitForPendingAsync(Func<PendingRequest, bool> match, TimeSpan timeout, CancellationToken ct) =>
+        inbox.WaitForAsync(match, timeout, ct);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        string? lastProblem = null;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await ListenAsync(stoppingToken);
-                return;
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
-                logger.LogWarning("Responder is not listening yet ({Reason}); retrying in {Delay}s",
-                    ex.Message, RetryDelay.TotalSeconds);
-                try { await Task.Delay(RetryDelay, time, stoppingToken); }
-                catch (OperationCanceledException) { return; }
+                QueueName = null;
+                var standby = ex is OperationInterruptedException oie && oie.ShutdownReason?.ReplyCode == ResourceLocked;
+                Status = standby ? "standby" : "disconnected";
+                var problem = standby
+                    ? "another rabbit-mcp instance with the same ClientName is responding; standing by"
+                    : ex.Message;
+                // Log a changed situation once, not every retry.
+                if (problem != lastProblem)
+                    logger.LogWarning("Responder is not listening ({Reason}); retrying every {Delay}s", problem, RetryDelay.TotalSeconds);
+                lastProblem = problem;
             }
+
+            try { await Task.Delay(RetryDelay, time, stoppingToken); }
+            catch (OperationCanceledException) { return; }
         }
     }
 
+    /// <summary>Consumes until the channel is lost (then throws, and ExecuteAsync starts over) or the host stops.</summary>
     private async Task ListenAsync(CancellationToken stoppingToken)
     {
         await using var channel = await connection.CreateChannelAsync(publisherConfirms: false, stoppingToken);
-        var queue = ReplyEndpoint.CreateName(options.Value.ClientName + "-responder");
+        var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        channel.ChannelShutdownAsync += (_, e) =>
+        {
+            lost.TrySetResult($"channel closed: {e.ReplyCode} {e.ReplyText}");
+            return Task.CompletedTask;
+        };
 
+        var queue = ReplyEndpoint.ResponderQueueName(options.Value.ClientName);
+        // Exclusive: a second instance gets RESOURCE_LOCKED and stands by, so each request is answered once.
         await channel.QueueDeclareAsync(queue, durable: false, exclusive: true, autoDelete: true, cancellationToken: stoppingToken);
         foreach (var contract in contracts.Requests)
         {
@@ -97,12 +127,19 @@ public sealed class ResponderService(
         await channel.BasicConsumeAsync(queue, autoAck: false, consumer, stoppingToken);
 
         QueueName = queue;
+        Status = "listening";
+        Interlocked.Increment(ref _listens);
         _ready.TrySetResult();
         logger.LogInformation("Responder listening on {Queue} for {Contracts}",
             queue, string.Join(", ", contracts.Requests.Select(c => c.Name)));
 
-        try { await Task.Delay(Timeout.Infinite, stoppingToken); }
-        catch (OperationCanceledException) { }
+        string reason;
+        try { reason = await lost.Task.WaitAsync(stoppingToken); }
+        catch (OperationCanceledException) { return; }
+
+        QueueName = null;
+        Status = "disconnected";
+        throw new InvalidOperationException(reason);
     }
 
     private async Task OnRequestAsync(IChannel channel, BasicDeliverEventArgs delivery)
@@ -110,8 +147,8 @@ public sealed class ResponderService(
         try
         {
             var envelope = MassTransitEnvelope.TryParse(delivery.Body.Span);
-            var contract = envelope is null ? null : contracts.Requests.FirstOrDefault(c =>
-                envelope.MessageType!.Contains(c.MessageTypeUrn, StringComparer.OrdinalIgnoreCase));
+            var contract = envelope?.MessageType is null ? null : contracts.Requests.FirstOrDefault(c =>
+                envelope.MessageType.Contains(c.MessageTypeUrn, StringComparer.OrdinalIgnoreCase));
 
             if (envelope is null || contract is null)
             {
@@ -125,7 +162,7 @@ public sealed class ResponderService(
             }
 
             var expires = envelope.ExpirationTime is { } exp
-                ? new DateTimeOffset(DateTime.SpecifyKind(exp, DateTimeKind.Utc))
+                ? new DateTimeOffset(exp.Kind == DateTimeKind.Local ? exp.ToUniversalTime() : DateTime.SpecifyKind(exp, DateTimeKind.Utc))
                 : (DateTimeOffset?)null;
             if (expires <= time.GetUtcNow())
                 return; // the requester has already given up
@@ -133,10 +170,15 @@ public sealed class ResponderService(
             var request = new PendingRequest(requestId, contract, envelope, time.GetUtcNow(), expires,
                 Telemetry.Extract(delivery.BasicProperties.Headers));
 
-            if (!inbox.TryAdd(request))
+            switch (inbox.TryAdd(request))
             {
-                await SendFaultAsync(request, $"rabbit-mcp responder is busy ({inbox.Capacity} requests pending).", null, CancellationToken.None);
-                return;
+                case InboxAddResult.Duplicate:
+                    logger.LogInformation("Responder ignored a duplicate delivery of request {RequestId}", requestId);
+                    return;
+                case InboxAddResult.Full:
+                    await SendFaultAsync(request, $"rabbit-mcp responder is busy ({inbox.Capacity} requests pending).",
+                        null, keepOnFailure: false, CancellationToken.None);
+                    return;
             }
 
             audit.Write(audit.Event(AuditActions.Receive, "pending", envelope.SourceAddress, contract.Name, contract.Exchange,
@@ -177,7 +219,7 @@ public sealed class ResponderService(
 
         var envelope = ResponderEnvelopes.Reply(request, descriptor, response, connection.BrokerUri,
             QueueName ?? options.Value.ClientName, Guid.NewGuid(), time.GetUtcNow().UtcDateTime);
-        await SendAsync(request, envelope, request.ResponseAddress, "reply", $"reply {descriptor.Name}", client, ct);
+        await SendAsync(request, envelope, request.ResponseAddress, "reply", $"reply {descriptor.Name}", client, keepOnFailure: true, ct);
 
         return new ReplyResult(request.RequestId.ToString(), request.Contract.Name, "replied", descriptor.Name,
             envelope.MessageId!, BrokerAddress.GetEntityName(request.ResponseAddress)!,
@@ -191,7 +233,7 @@ public sealed class ResponderService(
             throw new McpException("reason is required: the requester sees it as the fault message.");
 
         var request = Take(requestId);
-        var envelope = await SendFaultAsync(request, reason.Trim(), client, ct);
+        var envelope = await SendFaultAsync(request, reason.Trim(), client, keepOnFailure: true, ct);
         return new ReplyResult(request.RequestId.ToString(), request.Contract.Name, "rejected", "Fault",
             envelope.MessageId!, BrokerAddress.GetEntityName(request.FaultAddress)!,
             (long)(time.GetUtcNow() - request.ReceivedAt).TotalMilliseconds);
@@ -202,17 +244,18 @@ public sealed class ResponderService(
             $"No pending request {requestId}: it was already answered, has expired (the requester gave up), or never arrived. " +
             "See pending_requests.");
 
-    private async Task<MassTransitEnvelope> SendFaultAsync(PendingRequest request, string reason, string? client, CancellationToken ct)
+    private async Task<MassTransitEnvelope> SendFaultAsync(
+        PendingRequest request, string reason, string? client, bool keepOnFailure, CancellationToken ct)
     {
         var envelope = ResponderEnvelopes.Fault(request, reason, connection.BrokerUri,
             QueueName ?? options.Value.ClientName, Guid.NewGuid(), time.GetUtcNow().UtcDateTime);
-        await SendAsync(request, envelope, request.FaultAddress, "reject", $"rejected: {reason}", client, ct);
+        await SendAsync(request, envelope, request.FaultAddress, "reject", $"rejected: {reason}", client, keepOnFailure, ct);
         return envelope;
     }
 
     private async Task SendAsync(
         PendingRequest request, MassTransitEnvelope envelope, string destination, string operation, string detail,
-        string? client, CancellationToken ct)
+        string? client, bool keepOnFailure, CancellationToken ct)
     {
         var exchange = BrokerAddress.GetEntityName(destination)
             ?? throw new McpException($"The request's reply address '{destination}' cannot be parsed.");
@@ -251,10 +294,20 @@ public sealed class ResponderService(
             Audit("error", "requester gone");
             throw new McpException($"The requester of {request.RequestId} is no longer listening (it stopped or timed out). Nothing was delivered.");
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            // The tool call was cancelled: the request was not answered, so it stays pending.
+            if (keepOnFailure)
+                inbox.Return(request);
+            Telemetry.Fail(activity, "cancelled");
+            Audit("error", "cancelled");
+            throw;
+        }
+        catch (Exception ex)
         {
             // Broker hiccup: keep the request so the model can try again.
-            inbox.Return(request);
+            if (keepOnFailure)
+                inbox.Return(request);
             Telemetry.Fail(activity, ex.Message);
             Audit("error", ex.Message);
             throw ex as McpException ?? new McpException($"Could not send the {operation}: {ex.Message}. The request is still pending.");

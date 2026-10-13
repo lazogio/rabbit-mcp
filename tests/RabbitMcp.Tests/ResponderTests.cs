@@ -39,10 +39,10 @@ public class ResponderTests
         var first = Request(T0);
         var second = Request(T0.AddSeconds(1));
 
-        Assert.True(inbox.TryAdd(second));
-        Assert.True(inbox.TryAdd(first));
-        Assert.False(inbox.TryAdd(Request(T0)));
-        Assert.False(inbox.TryAdd(first)); // already pending
+        Assert.Equal(InboxAddResult.Added, inbox.TryAdd(second));
+        Assert.Equal(InboxAddResult.Added, inbox.TryAdd(first));
+        Assert.Equal(InboxAddResult.Duplicate, inbox.TryAdd(first)); // redelivered: keep the first, no "busy" fault
+        Assert.Equal(InboxAddResult.Full, inbox.TryAdd(Request(T0)));
 
         Assert.Equal(new[] { first.RequestId, second.RequestId }, inbox.List().Select(r => r.RequestId));
     }
@@ -74,7 +74,31 @@ public class ResponderTests
         Assert.Empty(inbox.List());
         Assert.Null(inbox.TryTake(request.RequestId));
         inbox.Return(request); // expired: not put back
-        Assert.True(inbox.TryAdd(Request(T0)));
+        Assert.Equal(InboxAddResult.Added, inbox.TryAdd(Request(T0)));
+    }
+
+    [Fact]
+    public async Task Long_poll_returns_when_a_request_arrives()
+    {
+        var inbox = new RequestInbox(TimeProvider.System, 10);
+        var request = Request(DateTimeOffset.UtcNow);
+
+        var wait = inbox.WaitForAsync(_ => true, TimeSpan.FromSeconds(10), CancellationToken.None);
+        await Task.Delay(100);
+        Assert.False(wait.IsCompleted);
+
+        inbox.TryAdd(request);
+        Assert.True(await wait.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task Long_poll_times_out_and_honours_the_filter()
+    {
+        var inbox = new RequestInbox(TimeProvider.System, 10);
+        inbox.TryAdd(Request(DateTimeOffset.UtcNow));
+
+        Assert.True(await inbox.WaitForAsync(_ => true, TimeSpan.FromSeconds(1), CancellationToken.None));
+        Assert.False(await inbox.WaitForAsync(_ => false, TimeSpan.FromMilliseconds(300), CancellationToken.None));
     }
 
     [Fact]
@@ -131,6 +155,10 @@ public class ResponderTests
         Assert.Equal(new[] { "GetOrderStatus" }, ResponderContracts.From(Registry, "*").Requests.Select(c => c.Name));
         Assert.Throws<StartupException>(() => ResponderContracts.From(Registry, "OrderSubmitted"));
     }
+
+    [Fact]
+    public void Responder_queue_name_is_stable_per_client_name() =>
+        Assert.Equal("rabbit-mcp-orders-responder", ReplyEndpoint.ResponderQueueName("rabbit-mcp/orders"));
 
     [Fact]
     public void One_reply_tool_per_reply_type()
