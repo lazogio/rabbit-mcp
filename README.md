@@ -11,6 +11,9 @@ RabbitMQ-ის MCP სერვერი, რომელიც **შეტყ�
 - **Request/response:** `request_<contract>` აგზავნის მოთხოვნას და ელოდება consumer-ის პასუხს. პასუხიც მოწმდება თავის კონტრაქტზე.
 - **დიაგნოსტიკა:** რიგების სია და სტატისტიკა, შეტყობინებების ნახვა ამოღების გარეშე, MassTransit-ის fault-ის დეტალებით.
 - **აღდგენა:** `_error` რიგიდან შეტყობინებების უსაფრთხოდ დაბრუნება საწყის რიგში.
+- **ვინ იღებს:** `contract_consumers` თითო კონტრაქტისთვის აჩვენებს, რომელ რიგებამდე აღწევს და ჰყავს თუ არა consumer.
+- **Responder:** სერვისების request-ებს მოდელი პასუხობს.
+- **თავსებადობა:** `rabbit-mcp contracts diff old.dll new.dll` CI-ში აჩერებს wire-ის დამრღვევ ცვლილებებს.
 
 ## სწრაფი დაწყება
 
@@ -41,6 +44,18 @@ Claude Desktop-ისთვის იგივე ბინარი და env 
 ```bash
 claude mcp add --transport http rabbit-mcp https://mcp.example.com/mcp --header "X-Api-Key: KEY1"
 ```
+
+**Docker:** `ghcr.io/lazogio/rabbit-mcp` (amd64/arm64) ნაგულისხმევად HTTP რეჟიმში ეშვება `0.0.0.0:5080`-ზე, non-root მომხმარებლით:
+
+```bash
+docker run -d -p 5080:5080 \
+  -e RabbitMcp__Uri=amqp://user:pass@rabbit:5672/ \
+  -e RabbitMcp__ApiKeys="team:$(openssl rand -base64 32)" \
+  -e RabbitMcp__ContractAssemblies=/contracts/Billing.Contracts.dll -v ./contracts:/contracts:ro \
+  ghcr.io/lazogio/rabbit-mcp:0.1
+```
+
+stdio-სთვის: `docker run -i --rm -e RabbitMcp__Transport=stdio … ghcr.io/lazogio/rabbit-mcp`.
 
 Audit-ში ჩანს, ვინ რა გააგზავნა: `"client": "alice (claude-code 2.1.0)"`. ბრაუზერიდან მოსული მოთხოვნები, ანუ `Origin` header-ით, უარყოფილია, თუ წყარო `HttpAllowedOrigins`-ში არ არის. ეს MCP-ის სპეციფიკაციით მოთხოვნილი დაცვაა DNS rebinding-ისგან. TLS-ისთვის სერვერი reverse proxy-ის (nginx, Traefik, ingress) უკან დააყენეთ.
 
@@ -85,7 +100,8 @@ Audit-ში ჩანს, ვინ რა გააგზავნა: `"clien
 | `publish_<contract>` * | აქვეყნებს event-ს |
 | `request_<contract>` * | აგზავნის request-ს და აბრუნებს პასუხს |
 | `republish_from_error` ** | აბრუნებს შეტყობინებებს `_error`/`_skipped` რიგიდან: ჯერ preview, შემდეგ `confirm=true` |
-| `pending_requests` † | სერვისებიდან შემოსული request-ები, რომლებიც პასუხს ელოდება |
+| `contract_consumers` *** | bindings-ის გავლით ეძებს, რომელ რიგებში ხვდება კონტრაქტი: consumer-ები, `_error`/`_skipped` ნარჩენი. სტატუსია `ok`, `no-consumers`, `no-queue` ან `no-exchange` |
+| `pending_requests` † | სერვისებიდან შემოსული request-ები, რომლებიც პასუხს ელოდება. `waitSeconds`-ით ახალ request-ს ელოდება (long poll) |
 | `reply_<response>` † | პასუხობს request-ს ერთ-ერთი დეკლარირებული პასუხის ტიპით |
 | `reject_request` † | უარყოფს request-ს: მომთხოვნი მიზეზით Fault-ს იღებს |
 
@@ -136,7 +152,7 @@ public sealed record GetOrderStatus
 - **`[Description]`:** ველის ახსნა, რომელსაც მოდელი კითხულობს.
 - **DataAnnotations** (`[Range]`, `[StringLength]`, `[RegularExpression]`, `[EmailAddress]`, `[MinLength]`): ჩანს სქემაში და სერვერიც ამოწმებს, ჩადგმულ ობიექტებსა და სიებშიც.
 - **სახელები:** URN `urn:message:Namespace:Type`, exchange `Namespace:Type`. სხვა namespace-ის კონტრაქტზე მისაბმელად გამოიყენეთ `Urn`/`Exchange`.
-- **საკუთარი კონტრაქტები სერვერის აწყობის გარეშე:** შექმენით classlib, რომელიც `RabbitMcp.Contracts`-ს (nupkg Release-შია) იყენებს. ააგეთ და მიუთითეთ DLL: `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`. მისი დამოკიდებულებები DLL-ის გვერდით უნდა იდოს. ფარდობითი გზა სერვერის საქაღალდიდან ითვლება. არასწორი გზის შემთხვევაში სერვერი stderr-ზე ერთ გასაგებ სტრიქონს წერს და არ ეშვება. ასეთ შემთხვევაში ნიმუშის კონტრაქტები არ ერევა.
+- **საკუთარი კონტრაქტები სერვერის აწყობის გარეშე:** შექმენით classlib, რომელიც `RabbitMcp.Contracts`-ს იყენებს (nupkg Release-შია, `NUGET_API_KEY` secret-ის არსებობისას კი nuget.org-ზეც). ააგეთ და მიუთითეთ DLL: `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`. მისი დამოკიდებულებები DLL-ის გვერდით უნდა იდოს. ფარდობითი გზა სერვერის საქაღალდიდან ითვლება. არასწორი გზის შემთხვევაში სერვერი stderr-ზე ერთ გასაგებ სტრიქონს წერს და არ ეშვება. ასეთ შემთხვევაში ნიმუშის კონტრაქტები არ ერევა.
 
 ## Request/response
 
@@ -160,9 +176,42 @@ MassTransit consumer ჩვეულებრივ პასუხობს: `a
 3. მოდელი პასუხობს `reply_<response>`-ით (პასუხი ჯერ კონტრაქტზე მოწმდება) ან `reject_request`-ით. უარყოფისას მომთხოვნის `GetResponse` მაშინვე `RequestFaultException`-ით სრულდება.
 4. ვადაგასული request ქრება, რადგან მომთხოვნმა უკვე timeout მიიღო. თუ request-ები `MaxPendingRequests`-ს გადააჭარბებს, ახლები მაშინვე Fault-ით უარიყოფა.
 
+- **ლოდინი:** `pending_requests(waitSeconds: 50)` პასუხს მაშინვე აბრუნებს, როგორც კი request მოვა, ამიტომ მოდელს ხშირი შემოწმება არ სჭირდება.
+- **რამდენიმე ასლი:** რიგის სახელი `ClientName`-ზეა დამოკიდებული (`rabbit-mcp-responder`) და exclusive-ია. ამიტომ ერთი `ClientName`-ით პასუხობს მხოლოდ ერთი ასლი, დანარჩენები `standby`-ში არიან. აქტიური ასლის გათიშვისას რიგი ქრება და ~5 წამში მას მეორე ასლი იკავებს. სტატუსი `pending_requests.status`-ში ჩანს.
+- **კავშირის დაკარგვა:** channel-ის ან კავშირის გაწყვეტის შემდეგ responder თავიდან უერთდება. მოლოდინში მყოფ request-ებზე პასუხი მაინც შეიძლება.
+
 request-ები მეხსიერებაში ინახება: სერვერის გადატვირთვისას მოლოდინში მყოფი request-ები იკარგება და მომთხოვნი timeout-ს იღებს. მიღება და პასუხი audit-ში იწერება (`receive`, `respond`), პასუხის span კი request-ის trace-ს უკავშირდება. რეჟიმი პასუხისმგებლობის გამო ხელით მუშაობს: ავტომატური პასუხი არ არსებობს.
 
 **Responder MassTransit-ის გარეშე** პასუხს აქვეყნებს exchange-ზე, რომლის სახელიც `responseAddress`-ის ბოლო სეგმენტია, routing key `""`-ით. envelope-ში უნდა იყოს იგივე `requestId`, `messageType: ["urn:message:Ns:Type"]` და `message`, content type კი `application/vnd.masstransit+json`.
+
+## კონტრაქტების თავსებადობა
+
+კონტრაქტის ცვლილება, რომელიც build-ს არ არღვევს, wire-ზე მაინც შეიძლება დაარღვიოს უკვე გაშვებული სერვისები. ორ build-ს ასე შეადარებთ:
+
+```bash
+rabbit-mcp contracts diff old/Billing.Contracts.dll new/Billing.Contracts.dll          # ან --json
+```
+
+```
+BREAKING OrderPlaced customer: Type changed from string to number.
+BREAKING OrderPlaced channel: New required property: existing publishers do not send it.
+WARNING  OrderPlaced: Breaking change without a version bump (still v1).
+INFO     OrderPlaced coupon: New optional property.
+```
+
+- **breaking:** კონტრაქტის ან პასუხის ტიპის წაშლა; URN-ის ან exchange-ის შეცვლა; ტიპის შეცვლა; ახალი სავალდებულო ველი; ველის სავალდებულოდ ქცევა; სავალდებულო ველის წაშლა; enum-ის მნიშვნელობის წაშლა.
+- **warning:** არასავალდებულო ველის წაშლა; ველის `null`-ად ქცევა; ახალი პასუხის ტიპი; ახალი enum-ის მნიშვნელობა; დამრღვევი ცვლილება ვერსიის გაზრდის გარეშე.
+- **exit code:** `0` თავსებადია, `1` არის breaking ცვლილება, `2` შეცდომაა. ორივე build ცალკე load context-ში იტვირთება, ამიტომ ერთი assembly-ის ორი ვერსიის შედარებაც შეიძლება. DataAnnotations-ის წესები არ დარდება, მხოლოდ JSON-ის სტრუქტურა.
+
+სერვისის CI-ში, მაგ. main-ის build-თან შესადარებლად:
+
+```yaml
+$|
+    curl -sL https://github.com/lazogio/rabbit-mcp/releases/download/v0.1.0/rabbit-mcp-0.1.0-linux-x64.tar.gz | tar xz
+    git worktree add ../base origin/main && dotnet build ../base/src/Billing.Contracts -c Release -o base
+    dotnet build src/Billing.Contracts -c Release -o head
+    rabbit-mcp/rabbit-mcp contracts diff base/Billing.Contracts.dll head/Billing.Contracts.dll
+```
 
 ## გარანტიები
 
@@ -197,6 +246,6 @@ tests/RabbitMcp.ExternalContracts      „გარე“ კონტრაქ�
 
 **CI:** ყოველ push-სა და PR-ზე GitHub Actions აგებს პროექტს, უშვებს unit ტესტებს, ინტეგრაციულ ტესტებს ნამდვილ RabbitMQ 4-სა და MassTransit 8-ზე და smoke test-ს (`scripts/smoke-test.sh`), რომელიც გამოქვეყნებულ ბინარს stdio-ზე MCP კლიენტივით ესაუბრება. ჩავარდნილი ტესტი PR-ში annotation-ად ჩანს.
 
-**Release:** `git tag v0.2.0 && git push origin v0.2.0` ააგებს ბინარებს ხუთივე პლატფორმისთვის და შექმნის GitHub Release-ს. ვერსია tag-იდან მოდის და MCP კლიენტს `serverInfo.version`-ში უჩანს. `-` შემცველი tag (`v0.2.0-rc.1`) prerelease-ად ქვეყნდება. **Dependabot** NuGet-ისა და Actions-ის განახლებებს ყოველ ორშაბათს გვთავაზობს. MassTransit 9+ გამოთიშულია, რადგან ის კომერციულია.
+**Release:** `git tag v0.2.0 && git push origin v0.2.0` ააგებს ბინარებს ხუთივე პლატფორმისთვის, Docker image-ს (`ghcr.io/lazogio/rabbit-mcp`) და შექმნის GitHub Release-ს. თუ რეპოზიტორიაში `NUGET_API_KEY` secret არის, `RabbitMcp.Contracts` nuget.org-ზეც ქვეყნდება. ვერსია tag-იდან მოდის და MCP კლიენტს `serverInfo.version`-ში უჩანს. `-` შემცველი tag (`v0.2.0-rc.1`) prerelease-ად ქვეყნდება. **Dependabot** NuGet-ისა და Actions-ის განახლებებს ყოველ ორშაბათს გვთავაზობს. MassTransit 9+ გამოთიშულია, რადგან ის კომერციულია.
 
 **შემდეგი ნაბიჯები:** იხ. [ROADMAP.md](ROADMAP.md).

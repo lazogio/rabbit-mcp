@@ -40,3 +40,14 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
 14. ✅ HTTP transport (`phase-5/http`, merged 2026-10-13): `Transport=http`, stateless Streamable HTTP, `/healthz`;
     API keys and/or JWT (any OIDC authority) with MCP protected resource metadata; Origin check; refuses to start
     without auth; audit records the user. Default chosen (no answer): support both auth kinds.
+
+## Phase 6 — Hardening & distribution (`phase-6/all`) ✅
+15. ✅ Phase 5 review: responder reconnects after channel loss; duplicate deliveries ignored (no false "busy" fault);
+    a cancelled reply keeps the request pending; HTTP `Stateless` set explicitly.
+16. ✅ Responder: `pending_requests(waitSeconds)` long poll; deterministic exclusive queue → one active instance,
+    others stand by and take over (MCP has no reliable way to wake the model, so long poll instead of notifications).
+17. ✅ `contract_consumers`: bindings from each contract exchange down to queues, consumers, `_error`/`_skipped` backlog.
+18. ✅ `rabbit-mcp contracts diff OLD.dll NEW.dll`: wire-compatibility check for service CI (exit 1 on breaking).
+19. ✅ Docker image `ghcr.io/lazogio/rabbit-mcp` (amd64/arm64) and nuget.org publishing (when `NUGET_API_KEY` exists).
+20. ⏸ Scheduled/delayed messages — not done: needs the rabbitmq_delayed_message_exchange plugin (not in standard
+    RabbitMQ images) or an external scheduler (Quartz/Hangfire); revisit if a broker with the plugin is used.

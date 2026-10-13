@@ -16,6 +16,8 @@ dotnet test tests/RabbitMcp.IntegrationTests      # Testcontainers RabbitMQ 4 + 
 dotnet publish src/RabbitMcp.Server -c Release -o out   # MCP clients must run this binary, never `dotnet run`
 docker compose up -d                                     # local RabbitMQ 4 (5672, UI 15672 guest/guest)
 scripts/smoke-test.sh out/rabbit-mcp                     # MCP stdio session against the published binary
+docker build -t rabbit-mcp . && scripts/smoke-test-http.sh docker:rabbit-mcp   # container (HTTP transport)
+out/rabbit-mcp contracts diff OLD.dll NEW.dll             # wire-compatibility check (CLI, not MCP)
 git tag vX.Y.Z && git push origin vX.Y.Z                 # release: binaries for 5 platforms + GitHub Release
 ```
 
@@ -64,7 +66,10 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   including failed and refused attempts. New sending tools must write audit events and respect `PublishPolicy`.
 - Responder mode (`RespondTo`) is manual: requests are acked on arrival and kept in memory until the model answers
   (`reply_*`) or rejects (`Fault<T>`). Replies go to `responseAddress`, faults to `faultAddress ?? responseAddress`;
-  a reply that fails validation is not sent and the request stays pending.
+  a reply that fails validation is not sent and the request stays pending. The responder queue name is
+  deterministic and exclusive (`{ClientName}-responder`): one active instance, others stand by (405 RESOURCE_LOCKED).
+- `contracts diff` compares the System.Text.Json schema with `MassTransitJson` naming; keep it in sync if the
+  envelope serialization options change. The CLI writes to stdout — it is never run as an MCP server.
 - Tools get the MCP client via an injected `McpServer? server = null` parameter (excluded from the schema).
 - **Tracing**: every send starts a `Telemetry.StartSend` span and injects it (`Telemetry.Inject`) — MassTransit 8
   reads `MT-Activity-Id` (W3C id) from the AMQP headers, other consumers `traceparent`. Metrics come from
