@@ -53,6 +53,38 @@ public sealed class PublishTests(BrokerFixture broker)
     }
 
     [Fact]
+    public async Task Exchange_deleted_after_a_cached_check_is_reported_and_forgotten()
+    {
+        var exchange = broker.Registry.Get(typeof(VolatileEvent)).Exchange;
+        const string queue = "it-volatile";
+        await using var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
+
+        async Task Recreate()
+        {
+            await channel.ExchangeDeclareAsync(exchange, RabbitMQ.Client.ExchangeType.Fanout, durable: true, autoDelete: false);
+            await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false);
+            await channel.QueueBindAsync(queue, exchange, routingKey: "");
+        }
+
+        await Recreate();
+        Assert.True((await broker.Publisher.PublishAsync(new VolatileEvent { Id = Guid.NewGuid() })).Routed); // caches "exists"
+
+        await channel.ExchangeDeleteAsync(exchange);
+        var ex = await Assert.ThrowsAsync<McpException>(() =>
+            broker.Publisher.PublishAsync(new VolatileEvent { Id = Guid.NewGuid() }));
+        Assert.Contains("no longer exists", ex.Message);
+
+        // Invalidated: the next publish checks again and fails cleanly before sending.
+        var again = await Assert.ThrowsAsync<McpException>(() =>
+            broker.Publisher.PublishAsync(new VolatileEvent { Id = Guid.NewGuid() }));
+        Assert.Contains("does not exist", again.Message);
+
+        await Recreate();
+        Assert.True((await broker.Publisher.PublishAsync(new VolatileEvent { Id = Guid.NewGuid() })).Routed);
+        await broker.WaitForQueueCount(queue, 2);
+    }
+
+    [Fact]
     public async Task Unbound_exchange_is_reported_as_returned()
     {
         var ex = await Assert.ThrowsAsync<McpException>(() =>

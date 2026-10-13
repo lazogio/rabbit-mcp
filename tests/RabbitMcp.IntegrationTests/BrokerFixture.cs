@@ -57,7 +57,7 @@ public sealed class BrokerFixture : IAsyncLifetime
 
         // --- rabbit-mcp under test, wired exactly like Program.cs but without the MCP host.
         var options = Microsoft.Extensions.Options.Options.Create(new RabbitMcpOptions { Uri = amqp.ToString(), ClientName = "rabbit-mcp-it" });
-        Connection = new RabbitConnection(options, NullLogger<RabbitConnection>.Instance);
+        Connection = new RabbitConnection(options, TimeProvider.System, NullLogger<RabbitConnection>.Instance);
         Registry = ContractRegistry.FromAssemblies(typeof(OrderSubmitted).Assembly, typeof(NobodyListens).Assembly);
         var inspector = new MessageInspector(Registry, options);
         Browser = new QueueBrowser(Connection, inspector, TimeProvider.System, options, NullLogger<QueueBrowser>.Instance);

@@ -10,13 +10,20 @@ namespace RabbitMcp.Server.Messaging;
 /// One lazily opened, auto-recovering AMQP connection shared by all tools.
 /// Channels are short-lived: one per tool call.
 /// </summary>
-public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, ILogger<RabbitConnection> logger)
+public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, TimeProvider time, ILogger<RabbitConnection> logger)
     : IAsyncDisposable
 {
     private const ushort NotFound = 404;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ExistenceCache _exchanges = new(time, TimeSpan.FromSeconds(Math.Max(0, options.Value.ExchangeCacheSeconds)));
     private IConnection? _connection;
+
+    /// <summary>True when the broker closed a channel because an entity does not exist.</summary>
+    public static bool IsNotFound(OperationInterruptedException ex) => ex.ShutdownReason?.ReplyCode == NotFound;
+
+    /// <summary>Forget a cached "exists" result, e.g. after a publish failed with 404.</summary>
+    public void InvalidateExchange(string exchange) => _exchanges.Invalidate(exchange);
 
     public Uri BrokerUri { get; } = options.Value.BrokerUri;
 
@@ -32,17 +39,23 @@ public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, ILogger
     /// <summary>
     /// Passive declare on a throwaway channel: the broker closes a channel when
     /// the entity is missing (404), so this must never share a working channel.
+    /// Positive results are cached for RabbitMcp:ExchangeCacheSeconds.
     /// </summary>
     public async Task<bool> ExchangeExistsAsync(string exchange, CancellationToken ct)
     {
+        if (_exchanges.IsKnownToExist(exchange))
+            return true;
+
         await using var channel = await CreateChannelAsync(publisherConfirms: false, ct);
         try
         {
             await channel.ExchangeDeclarePassiveAsync(exchange, ct);
+            _exchanges.MarkExists(exchange);
             return true;
         }
-        catch (OperationInterruptedException ex) when (ex.ShutdownReason?.ReplyCode == NotFound)
+        catch (OperationInterruptedException ex) when (IsNotFound(ex))
         {
+            _exchanges.Invalidate(exchange);
             return false;
         }
     }
@@ -55,7 +68,7 @@ public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, ILogger
         {
             return await channel.QueueDeclarePassiveAsync(queue, ct);
         }
-        catch (OperationInterruptedException ex) when (ex.ShutdownReason?.ReplyCode == NotFound)
+        catch (OperationInterruptedException ex) when (IsNotFound(ex))
         {
             return null;
         }

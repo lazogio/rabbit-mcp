@@ -27,3 +27,9 @@ public sealed record Pong
 {
     public required Guid Id { get; init; }
 }
+
+[MessageContract("Its exchange is created and deleted by the test, to exercise the exchange cache.")]
+public sealed record VolatileEvent
+{
+    public required Guid Id { get; init; }
+}

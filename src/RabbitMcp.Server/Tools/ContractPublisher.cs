@@ -180,6 +180,13 @@ public sealed class ContractPublisher(
             throw new McpException(
                 $"Exchange '{contract.Exchange}' exists but no queue is bound to it; the broker returned the message. Nothing was delivered.");
         }
+        catch (OperationInterruptedException ex) when (RabbitConnection.IsNotFound(ex))
+        {
+            // The exchange was deleted after it was last seen (cached check). Forget it.
+            connection.InvalidateExchange(contract.Exchange);
+            throw new McpException(
+                $"Exchange '{contract.Exchange}' no longer exists, so no service consumes {contract.Name} right now. Nothing was delivered.");
+        }
         catch (PublishException)
         {
             throw new McpException("The broker rejected the message (nack). Nothing was delivered.");

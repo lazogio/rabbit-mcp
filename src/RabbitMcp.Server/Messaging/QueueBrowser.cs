@@ -144,6 +144,14 @@ public sealed class QueueBrowser(
                     // Original body bytes, never re-serialized or truncated.
                     await channel.BasicPublishAsync(target, routingKey: "", mandatory: true, newProps, delivery.Body, ct);
                 }
+                catch (OperationInterruptedException ex) when (RabbitConnection.IsNotFound(ex))
+                {
+                    // The broker closed the channel: every message not yet acked goes back to the error queue.
+                    connection.InvalidateExchange(target);
+                    throw new McpException(
+                        $"Exchange '{target}' was deleted during the republish. {republished} message(s) were republished " +
+                        $"before that; all others remain in {errorQueue}.");
+                }
                 catch (PublishException ex)
                 {
                     toRequeue.Add(delivery.DeliveryTag);
