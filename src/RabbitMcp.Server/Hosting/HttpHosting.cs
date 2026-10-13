@@ -41,6 +41,9 @@ public static class HttpHosting
 
         builder.WebHost.UseUrls(settings.HttpUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         var schemes = ConfigureAuthentication(builder, settings);
+        if (schemes.Count > 0 && settings.Roles.Count == 0)
+            Console.Error.WriteLine("rabbit-mcp: note: no RabbitMcp:Roles configured — every authenticated caller may use " +
+                                    "every enabled tool.");
 
         var app = builder.Build();
 

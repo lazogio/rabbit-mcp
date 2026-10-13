@@ -9,12 +9,13 @@ using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
+using RabbitMcp.Server.Security;
 
 namespace RabbitMcp.Server.Tools;
 
 /// <summary>Responder mode (RabbitMcp:RespondTo): see and answer requests that other services send to this server.</summary>
 [McpServerToolType]
-public sealed class ResponderTools(ResponderService responder, TimeProvider time)
+public sealed class ResponderTools(ResponderService responder, AccessControl access, TimeProvider time)
 {
     [McpServerTool(Name = "pending_requests", Title = "Pending requests",
         ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = true, UseStructuredContent = true)]
@@ -27,11 +28,15 @@ public sealed class ResponderTools(ResponderService responder, TimeProvider time
         [Description("Only requests of this contract (name, e.g. GetOrderStatus).")] string? contract = null,
         [Description("Maximum requests to return, 1-100 (default 20).")] int limit = 20,
         [Description("If nothing is pending, wait up to this many seconds (0-50, default 0) for a request to arrive.")] int waitSeconds = 0,
+        ClaimsPrincipal? user = null,
         CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 100);
+        var permissions = access.For(user);
+        // Only requests of contracts the caller may answer (RabbitMcp:Roles respond patterns).
         bool Matches(PendingRequest r) =>
-            contract is null || string.Equals(r.Contract.Name, contract, StringComparison.OrdinalIgnoreCase);
+            permissions.Allows(Permission.Respond, r.Contract) &&
+            (contract is null || string.Equals(r.Contract.Name, contract, StringComparison.OrdinalIgnoreCase));
 
         if (waitSeconds > 0)
             await responder.WaitForPendingAsync(Matches, TimeSpan.FromSeconds(Math.Min(waitSeconds, 50)), cancellationToken);
@@ -55,7 +60,8 @@ public sealed class ResponderTools(ResponderService responder, TimeProvider time
         }).ToArray();
 
         return new PendingRequestList(items, all.Length,
-            [.. responder.Contracts.Requests.Select(c => c.Name)], responder.QueueName, responder.Status);
+            [.. responder.Contracts.Requests.Where(c => permissions.Allows(Permission.Respond, c)).Select(c => c.Name)],
+            responder.QueueName, responder.Status);
     }
 
     [McpServerTool(Name = "reject_request", Title = "Reject a pending request",

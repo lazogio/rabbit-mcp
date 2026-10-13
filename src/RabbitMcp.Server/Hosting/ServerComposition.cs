@@ -16,7 +16,9 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using RabbitMcp.Contracts.Orders;
 using RabbitMcp.Server.Contracts;
+using ModelContextProtocol.Server;
 using RabbitMcp.Server.Messaging;
+using RabbitMcp.Server.Security;
 using RabbitMcp.Server.Tools;
 
 namespace RabbitMcp.Server.Hosting;
@@ -55,7 +57,14 @@ public static class ServerComposition
         foreach (var pattern in policy.UnmatchedPatterns(contracts.Contracts))
             Console.Error.WriteLine($"rabbit-mcp: warning: PublishAllow/PublishDeny pattern '{pattern}' matches no contract.");
 
+        var access = new AccessControl(settings);
+        if (access.Enabled && settings.Transport.Trim().Equals("stdio", StringComparison.OrdinalIgnoreCase))
+            Console.Error.WriteLine("rabbit-mcp: note: RabbitMcp:Roles apply to the HTTP transport; over stdio the local " +
+                                    "user has every enabled tool (limit it with EnablePublish/EnableRepublish/PublishAllow).");
+
         builder.Services
+            .AddSingleton(access)
+            .AddSingleton<ToolAccess>()
             .AddSingleton(contracts)
             .AddSingleton(policy)
             .AddSingleton<AuditLog>()
@@ -71,20 +80,46 @@ public static class ServerComposition
 
         var mcp = builder.Services
             .AddMcpServer(o => o.ServerInfo = new Implementation { Name = "rabbit-mcp", Version = ServerVersion.Current })
-            .WithRequestFilters(f => f.AddCallToolFilter(next => async (request, cancellationToken) =>
+            .WithRequestFilters(f =>
             {
-                // RabbitMQ errors (403 ACCESS_REFUSED, lost connection ...) become readable tool errors instead of the
-                // SDK's reason-less "An error occurred invoking 'tool'".
-                try
+                // Roles: callers only see the tools they may use ...
+                f.AddListToolsFilter(next => async (request, cancellationToken) =>
                 {
-                    return await next(request, cancellationToken);
-                }
-                catch (Exception ex) when (ex is not McpException and not OperationCanceledException
-                                           && BrokerErrors.TryDescribe(ex, out var message))
+                    var result = await next(request, cancellationToken);
+                    var tools = ServicesOf(request).GetRequiredService<ToolAccess>();
+                    var user = tools.Control.For(request.User);
+                    if (!user.IsUnrestricted)
+                        result.Tools = [.. result.Tools.Where(t => tools.IsVisible(t.Name, user))];
+                    return result;
+                });
+
+                f.AddCallToolFilter(next => async (request, cancellationToken) =>
                 {
-                    throw new McpException(message, ex);
-                }
-            }))
+                    // ... and every call is checked again (a client may call a tool it was not shown). Denials are audited.
+                    var services = ServicesOf(request);
+                    var tools = services.GetRequiredService<ToolAccess>();
+                    var name = request.Params?.Name ?? "";
+                    if (tools.Check(name, request.Params?.Arguments, tools.Control.For(request.User)) is { } denied)
+                    {
+                        var audit = services.GetRequiredService<AuditLog>();
+                        audit.Write(audit.Event(AuditActions.Access, "denied", AuditLog.ClientOf(request.Server, request.User),
+                            denied.Contract?.Name, detail: $"{name}: {denied.Reason}"));
+                        throw new McpException(denied.Reason);
+                    }
+
+                    // RabbitMQ errors (403 ACCESS_REFUSED, lost connection ...) become readable tool errors instead of
+                    // the SDK's reason-less "An error occurred invoking 'tool'".
+                    try
+                    {
+                        return await next(request, cancellationToken);
+                    }
+                    catch (Exception ex) when (ex is not McpException and not OperationCanceledException
+                                               && BrokerErrors.TryDescribe(ex, out var message))
+                    {
+                        throw new McpException(message, ex);
+                    }
+                });
+            })
             .WithTools<BrokerTools>(ToolJson.Options);
 
         // publish_* for events, request_* for request/response contracts.
@@ -122,6 +157,10 @@ public static class ServerComposition
 
         return mcp;
     }
+
+    private static IServiceProvider ServicesOf(MessageContext request) =>
+        request.Services ?? request.Server.Services
+        ?? throw new InvalidOperationException("The MCP server has no service provider.");
 
     /// <summary>
     /// Every [MessageContract] type in the configured assemblies becomes a contract

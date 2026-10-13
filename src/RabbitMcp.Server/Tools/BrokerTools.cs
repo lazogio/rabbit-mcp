@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
+using RabbitMcp.Server.Security;
 
 namespace RabbitMcp.Server.Tools;
 
@@ -18,19 +20,24 @@ public sealed class BrokerTools(
     PublishPolicy policy,
     RabbitConnection connection,
     QueueBrowser browser,
+    AccessControl access,
     IOptions<RabbitMcpOptions> options)
 {
     [McpServerTool(Name = "list_contracts", Title = "List message contracts",
         ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Lists the message contracts this server knows: events (publish_*) and requests (request_*, with their possible replies), with version, MassTransit message type and exchange.")]
-    public ContractList ListContracts() =>
-        new(
+    public ContractList ListContracts(ClaimsPrincipal? user = null)
+    {
+        var permissions = access.For(user);
+        return new(
             [.. contracts.Contracts.Select(c =>
                 new ContractInfo(
                     c.Name, c.IsRequest ? "request" : "event", c.ToolName, c.Version, c.MessageTypeUrn, c.Exchange,
                     c.Description, [.. c.Responses.Select(r => r.Name)],
-                    Sendable: options.Value.EnablePublish && policy.IsAllowed(c)))],
+                    Sendable: options.Value.EnablePublish && policy.IsAllowed(c) &&
+                              permissions.Allows(c.IsRequest ? Permission.Request : Permission.Publish, c)))],
             options.Value.EnablePublish);
+    }
 
     [McpServerTool(Name = "validate_message", Title = "Validate a message against a contract",
         ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]

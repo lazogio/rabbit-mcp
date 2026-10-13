@@ -92,6 +92,22 @@ public sealed class RabbitMcpOptions
     /// <summary>HTTP: browser origins allowed to call the server (";"-separated). Default: none — requests with an Origin header are refused.</summary>
     public string? HttpAllowedOrigins { get; set; }
 
+    /// <summary>
+    /// HTTP: roles and their permissions (read, publish, request, republish, respond or *), ";"-separated; publish,
+    /// request and respond may be limited to contracts, republish to error queues: "read;publish:Billing.*,Order*".
+    /// Env: RabbitMcp__Roles__operator="read;publish;request". Empty: every authenticated caller may use every tool.
+    /// </summary>
+    public Dictionary<string, string> Roles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>HTTP: who has which roles — "alice=operator;bob@example.com=viewer,billing" (API key name or token user).</summary>
+    public string? UserRoles { get; set; }
+
+    /// <summary>HTTP: roles of authenticated callers without any assigned role (","-separated). Empty: no permissions.</summary>
+    public string? DefaultRoles { get; set; }
+
+    /// <summary>HTTP: JWT claim whose values are role names (Entra ID app roles, Keycloak with a roles mapper).</summary>
+    public string JwtRolesClaim { get; set; } = "roles";
+
     /// <summary>HTTP: run without any authentication. Only for local experiments.</summary>
     public bool HttpAllowAnonymous { get; set; }
 

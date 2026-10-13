@@ -271,4 +271,69 @@ public class HttpHostingTests
         Assert.Equal("plain", AuditLog.OneLine("plain"));
         Assert.Null(AuditLog.OneLine(null));
     }
+
+    private const string BobKey = "bob-key-0123456789abcdefghijklmnopqrstuvwx";
+
+    /// <summary>Streamable HTTP answers with JSON or with an SSE stream ("data: {...}").</summary>
+    private static async Task<JsonElement> Rpc(HttpResponseMessage response)
+    {
+        var raw = await response.Content.ReadAsStringAsync();
+        var data = raw.Split('\n').Where(l => l.StartsWith("data:")).Select(l => l[5..].Trim()).LastOrDefault();
+        return JsonDocument.Parse(data ?? raw).RootElement.Clone();
+    }
+
+    private static string Call(string tool, object arguments) => JsonSerializer.Serialize(new
+    {
+        jsonrpc = "2.0", id = 3, method = "tools/call", @params = new { name = tool, arguments },
+    });
+
+    private const string ListTools = """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""";
+
+    [Fact]
+    public async Task Roles_decide_which_tools_a_caller_sees_and_may_call()
+    {
+        var auditPath = Path.Combine(Path.GetTempPath(), $"rabbit-mcp-roles-{Guid.NewGuid():N}.jsonl");
+        await using var app = await StartAsync(Config(
+            ("ApiKeys", $"alice:{AliceKey};bob:{BobKey}"),
+            ("EnablePublish", "true"),
+            ("EnableRepublish", "true"),
+            ("AuditLogPath", auditPath),
+            ("Roles:viewer", "read"),
+            ("Roles:operator", "read;publish:Order*;republish:*_error"),
+            ("UserRoles", "alice=operator;bob=viewer")));
+        var client = app.GetTestClient();
+
+        async Task<HashSet<string>> ToolsOf(string key)
+        {
+            var list = await Rpc(await client.SendAsync(Mcp(ListTools, r => r.Headers.Add("X-Api-Key", key))));
+            return [.. list.GetProperty("result").GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString()!)];
+        }
+
+        var bobTools = await ToolsOf(BobKey);
+        Assert.Contains("peek_messages", bobTools);
+        Assert.DoesNotContain("publish_order_submitted", bobTools);
+        Assert.DoesNotContain("republish_from_error", bobTools);
+
+        var aliceTools = await ToolsOf(AliceKey);
+        Assert.Contains("publish_order_submitted", aliceTools);
+        Assert.Contains("republish_from_error", aliceTools);
+        Assert.DoesNotContain("request_get_order_status", aliceTools); // operator has no "request"
+
+        // Calling a tool that was not listed is refused before anything touches the broker, and audited.
+        var bobPublish = await Rpc(await client.SendAsync(Mcp(
+            Call("publish_order_submitted", new { message = new { orderId = Guid.NewGuid() } }), r => r.Headers.Add("X-Api-Key", BobKey))));
+        Assert.True(bobPublish.GetProperty("result").GetProperty("isError").GetBoolean());
+        Assert.Contains("Permission 'publish'", bobPublish.GetRawText());
+
+        var aliceRepublish = await Rpc(await client.SendAsync(Mcp(
+            Call("republish_from_error", new { errorQueue = "payments" }), r => r.Headers.Add("X-Api-Key", AliceKey))));
+        Assert.Contains("on queue 'payments'", aliceRepublish.GetRawText());
+
+        var denials = File.ReadAllLines(auditPath)
+            .Select(l => JsonDocument.Parse(l).RootElement)
+            .Where(e => e.GetProperty("action").GetString() == AuditActions.Access)
+            .ToArray();
+        Assert.Contains(denials, e => e.GetProperty("client").GetString()!.StartsWith("bob") && e.GetProperty("contract").GetString() == "OrderSubmitted");
+        Assert.Contains(denials, e => e.GetProperty("client").GetString()!.StartsWith("alice"));
+    }
 }
