@@ -123,11 +123,17 @@ public sealed class ManagementClient : IDisposable
             ?? throw new McpException("The Management API returned an empty response.");
     }
 
-    /// <summary>Bindings whose source is this exchange; null if the exchange does not exist.</summary>
-    public Task<IReadOnlyList<ManagementBinding>?> GetSourceBindingsAsync(string exchange, CancellationToken ct) =>
-        GetAsync<IReadOnlyList<ManagementBinding>>(
-            $"api/exchanges/{Uri.EscapeDataString(_vhost)}/{Uri.EscapeDataString(exchange)}/bindings/source",
-            NotFoundIs.Null, ct);
+    /// <summary>
+    /// Bindings whose source is this exchange; null if the exchange does not exist. (The bindings endpoint itself
+    /// answers [] for a missing exchange, so existence is checked first.)
+    /// </summary>
+    public async Task<IReadOnlyList<ManagementBinding>?> GetSourceBindingsAsync(string exchange, CancellationToken ct)
+    {
+        var path = $"api/exchanges/{Uri.EscapeDataString(_vhost)}/{Uri.EscapeDataString(exchange)}";
+        if (await GetAsync<System.Text.Json.Nodes.JsonObject>(path, NotFoundIs.Null, ct) is null)
+            return null;
+        return await GetAsync<IReadOnlyList<ManagementBinding>>(path + "/bindings/source", NotFoundIs.Null, ct) ?? [];
+    }
 
     /// <summary>One queue's statistics; null if it does not exist.</summary>
     public Task<ManagementQueue?> GetQueueAsync(string queue, CancellationToken ct) =>

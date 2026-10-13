@@ -15,6 +15,9 @@ public class TopologyInspectorTests
         var handler = new StubHandler(req =>
         {
             var path = Uri.UnescapeDataString(req.RequestUri!.AbsolutePath);
+            if (path.StartsWith("/api/exchanges/") && !path.EndsWith("/bindings/source")
+                && routes.ContainsKey(path + "/bindings/source"))
+                return StubHandler.Json("""{"name":"x","type":"fanout"}""");
             return routes.TryGetValue(path, out var json)
                 ? StubHandler.Json(json)
                 : StubHandler.Json("""{"error":"Object Not Found","reason":"Not Found"}""", HttpStatusCode.NotFound);
