@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 3 (0 open) · Next ID: BUG-004
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-13 phase-2/process: Dependabot, release workflow (5 platforms), MCP stdio smoke test, PR template
 - 2026-10-12 phase-1/reliability: BUG-002/003 fixed, peek guard, integration tests vs real MassTransit (all green, merged to main 2026-10-13)
 - 2026-10-12 0742939 project-memory agent added (seeded from history)
 - 2026-10-12 25db129 subagents + CLAUDE.md
@@ -21,6 +22,8 @@ Last updated: 2026-10-13 · Bugs: 3 (0 open) · Next ID: BUG-004
 4. NuGet is unreachable in the authoring sandbox — CI decides whether it builds; read run annotations (test failures show there).
 5. stdout belongs to MCP; register the published binary, never `dotnet run`.
 6. MassTransit: AMQP headers are in ReceiveContext.TransportHeaders, not ConsumeContext.Headers.
+7. Never accept a MassTransit 9.x bump (commercial); Dependabot already ignores it.
+8. Release = push a `vX.Y.Z` tag; the smoke test must pass on the single-file binary.
 
 ## Open ideas (not bugs)
 - Server as responder/consumer for requests from other services.

@@ -9,10 +9,12 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
    peek keeps messages, republish acks only after confirm. Separate CI job.
 3. ✅ Peek guard: refuse to peek a queue with active consumers unless `force=true`.
 
-## Phase 2 — Process & distribution
-4. ⬜ Dependabot (NuGet + GitHub Actions, weekly).
-5. ⬜ Release workflow on `v*` tags: self-contained binaries (platforms: **decision needed**), GitHub Release.
-6. ⬜ PR-based flow with branch protection on `main` (enabled by the repo owner).
+## Phase 2 — Process & distribution (`phase-2/process`) ✅ (merged 2026-10-13)
+4. ✅ Dependabot (NuGet + GitHub Actions, weekly, grouped; MassTransit pinned < 9).
+5. ✅ Release workflow on `v*` tags: self-contained single-file binaries for linux-x64/arm64, win-x64, osx-x64/arm64
+   (default chosen: all five), SHA256SUMS, GitHub Release; version from the tag → MCP `serverInfo.version`.
+   Bonus: `scripts/smoke-test.sh` — MCP stdio session against the published binary, in CI and release.
+6. 🔄 PR template added. Branch protection on `main` + "Automatically delete head branches" — **repo owner** (Settings).
 
 ## Phase 3 — Usability
 7. ⬜ Contract assemblies from configuration (`RabbitMcp__ContractAssemblies`), no rebuild needed.

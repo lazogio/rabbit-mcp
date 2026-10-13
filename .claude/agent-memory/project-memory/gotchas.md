@@ -29,6 +29,11 @@
 - DataAnnotations (`Range`, `StringLength`, `RegularExpression`, `EmailAddress`, `MinLength`) are mapped into the input schema by MEAI.
 
 ## Environment / tooling
+- Release workflow's `paths:` filter applies to branch pushes only; tag pushes always run (GitHub ignores path filters for tags).
+- Deleting a remote branch via `git push --delete` is cut off by the session git proxy ("unexpected disconnect");
+  pushes work. Ask the repo owner to delete branches (or enable "Automatically delete head branches").
+- Artifacts can be listed without auth (`/actions/runs/<id>/artifacts`) but not downloaded — verify binaries by
+  running them inside the workflow (smoke test), not locally.
 - CI logs need auth, but check-run **annotations** don't: test failures are emitted as annotations by
   `--logger GitHubActions`; read them via `/repos/lazogio/rabbit-mcp/check-runs/<job id>/annotations`.
 - The cloud authoring sandbox cannot reach api.nuget.org (policy 403) → code cannot be built there; CI is the verifier.

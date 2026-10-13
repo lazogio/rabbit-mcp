@@ -1,5 +1,17 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Phase 2 process & distribution — branch phase-2/process (70b5c25..), fast-forwarded into main 2026-10-13
+- What: Dependabot (NuGet via Directory.Packages.props + Actions, weekly, grouped); release workflow (`v*` tag →
+  self-contained single-file binaries linux-x64/arm64, win-x64, osx-x64/arm64 + SHA256SUMS → GitHub Release);
+  `ServerVersion` reports the assembly version (tag) as MCP `serverInfo.version`; `scripts/smoke-test.sh`
+  (initialize → tools/list over stdio against the published binary) in CI and release; PR template.
+- Decision: platforms default to all five — the user did not choose; dropping one is a one-line matrix change.
+- Decision: not trimmed / no AOT — MCP SDK + System.Text.Json reflect over contract types; ~31–33 MB per package.
+- Decision: all RIDs cross-published from one ubuntu runner (self-contained, non-AOT needs no native toolchain);
+  only linux-x64 is smoke-tested by execution; macOS binaries are unsigned (README documents `xattr`).
+- Decision: Dependabot ignores MassTransit >= 9 (commercial; test-only dependency).
+- Verified: smoke test fails on a fake server with polluted stdout / missing tools / missing outputSchema.
+
 ### 2026-10-12 Phase 1 reliability — branch phase-1/reliability (f7306bd..12c0df5), fast-forwarded into main 2026-10-13
 - What: BUG-002/003 fixed; peek and republish preview refuse queues with active consumers unless `force=true`;
   `tests/RabbitMcp.IntegrationTests` (Testcontainers RabbitMQ 4-management + MassTransit 8.5.10 consumers, 13 tests);

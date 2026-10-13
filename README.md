@@ -29,6 +29,8 @@ claude mcp add rabbit-mcp \
 
 Claude Desktop-ისთვის იგივე ბინარი და env ცვლადები `claude_desktop_config.json`-ის `mcpServers`-ში ჩაწერეთ.
 
+**მზა ბინარი:** [Releases](https://github.com/lazogio/rabbit-mcp/releases)-ში ყველა ვერსიისთვის დევს self-contained ფაილი Linux-ის (x64/arm64), Windows-ის (x64) და macOS-ის (x64/arm64) პლატფორმებისთვის, `SHA256SUMS.txt`-თან ერთად. .NET-ის დაყენება არ სჭირდება. ჩამოტვირთეთ, გახსენით და დაარეგისტრირეთ `rabbit-mcp` (Windows-ზე `rabbit-mcp.exe`). macOS-ზე ბინარი ხელმოწერილი არ არის, ამიტომ პირველ გაშვებამდე: `xattr -d com.apple.quarantine rabbit-mcp`.
+
 ## კონფიგურაცია
 
 პარამეტრები `appsettings.json`-ში ან env ცვლადებში იწერება.
@@ -129,6 +131,8 @@ src/RabbitMcp.Server       Contracts/ რეესტრი, ვალიდა�
 tests/RabbitMcp.Tests      unit ტესტები (RabbitMQ არ სჭირდება)
 ```
 
-**CI:** ყოველ push-სა და PR-ზე GitHub Actions აგებს პროექტს, უშვებს unit ტესტებს და ცალკე job-ში ინტეგრაციულ ტესტებს ნამდვილ RabbitMQ 4-სა და MassTransit 8-ზე. ჩავარდნილი ტესტი PR-ში annotation-ად ჩანს. `main`-ზე ასევე ქვეყნდება სერვერის ბინარი (artifact `rabbit-mcp-linux-x64`).
+**CI:** ყოველ push-სა და PR-ზე GitHub Actions აგებს პროექტს, უშვებს unit ტესტებს, ინტეგრაციულ ტესტებს ნამდვილ RabbitMQ 4-სა და MassTransit 8-ზე და smoke test-ს (`scripts/smoke-test.sh`), რომელიც გამოქვეყნებულ ბინარს stdio-ზე MCP კლიენტივით ესაუბრება. ჩავარდნილი ტესტი PR-ში annotation-ად ჩანს.
+
+**Release:** `git tag v0.2.0 && git push origin v0.2.0` ააგებს ბინარებს ხუთივე პლატფორმისთვის და შექმნის GitHub Release-ს. ვერსია tag-იდან მოდის და MCP კლიენტს `serverInfo.version`-ში უჩანს. `-` შემცველი tag (`v0.2.0-rc.1`) prerelease-ად ქვეყნდება. **Dependabot** NuGet-ისა და Actions-ის განახლებებს ყოველ ორშაბათს გვთავაზობს. MassTransit 9+ გამოთიშულია, რადგან ის კომერციულია.
 
 **შემდეგი ნაბიჯები:** ინტეგრაციული ტესტები Testcontainers-ით, `list_queues` Management API-ით, HTTP ტრანსპორტი ავტორიზაციით.

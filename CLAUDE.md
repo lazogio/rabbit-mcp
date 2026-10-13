@@ -15,11 +15,15 @@ dotnet test tests/RabbitMcp.Tests                 # unit, no broker
 dotnet test tests/RabbitMcp.IntegrationTests      # Testcontainers RabbitMQ 4 + MassTransit 8 consumers (needs Docker)
 dotnet publish src/RabbitMcp.Server -c Release -o out   # MCP clients must run this binary, never `dotnet run`
 docker compose up -d                                     # local RabbitMQ 4 (5672, UI 15672 guest/guest)
+scripts/smoke-test.sh out/rabbit-mcp                     # MCP stdio session against the published binary
+git tag vX.Y.Z && git push origin vX.Y.Z                 # release: binaries for 5 platforms + GitHub Release
 ```
 
 CI (`.github/workflows/ci.yml`) builds and tests every push (any branch) and PR, with a separate
 integration job; failing tests appear as annotations (readable via the REST API without auth).
 It is the source of truth when the local environment cannot restore NuGet packages.
+`.github/workflows/release.yml` builds on `v*` tags (and build-only when the workflow file changes).
+Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 
 ## Layout
 
