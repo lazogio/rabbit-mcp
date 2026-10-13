@@ -1,6 +1,6 @@
 # rabbit-mcp memory — index
 
-Last updated: 2026-10-13 · Bugs: 10 (0 open) · Next ID: BUG-011
+Last updated: 2026-10-13 · Bugs: 18 (0 open) · Next ID: BUG-019
 
 ## Files
 - `bugs.md` — bug log (symptom, root cause, fix, guard, lesson)
@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 10 (0 open) · Next ID: BUG-011
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-13 review/security-bugs: BUG-011..018 (responder confused deputy, JWT scopes, spoofed republish target, anonymous on 0.0.0.0, audit gaps, opaque broker errors, log forging), vuln scan in CI
 - 2026-10-13 phase-6/all: review (BUG-008..010), responder HA + long poll, contract_consumers, contracts diff CLI, Docker/GHCR, NuGet
 - 2026-10-13 phase-5/responder: responder mode — pending_requests, reply_<response>, reject_request (Fault<T>), manual only
 - 2026-10-13 phase-5/http: HTTP transport, API keys + JWT/OIDC, MCP resource metadata, Origin check, user in audit
@@ -30,6 +31,7 @@ Last updated: 2026-10-13 · Bugs: 10 (0 open) · Next ID: BUG-011
 5. stdout belongs to MCP; register the published binary, never `dotnet run`.
 6. MassTransit: AMQP headers are in ReceiveContext.TransportHeaders, not ConsumeContext.Headers.
 7. Never accept a MassTransit 9.x bump (commercial); Dependabot already ignores it.
+8. Message content (addresses, headers) is untrusted input: never route by it unchecked.
 8. Release = push a `vX.Y.Z` tag; the smoke test must pass on the single-file binary.
 9. Keep RabbitMcp.Contracts AssemblyVersion 1.0.0.0 (external contract DLLs bind to it).
 10. Anything that sends/moves messages must respect PublishPolicy and write AuditLog events (incl. failures).

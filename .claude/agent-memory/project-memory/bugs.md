@@ -1,6 +1,27 @@
 # Bugs (newest first)
 
-Next ID: BUG-011
+Next ID: BUG-019
+
+### BUG-011..018 Security & bug review (2026-10-13) — fixed in commit 34f6e15
+- BUG-011 (security, medium) Responder confused deputy: replies, rejections and automatic "busy" faults went to the
+  request's `responseAddress`/`faultAddress`, which whoever publishes the request controls → rabbit-mcp could be made to
+  publish into any exchange with its own credentials. Fix: `RabbitConnection.CheckTemporaryExchangeAsync` (passive
+  declare, then re-declare fanout/durable:false/autoDelete:true → 406 = not a reply endpoint); such requests are
+  refused at receive (audit `receive refused`). Guard: integration `Request_whose_reply_address_is_a_regular_exchange_is_refused`.
+- BUG-012 (security, medium) `JwtScopes` were only advertised in the resource metadata, never required. Fix: policy
+  assertion `HttpHosting.HasRequiredScopes` (scope/scp; API keys unscoped). Guard: `Jwt_must_carry_the_configured_scopes`
+  (real signed tokens via static OpenIdConnectConfiguration).
+- BUG-013 (security, medium-low) Republish followed `MT-Fault-InputAddress` even when it disagreed with the error queue's
+  owner (headers are publisher-controlled). Fix: `RepublishTarget.Conflict` → skipped unless `targetExchange` is given;
+  `PeekedMessage.RepublishWarning`. Guard: `Spoofed_fault_input_address_is_not_followed_without_an_explicit_target`.
+- BUG-014 (security, low-medium) `HttpAllowAnonymous` worked on 0.0.0.0 (e.g. Docker). Fix: loopback only. Guard: `Anonymous_access_is_refused_beyond_loopback`.
+- BUG-015 (bug) publish/request/republish audited only McpException failures; 403/lost connection/cancel were not
+  audited and partial republish progress vanished from the audit. Fix: catch `Exception`, audit, wrap via `BrokerErrors`.
+- BUG-016 (bug) RabbitMQ exceptions reached the SDK as non-McpException → "An error occurred invoking 'x'." with no reason.
+  Fix: call-tool filter + `BrokerErrors.TryDescribe`.
+- BUG-017 (security, low) AUDIT text log lines could be forged with CR/LF in client name or reject reason. Fix: `AuditLog.OneLine`.
+- BUG-018 (bug, low) `MessageInspector.Validate` let NotSupported/InvalidOperation exceptions escape (exotic contracts broke peek).
+- Hardening: CI fails on vulnerable NuGet packages; Dependabot for Docker base images.
 
 ### BUG-010 Release Docker build failed on branch runs — fixed (2026-10-13)
 - Symptom: `dotnet publish` in the Dockerfile failed in release.yml only (CI's own docker build passed).

@@ -80,10 +80,10 @@ Audit-ში ჩანს, ვინ რა გააგზავნა: `"clien
 | `RabbitMcp__Transport` | `stdio` | `stdio` ან `http` |
 | `RabbitMcp__HttpUrls` / `HttpPath` | `http://localhost:5080` / `/mcp` | HTTP მისამართი და MCP endpoint |
 | `RabbitMcp__ApiKeys` | — | `name:KEY;…` (≥ 32 სიმბოლო) |
-| `RabbitMcp__JwtAuthority` / `JwtAudience` / `JwtScopes` | — | OIDC ავტორიზაცია |
+| `RabbitMcp__JwtAuthority` / `JwtAudience` / `JwtScopes` | — | OIDC ავტორიზაცია. `JwtScopes` (`;`) token-ში სავალდებულოა, მის გარეშე 403 |
 | `RabbitMcp__HttpPublicUrl` | — | საჯარო URL, რომელიც OAuth metadata-ში ჩანს (proxy-ს უკან) |
 | `RabbitMcp__HttpAllowedOrigins` | — | ბრაუზერის origin-ები (`;`) |
-| `RabbitMcp__HttpAllowAnonymous` | `false` | ავტორიზაციის გარეშე, მხოლოდ ლოკალური ცდისთვის |
+| `RabbitMcp__HttpAllowAnonymous` | `false` | ავტორიზაციის გარეშე, მხოლოდ loopback მისამართზე (`localhost`/`127.0.0.1`); სხვაგან სერვერი არ ეშვება |
 | `RabbitMcp__RespondTo` | — | responder რეჟიმი: request კონტრაქტები, რომლებსაც სერვერი თავად პასუხობს (ნიმუშები, როგორც `PublishAllow`-ში) |
 | `RabbitMcp__MaxPendingRequests` | `100` | რამდენი request შეიძლება ელოდოს პასუხს. დანარჩენი მაშინვე Fault-ით უარიყოფა |
 | `RabbitMcp__AuditIncludePayload` | `false` | audit-ში შეტყობინების შიგთავსიც ჩაიწეროს (შეიძლება პერსონალურ მონაცემებს შეიცავდეს) |
@@ -219,6 +219,19 @@ INFO     OrderPlaced coupon: New optional property.
 - **publish/request:** ვალიდაციის ჩავარდნისას არაფერი იგზავნება. exchange-ის არსებობა წინასწარ მოწმდება. publisher confirms და `mandatory` უზრუნველყოფს, რომ ვერ მიწოდებული შეტყობინება შეცდომად დაბრუნდეს და ჩუმად არ დაიკარგოს. შეტყობინებები persistent-ია.
 - **republish:** შეტყობინება error რიგიდან ack-დება მხოლოდ ბროკერის დადასტურების შემდეგ, წარუმატებელი კი რიგში რჩება. body უცვლელია, იშლება მხოლოდ `MT-Reason`, `MT-Fault-*` და `MT-Host-*`. `messageIds`-ით მხოლოდ preview-ში ნანახ შეტყობინებებს აბრუნებთ. მიწოდება at-least-once-ია, ამიტომ consumer-ები `messageId`-ით იდემპოტენტური უნდა იყვნენ.
 - **peek:** აქტიური consumer-ის მქონე რიგზე უარს ამბობს, თუ `force=true` არ არის. შეტყობინება რიგში რჩება, მაგრამ იღებს `redelivered` დროშას და შეიძლება თანმიმდევრობა შეეცვალოს. quorum რიგებზე თითოეული peek delivery-limit-ში ითვლება.
+
+## უსაფრთხოება
+
+- **საიდუმლოები:** AMQP და Management URI-ის პაროლი არც ლოგში, არც შეცდომებში, არც audit-ში ჩანს, მხოლოდ `host:port`. API key-ები მეხსიერებაში მხოლოდ SHA-256-ით ინახება და constant-time შედარებით მოწმდება.
+- **HTTP:** ავტორიზაციის გარეშე სერვერი არ ეშვება, `HttpAllowAnonymous` კი მხოლოდ loopback-ზე მუშაობს. JWT უნდა შეიცავდეს `JwtScopes`-ის ყველა scope-ს. უცხო `Origin` უარიყოფა. Docker image non-root მომხმარებლით ეშვება.
+- **გაგზავნა:** `publish_*`/`request_*`/`republish_from_error` ნაგულისხმევად გამორთულია. `PublishAllow`/`PublishDeny` ზღუდავს კონტრაქტებს, ყოველი მცდელობა კი (ჩავარდნილიც) audit-ში იწერება.
+- **შეტყობინების შიგთავსს არ ენდობა:** header-ები და envelope-ის მისამართები ნებისმიერ გამომგზავნს შეუძლია ჩაწეროს.
+  - Responder პასუხობს მხოლოდ MassTransit-ის დროებით reply endpoint-ს (fanout, `durable:false`, `autoDelete:true`). request, რომლის `responseAddress` ჩვეულებრივ exchange-ზე მიუთითებს, უარიყოფა (audit: `receive refused`).
+  - Republish არ მიჰყვება `MT-Fault-InputAddress`-ს, თუ ის error რიგის მფლობელს არ ემთხვევა. ასეთ დროს `targetExchange` ცალსახად უნდა მიუთითოთ.
+- **peek-ით ნანახი payload** მონაცემია და არა ინსტრუქცია: მოდელმა შეტყობინების ტექსტი ბრძანებად არ უნდა აღიქვას.
+- **`contracts diff`** DLL-ებს ტვირთავს და მათი attribute-ების კოდს ასრულებს. ამიტომ მხოლოდ საკუთარი build-ები შეადარეთ.
+- **მინიმალური უფლებები:** RabbitMQ-ის მომხმარებელს მიეცით მხოლოდ საჭირო vhost-ის permission-ები: read (peek, reply queue), write (საჭირო exchange-ები) და configure (მხოლოდ reply/responder რიგები). Management API-სთვის საკმარისია `monitoring` tag. 403-ის შემთხვევაში ხელსაწყო ზუსტად წერს, რომელი უფლება აკლია.
+- **CI:** ცნობილი მოწყვლადობის მქონე NuGet პაკეტი build-ს აჩერებს. Dependabot კი NuGet-ს, Actions-სა და Docker-ის base image-ებს ანახლებს.
 
 ## Claude Code აგენტები
 

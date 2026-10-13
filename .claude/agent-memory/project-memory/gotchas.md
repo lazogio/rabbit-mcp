@@ -75,6 +75,15 @@
   defer `RabbitMcp.Contracts` to the default context (otherwise `[MessageContract]` is a different type).
 - Shell: never use `|` as the sed delimiter when the pattern contains `|` (it silently mangled a README line).
 
+- Envelope addresses (`responseAddress`, `faultAddress`) and AMQP headers (`MT-Fault-InputAddress`) are attacker-
+  controlled for anyone who can publish: never route by them without checking (see BUG-011, BUG-013).
+- MCP C# SDK: only `McpException` messages reach the client; anything else becomes "An error occurred invoking 'x'."
+  → `WithRequestFilters(f => f.AddCallToolFilter(...))` to translate. The MCP auth scheme forwards authenticate to "Bearer".
+- Testing JWT offline: PostConfigure `JwtBearerOptions.Configuration = new OpenIdConnectConfiguration { Issuer, SigningKeys }`
+  before `AddJwtBearer` runs; tokens from `JsonWebTokenHandler.CreateToken`.
+- RabbitMQ.Client 7: `AlreadyClosedException : OperationInterruptedException : RabbitMQClientException` — match the
+  most derived first; `BrokerUnreachableException : IOException`.
+
 ## Anti-patterns seen in other RabbitMQ MCP servers (do not copy)
 - Republish that consumes with `ack_requeue_false` before publishing → message lost if publish fails.
 - Management API `/get` with `truncate: 50000` used for republish → large bodies republished truncated.

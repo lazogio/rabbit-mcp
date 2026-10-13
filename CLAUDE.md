@@ -70,6 +70,11 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   (`reply_*`) or rejects (`Fault<T>`). Replies go to `responseAddress`, faults to `faultAddress ?? responseAddress`;
   a reply that fails validation is not sent and the request stays pending. The responder queue name is
   deterministic and exclusive (`{ClientName}-responder`): one active instance, others stand by (405 RESOURCE_LOCKED).
+- **Never trust message content for routing**: envelope addresses and AMQP headers are written by whoever published
+  the message. Responder replies only to temporary reply endpoints (`CheckTemporaryExchangeAsync`); republish does not
+  follow an `MT-Fault-InputAddress` that disagrees with the error queue's owner (`RepublishTarget.Conflict`).
+- Broker exceptions: tools may let RabbitMQ exceptions propagate — the call-tool filter in `ServerComposition` turns
+  them into readable `McpException`s (`BrokerErrors`). Sending paths still catch `Exception` themselves to audit.
 - `contracts diff` compares the System.Text.Json schema with `MassTransitJson` naming; keep it in sync if the
   envelope serialization options change. The CLI writes to stdout — it is never run as an MCP server.
 - Tools get the MCP client via an injected `McpServer? server = null` parameter (excluded from the schema).
