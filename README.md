@@ -206,7 +206,8 @@ INFO     OrderPlaced coupon: New optional property.
 სერვისის CI-ში, მაგ. main-ის build-თან შესადარებლად:
 
 ```yaml
-$|
+# needs actions/checkout with fetch-depth: 0 (for origin/main)
+- run: |
     curl -sL https://github.com/lazogio/rabbit-mcp/releases/download/v0.1.0/rabbit-mcp-0.1.0-linux-x64.tar.gz | tar xz
     git worktree add ../base origin/main && dotnet build ../base/src/Billing.Contracts -c Release -o base
     dotnet build src/Billing.Contracts -c Release -o head

@@ -1,5 +1,17 @@
 # Changes and decisions (newest first)
 
+### 2026-10-13 Phase 6: review, responder HA, contract_consumers, contracts diff, Docker, NuGet (phase-6/all)
+- Review of phase 5 → BUG-008/009 fixed; cancelled reply keeps the request; `Stateless = true` explicit
+  (SDK 2.2 already defaults to stateless — SEP-2567). Commit 993e45e.
+- Responder: `pending_requests(waitSeconds)` long poll; queue `{ClientName}-responder` exclusive → active/standby.
+- `contract_consumers` (ManagementUri): BFS over exchange→exchange bindings, consumers, `_error`/`_skipped` backlog;
+  status ok / no-consumers / no-queue / no-exchange. Commits 7cac1f1, 960be84.
+- `rabbit-mcp contracts diff OLD NEW [--json]`: URN/exchange/reply types + JSON schema (camelCase) comparison,
+  breaking/warning/info, exit 0/1/2. Commit c3e99df.
+- Dockerfile (cross-publish, aspnet:10.0, non-root, HTTP default), CI container smoke test, release pushes
+  ghcr.io multi-arch; nuget.org push only when `NUGET_API_KEY` secret exists. Commits eaf4008, b3409e2.
+- Decision: delayed/scheduled messages not implemented — needs the delayed-exchange plugin or an external scheduler.
+
 ### 2026-10-13 Responder mode (phase-5/responder) — commits cc7b489, ef4b539
 - What: `RespondTo` (patterns) makes the server a consumer of request contracts: `ResponderService` (BackgroundService,
   exclusive auto-delete queue bound to each contract exchange, fanout durable like MassTransit; retries every 5 s),

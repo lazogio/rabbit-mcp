@@ -1,6 +1,6 @@
 # rabbit-mcp memory — index
 
-Last updated: 2026-10-13 · Bugs: 7 (0 open) · Next ID: BUG-008
+Last updated: 2026-10-13 · Bugs: 10 (0 open) · Next ID: BUG-011
 
 ## Files
 - `bugs.md` — bug log (symptom, root cause, fix, guard, lesson)
@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 7 (0 open) · Next ID: BUG-008
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-13 phase-6/all: review (BUG-008..010), responder HA + long poll, contract_consumers, contracts diff CLI, Docker/GHCR, NuGet
 - 2026-10-13 phase-5/responder: responder mode — pending_requests, reply_<response>, reject_request (Fault<T>), manual only
 - 2026-10-13 phase-5/http: HTTP transport, API keys + JWT/OIDC, MCP resource metadata, Origin check, user in audit
 - 2026-10-13 phase-5/telemetry: spans + MT-Activity-Id/traceparent (MassTransit joins traces), metrics, OTLP

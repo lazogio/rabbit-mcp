@@ -64,6 +64,17 @@
 - GitHub repo was created with an auto-README → first push needed a rebase (kept the full README).
 - C#: avoid collection expressions where target typing is ambiguous (`Assert.Equal([...], ...)`, `cond ? x : [..]`) → use `new[] { }`.
 
+- Management API: `GET /api/exchanges/{vhost}/{name}/bindings/source` answers `200 []` for a missing exchange —
+  check `GET /api/exchanges/{vhost}/{name}` (404) first.
+- RabbitMQ exclusive queues are per connection: declaring one held by another connection fails with 405
+  RESOURCE_LOCKED (closes the channel) — used for responder active/standby; on the *same* connection it succeeds.
+- `JsonSchemaExporter` needs options with a `TypeInfoResolver` → copy the options and set `DefaultJsonTypeInfoResolver`.
+- MCP has no reliable way to wake the model on a server event (logging/resource notifications are not shown to it,
+  stateless HTTP cannot push) → long-poll tools (`waitSeconds`).
+- Two builds of the same contracts assembly can only be compared in separate (collectible) AssemblyLoadContexts that
+  defer `RabbitMcp.Contracts` to the default context (otherwise `[MessageContract]` is a different type).
+- Shell: never use `|` as the sed delimiter when the pattern contains `|` (it silently mangled a README line).
+
 ## Anti-patterns seen in other RabbitMQ MCP servers (do not copy)
 - Republish that consumes with `ack_requeue_false` before publishing → message lost if publish fails.
 - Management API `/get` with `truncate: 50000` used for republish → large bodies republished truncated.

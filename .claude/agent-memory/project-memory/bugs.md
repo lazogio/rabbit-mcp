@@ -1,6 +1,26 @@
 # Bugs (newest first)
 
-Next ID: BUG-008
+Next ID: BUG-011
+
+### BUG-010 Release Docker build failed on branch runs — fixed (2026-10-13)
+- Symptom: `dotnet publish` in the Dockerfile failed in release.yml only (CI's own docker build passed).
+- Root cause: `VERSION=${{ steps.meta.outputs.version }}` — docker/metadata-action yields the branch name
+  (`phase-6-all`) on branches, which is not a valid package version.
+- Fix: same version step as the binaries (`0.0.0-ci.N` off tags) — commit b3409e2.
+- Lesson: never feed metadata-action's version into MSBuild; it is a tag, not a SemVer.
+
+### BUG-009 Duplicate request delivery faulted the requester as "busy" — fixed (2026-10-13)
+- Symptom (found in review): a redelivered request already pending made `RequestInbox.TryAdd` return false and the
+  responder sent a Fault "busy" — the requester failed although its request was waiting for an answer.
+- Fix: `InboxAddResult { Added, Duplicate, Full }`; duplicates are ignored — commit 993e45e.
+- Guard: `ResponderTests.Inbox_is_bounded_and_lists_oldest_first`.
+
+### BUG-008 Responder stopped listening after the channel was lost — fixed (2026-10-13)
+- Symptom (found in review): after a broker restart / forced close the responder sat in `Task.Delay(Infinite)` on a dead
+  channel; requests were no longer received and nothing was logged.
+- Fix: `ChannelShutdownAsync` completes a TCS → `ListenAsync` throws → retry loop listens again; `Listens` counter and
+  `Status` exposed — commit 993e45e.
+- Guard: integration `Responder_listens_again_after_the_connection_is_lost` (closes the connection via Management API).
 
 ### BUG-007 list_queues scanned up to 20 pages even when one was enough — fixed (2026-10-13)
 - Symptom: every call fetched all pages (500 queues each) to count matches, even with limit=100 and no client-side filter.
