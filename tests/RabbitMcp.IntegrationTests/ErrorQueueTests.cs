@@ -122,16 +122,19 @@ public sealed class ErrorQueueTests(BrokerFixture broker)
         await broker.Publisher.PublishAsync(new OrderCancelled { OrderId = orderId, Reason = "Parked" });
         await broker.WaitForQueueCount(ErrorQueue, 1);
         var id = Assert.Single((await broker.Browser.PeekAsync(ErrorQueue, 5, false, CancellationToken.None)).Messages).MessageId!;
+        // Other tests park messages here too (e.g. resend_corrected): count relative to what is already there.
+        var before = (await broker.Connection.GetQueueAsync(deadQueue, CancellationToken.None))?.MessageCount ?? 0;
 
         var result = await broker.Browser.DeadLetterAsync(ErrorQueue, 5, [id], null, "cannot be fixed", CancellationToken.None, "it");
 
         Assert.Equal(1, result.Moved);
         Assert.Equal(deadQueue, result.DeadLetterQueue);
         await broker.WaitForQueueCount(ErrorQueue, 0);
-        await broker.WaitForQueueCount(deadQueue, 1);
+        await broker.WaitForQueueCount(deadQueue, before + 1);
 
         // Nothing is lost: fault details stay, ours are added, and the target is still the original queue.
-        var parked = Assert.Single((await broker.Browser.PeekAsync(deadQueue, 5, false, CancellationToken.None)).Messages);
+        var parked = Assert.Single((await broker.Browser.PeekAsync(deadQueue, 50, false, CancellationToken.None)).Messages,
+            m => m.MessageId == id);
         Assert.Equal(id, parked.MessageId);
         Assert.NotNull(parked.Fault);
         Assert.Equal(ErrorQueue, parked.Headers["X-Dead-Lettered-From"]);
@@ -146,7 +149,7 @@ public sealed class ErrorQueueTests(BrokerFixture broker)
         // ... and it can be brought back from the dead-letter queue.
         await broker.Browser.RepublishAsync(deadQueue, 5, [id], null, CancellationToken.None);
         await broker.WaitForCancelled(orderId);
-        await broker.WaitForQueueCount(deadQueue, 0);
+        await broker.WaitForQueueCount(deadQueue, before);
     }
 
     [Fact]
