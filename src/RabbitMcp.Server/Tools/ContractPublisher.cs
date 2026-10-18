@@ -273,7 +273,7 @@ public sealed class ContractPublisher(
         if (correlationId is not null && !Guid.TryParse(correlationId, out _))
             throw new McpException("correlationId must be a GUID.");
 
-        // The default exchange always exists (and cannot be declared, not even passively): check the queue instead.
+        // The default exchange always exists and is never declared: check the queue it routes to instead.
         if (contract.UsesDefaultExchange)
         {
             if (await connection.GetQueueAsync(contract.RoutingKey, ct) is null)
