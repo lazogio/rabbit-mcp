@@ -1,6 +1,40 @@
 # Bugs (newest first)
 
-Next ID: BUG-020
+Next ID: BUG-027
+
+### BUG-020..026 Security & bug review after phase 11 (2026-10-18) — fixed in commits 797cd9b, 3462d5b
+- BUG-020 (security, medium) JWT scope enforcement was skipped for any principal with the claim `auth_method=api_key`;
+  a token can carry any claim (IdP mappers, user attributes). Fix: `ApiKeyAuthenticationHandler.IsApiKeyCaller` checks
+  the identity's AuthenticationType ("ApiKey"), which only the handler sets. Guards:
+  `An_auth_method_claim_in_a_token_does_not_skip_the_scope_check`, `Jwt_claiming_to_be_an_api_key_is_still_refused_without_scopes`.
+- BUG-021 (security, medium) Role assignment mixed name spaces: a token user whose preferred_username/sub/e-mail equalled
+  an API key name got that key's roles, and an unverified (user-editable) e-mail picked up the roles of that address.
+  Fix: `AccessControl.NamesOf` — API-key callers by key name only; token callers by sub / preferred_username / e-mail
+  only with email_verified=true; token names equal to an API key name ignored; roles claim only from token identities.
+  Guards: `Token_user_named_like_an_api_key_does_not_get_its_roles`, `Unverified_email_assigns_no_role`.
+- BUG-022 (security, medium) A role limited to some error queues (`republish:orders-*_error`) could still send their
+  messages anywhere via targetExchange/targetQueue or deadLetterQueue. Fix: `ToolRule.OverrideArguments` need the
+  permission without patterns; queue patterns case-sensitive (`Grant.CoversQueue`). Guards:
+  `Choosing_another_destination_needs_republish_without_patterns`, `Queue_patterns_are_case_sensitive_like_rabbitmq`.
+- BUG-023 (bug/security) `dead_letter_from_error` accepted a live queue as deadLetterQueue: "parking" handed messages to
+  its consumers. Fix: `QueueBrowser.CheckDeadLetterTargetAsync` refuses a target with consumers (preview and confirm).
+  Guard: integration `A_queue_with_consumers_is_never_used_as_the_dead_letter_queue`.
+- BUG-024 (bug) Republish whose destination is the error queue itself (targetQueue, or an MT exchange of the same name
+  from headers) only stripped the fault headers — fault information lost. Fix: skipped per message. Guard:
+  integration `Republishing_into_the_error_queue_itself_is_skipped_and_keeps_the_fault`.
+- BUG-025 (bug) A queue exclusive to another connection (passive declare → 405 RESOURCE_LOCKED) aborted the whole
+  find_message (scope=all lists such queues) and queue_stats, and made raw sends to it fail; one failing peek aborted the
+  search. Fix: `RabbitConnection.QueueExistsAsync`/`IsResourceLocked`, per-queue "skipped: exclusive…"/"error: …",
+  405 in `BrokerErrors`. Guard: integration `Queues_exclusive_to_another_connection_do_not_break_search_stats_or_sending`.
+- BUG-026 (bug, low) Small ones: `since=999999d` threw ArgumentOutOfRange (now: everything); message-derived values
+  (reply ids, refusal reasons with addresses, republish ids/targets) were logged raw → log forging outside AUDIT lines
+  (now `AuditLog.OneLine`); `FaultUrnFor` crashed for a custom Urn without `urn:message:`.
+- Accepted (documented, not changed): x-death / MT-Fault-InputAddress on a queue without an _error/_skipped/_dead
+  suffix are followed (the preview shows the target, confirm is required); whoever can publish into a DLQ through the
+  default exchange can reach any queue directly anyway. RabbitMQ 4 quorum queues: basic.nack(requeue) does not count
+  towards the delivery limit (docs table), so peek does not push messages to the default limit of 20.
+- Lesson: decide "who is this" by how a caller authenticated, never by a claim value; every argument that changes a
+  destination needs its own permission check.
 
 ### BUG-019 MassTransit decimals (JSON strings) failed contract validation — fixed (2026-10-13)
 - Symptom (found by the Shop sample e2e): `pending_requests` showed `check.valid=false` for an ApproveLargeOrder sent

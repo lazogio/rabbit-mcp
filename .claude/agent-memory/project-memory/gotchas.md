@@ -7,6 +7,10 @@
   `BasicPublishAsync` await the confirm; with `mandatory: true` an unroutable message throws `PublishException { IsReturn: true }`.
 - `basic.get` + nack(requeue) sets `redelivered` and may reorder; on quorum queues each peek counts toward the delivery-limit.
 - `BasicDeliverEventArgs.Body` is only valid inside the handler → parse/copy before returning.
+- Passive declare of a queue exclusive to another connection fails with 405 RESOURCE_LOCKED (closes the channel), yet
+  publishing to it works → `QueueExistsAsync` treats 405 as "exists"; tools iterating queues must not abort on it.
+- RabbitMQ 4 quorum queues: `basic.reject` and channel closure with unacked messages count towards the delivery limit
+  (default 20, then dropped or dead-lettered); `basic.nack(requeue)` does not → always nack in finally, never just close.
 - RabbitMQ 4 refuses transient non-exclusive queues (`durable:false, exclusive:false`): 541 INTERNAL_ERROR
   "transient_nonexcl_queues is deprecated" closes the whole connection → declare test/sample queues durable.
 - The default exchange ("") always exists and is never declared (declaring it is refused) → for default-exchange contracts check the queue
