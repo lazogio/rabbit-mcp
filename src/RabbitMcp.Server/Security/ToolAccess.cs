@@ -37,6 +37,7 @@ public sealed class ToolAccess(AccessControl control, ContractRegistry contracts
         ["contract_consumers"] = new(Permission.Read, []),
         ["find_message"] = new(Permission.Read, []),
         ["recent_activity"] = new(Permission.Read, []),
+        ["read_stream"] = new(Permission.Read, []),
         ["republish_from_error"] = new(Permission.Republish, [], QueueArgument: "errorQueue",
             OverrideArguments: ["targetExchange", "targetQueue"]),
         // Moving to the dead-letter queue is a move out of the error queue like republish (nothing is deleted).

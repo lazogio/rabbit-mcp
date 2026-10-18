@@ -45,6 +45,7 @@ public static class ServerComposition
             .Validate(o => Uri.TryCreate(o.Uri, UriKind.Absolute, out var u) && u.Scheme is "amqp" or "amqps",
                 "RabbitMcp:Uri must be an amqp:// or amqps:// URI.")
             .Validate(o => o.MaxMessagesPerCall is >= 1 and <= 1000, "RabbitMcp:MaxMessagesPerCall must be 1-1000.")
+            .Validate(o => o.MaxBulkMessages is >= 1 and <= 100_000, "RabbitMcp:MaxBulkMessages must be 1-100000.")
             .Validate(o => string.IsNullOrWhiteSpace(o.ManagementUri)
                            || (Uri.TryCreate(o.ManagementUri, UriKind.Absolute, out var m) && m.Scheme is "http" or "https"),
                 "RabbitMcp:ManagementUri must be an http:// or https:// URL.")
@@ -59,6 +60,7 @@ public static class ServerComposition
 
         var access = new AccessControl(settings);
         var confirmation = new HumanConfirmation(settings);
+        var limiter = new RateLimiter(settings, TimeProvider.System);
         if (access.Enabled && settings.Transport.Trim().Equals("stdio", StringComparison.OrdinalIgnoreCase))
             Console.Error.WriteLine("rabbit-mcp: note: RabbitMcp:Roles apply to the HTTP transport; over stdio the local " +
                                     "user has every enabled tool (limit it with EnablePublish/EnableRepublish/PublishAllow).");
@@ -66,6 +68,7 @@ public static class ServerComposition
         builder.Services
             .AddSingleton(access)
             .AddSingleton(confirmation)
+            .AddSingleton(limiter)
             .AddSingleton<ToolAccess>()
             .AddSingleton(contracts)
             .AddSingleton(policy)
@@ -126,6 +129,17 @@ public static class ServerComposition
                         throw new McpException(denied.Reason);
                     }
 
+                    // A runaway agent stops at RabbitMcp:RateLimits (counted before the person is asked).
+                    var limits = services.GetRequiredService<RateLimiter>();
+                    if (limits.Enabled && RateLimiter.KindOf(name, tools.RuleFor(name), request.Params?.Arguments) is { } kind
+                        && limits.TryAcquire(AuditLog.ClientOf(null, request.User) ?? "local", kind) is { } limited)
+                    {
+                        var audit = services.GetRequiredService<AuditLog>();
+                        audit.Write(audit.Event(AuditActions.Access, "limited", AuditLog.ClientOf(request.Server, request.User),
+                            detail: $"{name}: {limited}"));
+                        throw new McpException(limited);
+                    }
+
                     // The person confirms changes through the client (elicitation); the model's confirm=true is the
                     // fallback only where the person cannot be asked. Every question and answer is audited.
                     var human = services.GetRequiredService<HumanConfirmation>();
@@ -156,6 +170,7 @@ public static class ServerComposition
             })
             .WithTools<BrokerTools>(ToolJson.Options)
             .WithTools<SearchTools>(ToolJson.Options)
+            .WithTools<StreamTools>(ToolJson.Options)
             .WithPrompts<OperatorPrompts>()
             .WithResources(ContractResources.Create(contracts));
 

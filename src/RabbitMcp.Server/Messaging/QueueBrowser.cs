@@ -92,7 +92,8 @@ public sealed class QueueBrowser(
         string? targetExchangeOverride,
         CancellationToken ct,
         string? client = null,
-        string? targetQueueOverride = null)
+        string? targetQueueOverride = null,
+        MessageFilter? selection = null)
     {
         // Every per-message outcome is audited, including those reached before a failure.
         var outcomes = new List<RepublishOutcome>();
@@ -106,9 +107,11 @@ public sealed class QueueBrowser(
         try
         {
             var target = Override(targetExchangeOverride, targetQueueOverride);
-            var result = await RepublishCoreAsync(errorQueue, count, onlyMessageIds, target, outcomes, ct);
+            var result = await RepublishCoreAsync(errorQueue, count, onlyMessageIds, target, outcomes, selection, ct);
             AuditOutcomes();
-            return result;
+            return result.Outcomes.Count <= MaxListedOutcomes
+                ? result
+                : result with { Outcomes = [.. result.Outcomes.Take(MaxListedOutcomes)], OutcomesOmitted = result.Outcomes.Count - MaxListedOutcomes };
         }
         catch (Exception ex)
         {
@@ -133,9 +136,10 @@ public sealed class QueueBrowser(
         IReadOnlyCollection<string>? onlyMessageIds,
         RepublishTarget? targetOverride,
         List<RepublishOutcome> outcomes,
+        MessageFilter? selection,
         CancellationToken ct)
     {
-        CheckCount(count);
+        CheckCount(count, bulk: selection is not null);
         await EnsureQueueExistsAsync(errorQueue, ct);
 
         var filter = onlyMessageIds is { Count: > 0 }
@@ -161,7 +165,8 @@ public sealed class QueueBrowser(
                 var messageId = props.MessageId
                     ?? MassTransitEnvelope.TryParse(delivery.Body.Span)?.MessageId;
 
-                if (filter is not null && (messageId is null || !filter.Contains(messageId)))
+                if ((filter is not null && (messageId is null || !filter.Contains(messageId)))
+                    || (selection is not null && !selection.Matches(inspector.Inspect(0, errorQueue, delivery))))
                 {
                     // Not selected: keep it unacked so BasicGet doesn't hand it out again.
                     toRequeue.Add(delivery.DeliveryTag);
@@ -279,7 +284,10 @@ public sealed class QueueBrowser(
                 outcomes.Add(new RepublishOutcome(missing, "skipped", null, $"Not found in the first {scanned} message(s) of {errorQueue}."));
         }
 
-        return new RepublishResult(errorQueue, Executed: true, Preview: null, outcomes, republished, toRequeue.Count);
+        return new RepublishResult(errorQueue, Executed: true, Preview: null, outcomes, republished, toRequeue.Count)
+        {
+            MoreMayRemain = scanned == count,
+        };
     }
 
     /// <summary>
@@ -295,7 +303,8 @@ public sealed class QueueBrowser(
         string? deadLetterQueue,
         string? reason,
         CancellationToken ct,
-        string? client = null)
+        string? client = null,
+        MessageFilter? selection = null)
     {
         var outcomes = new List<DeadLetterOutcome>();
         var target = deadLetterQueue ?? DeadLetterNaming.For(errorQueue, options.Value.DeadLetterQueue);
@@ -308,9 +317,11 @@ public sealed class QueueBrowser(
 
         try
         {
-            var result = await DeadLetterCoreAsync(errorQueue, count, onlyMessageIds, target, reason, outcomes, client, ct);
+            var result = await DeadLetterCoreAsync(errorQueue, count, onlyMessageIds, target, reason, outcomes, client, selection, ct);
             AuditOutcomes();
-            return result;
+            return result.Outcomes.Count <= MaxListedOutcomes
+                ? result
+                : result with { Outcomes = [.. result.Outcomes.Take(MaxListedOutcomes)], OutcomesOmitted = result.Outcomes.Count - MaxListedOutcomes };
         }
         catch (Exception ex)
         {
@@ -334,9 +345,10 @@ public sealed class QueueBrowser(
         string? reason,
         List<DeadLetterOutcome> outcomes,
         string? client,
+        MessageFilter? selection,
         CancellationToken ct)
     {
-        CheckCount(count);
+        CheckCount(count, bulk: selection is not null);
         var source = await EnsureQueueExistsAsync(errorQueue, ct);
         if (source.ConsumerCount > 0)
             throw new McpException(
@@ -369,7 +381,8 @@ public sealed class QueueBrowser(
 
                 var props = delivery.BasicProperties;
                 var messageId = props.MessageId ?? MassTransitEnvelope.TryParse(delivery.Body.Span)?.MessageId;
-                if (filter is not null && (messageId is null || !filter.Contains(messageId)))
+                if ((filter is not null && (messageId is null || !filter.Contains(messageId)))
+                    || (selection is not null && !selection.Matches(inspector.Inspect(0, errorQueue, delivery))))
                 {
                     toRequeue.Add(delivery.DeliveryTag);
                     continue;
@@ -421,7 +434,10 @@ public sealed class QueueBrowser(
                 outcomes.Add(new DeadLetterOutcome(missing, "skipped", $"Not found in the first {scanned} message(s) of {errorQueue}."));
         }
 
-        return new DeadLetterResult(errorQueue, target, Executed: true, Preview: null, outcomes, moved, toRequeue.Count);
+        return new DeadLetterResult(errorQueue, target, Executed: true, Preview: null, outcomes, moved, toRequeue.Count)
+        {
+            MoreMayRemain = scanned == count,
+        };
     }
 
     /// <summary>
@@ -647,10 +663,197 @@ public sealed class QueueBrowser(
             ?? throw new McpException($"Queue '{queue}' does not exist.");
     }
 
-    private void CheckCount(int count)
+    /// <summary>With a filter (bulk recovery) up to MaxBulkMessages, otherwise MaxMessagesPerCall.</summary>
+    private void CheckCount(int count, bool bulk = false)
     {
-        var max = options.Value.MaxMessagesPerCall;
+        var max = bulk ? options.Value.MaxBulkMessages : options.Value.MaxMessagesPerCall;
         if (count < 1 || count > max)
-            throw new McpException($"count must be between 1 and {max}.");
+            throw new McpException(bulk
+                ? $"count must be between 1 and {max} (RabbitMcp:MaxBulkMessages)."
+                : $"count must be between 1 and {max}. With a filter (exceptionType, contract, since …) up to {options.Value.MaxBulkMessages}.");
+    }
+
+    public const int MaxListedOutcomes = 100;
+    public const int SampleIdsPerGroup = 5;
+
+    /// <summary>
+    /// Preview of a bulk recovery: reads up to <paramref name="limit"/> messages from the head (unacked, all returned with
+    /// one nack at the end, like peek) and groups those matching <paramref name="selection"/> by fault.
+    /// </summary>
+    public async Task<SelectionSummary> SummarizeAsync(
+        string queue, MessageFilter selection, int limit, bool force, CancellationToken ct)
+    {
+        var info = await EnsureQueueExistsAsync(queue, ct);
+        if (info.ConsumerCount > 0 && !force)
+            throw new McpException(
+                $"Queue '{queue}' has {info.ConsumerCount} active consumer(s). Nothing was read. Pass force=true to scan it anyway.");
+
+        var groups = new Dictionary<(string?, string?, string?), (int Count, List<string> Ids)>();
+        var scanned = 0;
+        var matched = 0;
+        ulong lastTag = 0;
+        var more = false;
+        await using var channel = await connection.CreateChannelAsync(publisherConfirms: false, ct);
+        try
+        {
+            while (scanned < limit)
+            {
+                var delivery = await channel.BasicGetAsync(queue, autoAck: false, ct);
+                if (delivery is null)
+                    break;
+                lastTag = delivery.DeliveryTag;
+                scanned++;
+                more = delivery.MessageCount > 0;
+
+                var m = inspector.Inspect(0, queue, delivery);
+                if (!selection.Matches(m))
+                    continue;
+                matched++;
+                var text = m.Fault?.ExceptionMessage ?? m.DeadLettered?.FirstOrDefault()?.Reason ?? m.Fault?.Reason;
+                var key = (m.Fault?.ExceptionType, text is { Length: > 200 } ? text[..200] : text, m.Contract?.Contract);
+                if (!groups.TryGetValue(key, out var group))
+                    group = (0, []);
+                if (m.MessageId is { } id && group.Ids.Count < SampleIdsPerGroup)
+                    group.Ids.Add(id);
+                groups[key] = (group.Count + 1, group.Ids);
+            }
+        }
+        finally
+        {
+            if (lastTag > 0 && channel.IsOpen)
+                await channel.BasicNackAsync(lastTag, multiple: true, requeue: true, CancellationToken.None);
+        }
+
+        return new SelectionSummary(scanned, matched, more && scanned == limit,
+            [.. groups.OrderByDescending(g => g.Value.Count)
+                .Select(g => new FaultGroup(g.Key.Item1, g.Key.Item2, g.Key.Item3, g.Value.Count, g.Value.Ids))]);
+    }
+
+    public const string StreamOffsetHeader = "x-stream-offset";
+
+    /// <summary>
+    /// Reads a RabbitMQ stream from <paramref name="from"/> (first, last, next, an offset, or a time: 10m / ISO 8601)
+    /// with a consumer (streams do not support basic.get). Reading a stream changes nothing. When it is not known to be a
+    /// stream, the first delivery tells (streams add x-stream-offset); for any other queue everything received is
+    /// returned with a nack and nothing is shown.
+    /// </summary>
+    /// <param name="isStream">From the Management API when available; null: unknown.</param>
+    public async Task<StreamReadResult> ReadStreamAsync(
+        string queue, string? from, int count, bool? isStream, bool force, CancellationToken ct)
+    {
+        CheckCount(count);
+        var info = await EnsureQueueExistsAsync(queue, ct);
+        if (isStream == false)
+            throw new McpException($"'{queue}' is not a stream. Use peek_messages.");
+        if (isStream is null && info.ConsumerCount > 0 && !force)
+            throw new McpException(
+                $"'{queue}' has consumers and without RabbitMcp:ManagementUri it cannot be confirmed to be a stream. " +
+                "If it is a stream, pass force=true (reading a stream changes nothing). Nothing was read.");
+
+        var (offset, shown) = StreamOffset(from, time.GetUtcNow());
+        var messages = new List<PeekedMessage>();
+        var offsets = new List<long>();
+        var gate = new object();
+        var notStream = false;
+        ulong lastTag = 0;
+        var lastArrival = time.GetUtcNow();
+        var enough = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var channel = await connection.CreateChannelAsync(publisherConfirms: false, ct);
+        await channel.BasicQosAsync(0, (ushort)count, global: false, ct); // streams require a prefetch
+        var consumer = new RabbitMQ.Client.Events.AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += (_, delivery) =>
+        {
+            lock (gate)
+            {
+                lastTag = delivery.DeliveryTag;
+                lastArrival = time.GetUtcNow();
+                var headers = delivery.BasicProperties.Headers;
+                if (headers is null || !headers.TryGetValue(StreamOffsetHeader, out var position))
+                {
+                    notStream = true;
+                    enough.TrySetResult();
+                }
+                else if (messages.Count < count)
+                {
+                    offsets.Add(Convert.ToInt64(position, System.Globalization.CultureInfo.InvariantCulture));
+                    messages.Add(inspector.Inspect(messages.Count, queue, delivery.BasicProperties, delivery.Body.Span, delivery.Redelivered));
+                    if (messages.Count >= count)
+                        enough.TrySetResult();
+                }
+            }
+            return Task.CompletedTask;
+        };
+
+        string consumerTag;
+        try
+        {
+            consumerTag = await channel.BasicConsumeAsync(queue, autoAck: false, consumerTag: "", noLocal: false, exclusive: false,
+                arguments: new Dictionary<string, object?> { [StreamOffsetHeader] = offset }, consumer, ct);
+        }
+        catch (OperationInterruptedException ex) when (isStream != true)
+        {
+            throw new McpException($"'{queue}' is not a stream or cannot be read as one ({ex.ShutdownReason?.ReplyText}). " +
+                                   "Nothing was changed; use peek_messages for other queues.");
+        }
+        try
+        {
+            // Until count is reached, or nothing new arrived for a moment (the end of the stream).
+            var started = time.GetUtcNow();
+            while (!enough.Task.IsCompleted)
+            {
+                await Task.WhenAny(enough.Task, Task.Delay(TimeSpan.FromMilliseconds(250), ct));
+                var now = time.GetUtcNow();
+                DateTimeOffset last;
+                lock (gate)
+                    last = lastArrival;
+                if (now - last > TimeSpan.FromSeconds(1.5) || now - started > TimeSpan.FromSeconds(15))
+                    break;
+            }
+        }
+        finally
+        {
+            if (channel.IsOpen)
+            {
+                await channel.BasicCancelAsync(consumerTag, noWait: false, CancellationToken.None);
+                ulong tag;
+                bool returnAll;
+                lock (gate)
+                {
+                    tag = lastTag;
+                    returnAll = notStream;
+                }
+                if (tag > 0)
+                {
+                    // Not a stream: give everything back (nack does not count towards a quorum delivery limit).
+                    if (returnAll)
+                        await channel.BasicNackAsync(tag, multiple: true, requeue: true, CancellationToken.None);
+                    else
+                        await channel.BasicAckAsync(tag, multiple: true, CancellationToken.None); // a stream ack only moves credit
+                }
+            }
+        }
+
+        if (notStream)
+            throw new McpException($"'{queue}' is not a stream (its messages carry no x-stream-offset). Nothing was changed; use peek_messages.");
+
+        return new StreamReadResult(queue, shown, messages.Count, offsets.Count > 0 ? offsets[0] : null,
+            offsets.Count > 0 ? offsets[^1] : null, messages,
+            messages.Count == 0 ? "No messages from that position (a stream's end, or 'next' waits for new ones)." : null);
+    }
+
+    /// <summary>first | last | next | an offset (number) | a time (30m, 2h, 7d, ISO 8601) → x-stream-offset.</summary>
+    public static (object Offset, string Shown) StreamOffset(string? from, DateTimeOffset now)
+    {
+        var text = string.IsNullOrWhiteSpace(from) ? "first" : from.Trim();
+        switch (text.ToLowerInvariant())
+        {
+            case "first" or "last" or "next":
+                return (text.ToLowerInvariant(), text.ToLowerInvariant());
+        }
+        if (long.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var offset))
+            return (offset, $"offset {offset}");
+        var at = AuditReader.ParseSince(text, now)!.Value;
+        return (new AmqpTimestamp(Math.Max(0, at.ToUnixTimeSeconds())), at.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
     }
 }

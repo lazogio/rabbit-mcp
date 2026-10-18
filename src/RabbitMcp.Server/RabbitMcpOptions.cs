@@ -29,6 +29,18 @@ public sealed class RabbitMcpOptions
     /// <summary>Upper bound for the count argument of peek/republish tools.</summary>
     public int MaxMessagesPerCall { get; set; } = 50;
 
+    /// <summary>
+    /// Upper bound for count when republish_from_error / dead_letter_from_error select by a filter (exceptionType,
+    /// contract, since …): one scan, every message still acked only after its confirm.
+    /// </summary>
+    public int MaxBulkMessages { get; set; } = 1000;
+
+    /// <summary>
+    /// Calls per caller and kind of change, e.g. "publish:100/h;request:300/h;republish:500/h;respond:200/h"
+    /// (units s, m, h, d; "*" = every change). Stops a runaway agent. Empty: no limits.
+    /// </summary>
+    public string? RateLimits { get; set; }
+
     /// <summary>Message bodies longer than this are shown truncated (display only, never when republishing).</summary>
     public int MaxPayloadChars { get; set; } = 16_000;
 

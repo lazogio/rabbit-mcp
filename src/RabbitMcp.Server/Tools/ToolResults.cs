@@ -97,7 +97,17 @@ public sealed record RepublishResult(
     PeekResult? Preview,
     IReadOnlyList<RepublishOutcome> Outcomes,
     int Republished,
-    int Requeued);
+    int Requeued)
+{
+    [Description("Preview with a filter: what matches, grouped by fault.")]
+    public SelectionSummary? Selection { get; init; }
+
+    [Description("Outcomes not listed (the first 100 are); every one is in the audit.")]
+    public int OutcomesOmitted { get; init; }
+
+    [Description("True when count was reached: more matching messages may be left; call again.")]
+    public bool MoreMayRemain { get; init; }
+}
 
 public sealed record DeadLetterOutcome(
     string? MessageId,
@@ -111,7 +121,17 @@ public sealed record DeadLetterResult(
     PeekResult? Preview,
     IReadOnlyList<DeadLetterOutcome> Outcomes,
     int Moved,
-    int Requeued);
+    int Requeued)
+{
+    [Description("Preview with a filter: what matches, grouped by fault.")]
+    public SelectionSummary? Selection { get; init; }
+
+    [Description("Outcomes not listed (the first 100 are); every one is in the audit.")]
+    public int OutcomesOmitted { get; init; }
+
+    [Description("True when count was reached: more matching messages may be left; call again.")]
+    public bool MoreMayRemain { get; init; }
+}
 
 public sealed record ExceptionSummary(string? ExceptionType, string? Message, string? StackTrace);
 
@@ -247,4 +267,26 @@ public sealed record CorrectionResult(
     [property: Description("Where the original is parked, unchanged. Nothing is deleted.")] string DeadLetterQueue,
     [property: Description("MessageId of the corrected message, once sent.")] string? NewMessageId,
     [property: Description("True when the original was moved to the dead-letter queue (false: it is still in the error queue).")] bool OriginalParked,
+    string? Note);
+
+public sealed record FaultGroup(
+    string? ExceptionType,
+    [property: Description("Exception message (first 200 characters), or the dead-lettering reason.")] string? ExceptionMessage,
+    string? Contract,
+    int Count,
+    [property: Description("A few messageIds of this group.")] IReadOnlyList<string> SampleMessageIds);
+
+public sealed record SelectionSummary(
+    [property: Description("Messages read from the head of the queue (nothing was changed).")] int Scanned,
+    [property: Description("How many of them match the filter.")] int Matched,
+    [property: Description("True when the scan stopped at its limit: the queue holds more.")] bool MoreMayRemain,
+    IReadOnlyList<FaultGroup> Groups);
+
+public sealed record StreamReadResult(
+    string Queue,
+    [property: Description("Where reading started: first, last, next, an offset or a time.")] string From,
+    int Returned,
+    [property: Description("Stream offset of the first returned message.")] long? FirstOffset,
+    [property: Description("Stream offset of the last returned message: pass LastOffset+1 as from to continue.")] long? LastOffset,
+    IReadOnlyList<PeekedMessage> Messages,
     string? Note);
