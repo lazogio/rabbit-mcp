@@ -1,5 +1,16 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Phase 13 — incident scale (phase-13/scale) — commit c5e56da + docs
+- `MessageFilter` (exceptionType / exceptionContains incl. x-death reason / contract / since / until on
+  MT-Fault-Timestamp → x-death time → sent time) on republish_from_error and dead_letter_from_error; with a filter
+  count ≤ `MaxBulkMessages` (1000); preview = `SelectionSummary` (groups by type+message+contract, 5 sample ids);
+  results cap Outcomes at 100 (`OutcomesOmitted`), `MoreMayRemain`.
+- `read_stream` (`Tools/StreamTools`, read): basic.consume + x-stream-offset (first/last/next/offset/AmqpTimestamp),
+  prefetch = count, stop on count or 1.5 s idle; type from Management API when configured, else a delivery without
+  x-stream-offset → nack all back, "not a stream" (verified on a classic queue in CI).
+- `RateLimits` (`Security/RateLimiter`): per caller and kind (permission name or *), sliding window, refused calls not
+  counted, audit `access limited`; checked before human confirmation.
+
 ### 2026-10-18 Phase 12 — human in the loop (phase-12/human) — commits bb99eef, ef49c66
 - `Security/HumanConfirmation` + call-tool filter: `HumanConfirmation` auto|required|off, `ConfirmTools` patterns
   (default republish_from_error;dead_letter_from_error;resend_corrected; preview tools asked only with confirm=true).

@@ -131,15 +131,15 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
     `X-Corrected-By/-At` and the diff summary → ack. Nothing is deleted; both sides audited (`correct`).
     MassTransit (envelope rebuilt, original headers kept) and raw contracts (plain JSON, original properties kept).
 
-## Phase 13 — Incident scale (`phase-13/scale`) ⬜ — planned 2026-10-18
-36. ⬜ **Recovery by filter**: `republish_from_error` / `dead_letter_from_error` select by `exceptionType`,
+## Phase 13 — Incident scale (`phase-13/scale`) ✅ (2026-10-18)
+36. ✅ **Recovery by filter**: `republish_from_error` / `dead_letter_from_error` select by `exceptionType`,
     `exceptionContains`, `contract`, `since`/`until` instead of only messageIds. Preview = counts per group + samples;
     confirm processes up to `RabbitMcp:MaxBulkMessages` (default 1000, one scan of the queue, same confirm-then-ack
     guarantee, non-matching messages requeued with nack). The result reports what is left for a next call.
-37. ⬜ **Reading RabbitMQ streams** (`read_stream`, permission `read`): from `first`, `last`, an offset or a time
+37. ✅ **Reading RabbitMQ streams** (`read_stream`, permission `read`): from `first`, `last`, an offset or a time
     ("last 10 minutes"), bounded count, via basic.consume with `x-stream-offset` (streams do not support basic.get).
     Reading a stream changes nothing, so no `force` is needed; `peek_messages` on a stream points to it.
-38. ⬜ **Limits for agents**: `RabbitMcp:RateLimits` per caller and action, e.g. `publish:100/h;republish:2000/h;request:300/h`
+38. ✅ **Limits for agents**: `RabbitMcp:RateLimits` per caller and action, e.g. `publish:100/h;republish:2000/h;request:300/h`
     (optionally per role). A runaway agent loop stops at the limit with a readable error; refusals audited as
     `limited`; metrics. In memory per instance (documented).
 

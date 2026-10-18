@@ -8,6 +8,7 @@ Last updated: 2026-10-18 · Bugs: 26 (0 open) · Next ID: BUG-027
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-18 phase-13/scale: recovery by filter (MaxBulkMessages), read_stream, RateLimits
 - 2026-10-18 phase-12/human: elicitation confirmations (HumanConfirmation, ConfirmTools), resend_corrected
 - 2026-10-18 plan: phases 12 (elicitation, resend_corrected), 13 (bulk by filter, streams, rate limits), 14 (AsyncAPI), 15 (release-gated)
 - 2026-10-18 review/phase-11: BUG-020..026 (scope bypass via auth_method claim, role name collisions / unverified e-mail, destination overrides for restricted roles, live queue as DLQ, republish into itself, 405 exclusive queues, log forging)

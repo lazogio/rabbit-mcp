@@ -370,6 +370,32 @@ public class HttpHostingTests
         Assert.Contains(denials, e => e.GetProperty("client").GetString()!.StartsWith("alice"));
     }
 
+    [Fact]
+    public async Task A_runaway_caller_stops_at_the_rate_limit()
+    {
+        var auditPath = Path.Combine(Path.GetTempPath(), $"rabbit-mcp-limits-{Guid.NewGuid():N}.jsonl");
+        await using var app = await StartAsync(Config(
+            ("ApiKeys", $"alice:{AliceKey}"),
+            ("EnablePublish", "true"),
+            ("AuditLogPath", auditPath),
+            ("Uri", "amqp://guest:guest@127.0.0.1:1/"), // nothing listens: the first call fails at the broker, still counted
+            ("RateLimits", "publish:1/h")));
+        var client = app.GetTestClient();
+        Task<JsonElement> Publish() => client.SendAsync(Mcp(
+                Call("publish_order_submitted", new { message = new { orderId = Guid.NewGuid() } }), r => r.Headers.Add("X-Api-Key", AliceKey)))
+            .ContinueWith(t => Rpc(t.Result)).Unwrap();
+
+        var first = await Publish();
+        Assert.DoesNotContain("Rate limit", Text(first));
+        var second = await Publish();
+        Assert.True(second.GetProperty("result").GetProperty("isError").GetBoolean());
+        Assert.Contains("Rate limit reached: at most 1/h publish calls for alice", Text(second));
+
+        var limited = File.ReadAllLines(auditPath).Select(l => JsonDocument.Parse(l).RootElement)
+            .Where(e => e.GetProperty("outcome").GetString() == "limited");
+        Assert.Single(limited);
+    }
+
     private const string CarolKey = "carol-key-0123456789abcdefghijklmnopqrstu";
 
     [Fact]

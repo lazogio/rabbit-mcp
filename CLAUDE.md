@@ -111,6 +111,11 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 - **Corrections** (`resend_corrected`): validated against the original's contract, sent as a new message
   (X-Corrected-From), original parked unchanged (X-Corrected-To) — needs EnableRepublish + EnablePublish and the
   contract's publish permission; requests are refused.
+- **Bulk recovery** (`MessageFilter`, `QueueBrowser.SummarizeAsync`): republish/dead-letter with a filter scan up to
+  `MaxBulkMessages` in one call with the same get → confirm → ack sequence; results list at most 100 outcomes (all are
+  audited). **Streams** (`read_stream`): basic.consume with x-stream-offset and a prefetch; a delivery without
+  x-stream-offset means "not a stream" → nack everything back. **RateLimits** (`Security/RateLimiter`): counted in the
+  call-tool filter before the person is asked; only changing calls (permission ≠ read, previews excluded).
 - **Logs**: values that come from messages (ids, addresses, header-derived targets) go through `AuditLog.OneLine` in
   every log call, not only in AUDIT lines — otherwise a message can forge log lines.
 - **Prompts** only instruct the model and must keep the "confirm before any change" sentence; **resources**
