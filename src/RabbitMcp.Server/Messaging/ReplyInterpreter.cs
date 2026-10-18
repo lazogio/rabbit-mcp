@@ -13,11 +13,59 @@ public sealed record ReplyInterpretation(
     JsonElement? Response,
     ContractCheck? ResponseCheck,
     RequestFault? Fault,
-    Responder RespondedBy);
+    Responder RespondedBy)
+{
+    /// <summary>Why the reply could not be matched to a declared response, when that is not obvious.</summary>
+    public string? Note { get; init; }
+}
 
 /// <summary>Classifies a reply: a declared response (validated), an unexpected type, or a MassTransit Fault.</summary>
 public static class ReplyInterpreter
 {
+    public static ReplyInterpretation Interpret(ContractDescriptor request, ReceivedReply reply) =>
+        reply.Envelope is { } envelope ? Interpret(request, envelope) : InterpretRaw(request, reply.Raw!);
+
+    /// <summary>
+    /// A raw (RPC) reply: the reply type is named by the AMQP type property (a response name or URN); without it the
+    /// only declared response is assumed, and with several it stays unknown — the body is never guessed from.
+    /// Raw services have no fault convention: errors are declared response types.
+    /// </summary>
+    public static ReplyInterpretation InterpretRaw(ContractDescriptor request, RawReply reply)
+    {
+        var responder = new Responder(Address: null, MachineName: null, ProcessName: reply.AppId, Assembly: null);
+        var hasType = !string.IsNullOrWhiteSpace(reply.Type);
+        var response = hasType
+            ? request.FindResponseByType(reply.Type)
+            : request.Responses.Count == 1 ? request.Responses[0] : null;
+
+        if (reply.Body is not { } body)
+        {
+            return new ReplyInterpretation("responded", response?.Name ?? reply.Type,
+                JsonSerializer.SerializeToElement(reply.Text ?? ""), null, null, responder)
+            {
+                Note = $"The reply is not JSON ({reply.Bytes} bytes); Response holds it as text.",
+            };
+        }
+
+        if (response is null)
+        {
+            var declared = string.Join(", ", request.Responses.Select(r => r.Name));
+            return new ReplyInterpretation("responded", hasType ? reply.Type : null, body, null, null, responder)
+            {
+                Note = hasType
+                    ? $"Reply type '{reply.Type}' is not one of the declared responses ({declared})."
+                    : $"The reply has no AMQP type property, so it cannot be matched to one of {declared}. " +
+                      "The replier should set type to the response name or URN.",
+            };
+        }
+
+        var errors = MessageInspector.Validate(response.Type, body, MassTransitJson.Options);
+        return new ReplyInterpretation(
+            "responded", response.Name, body,
+            new ContractCheck(response.Name, Version: null, errors.Count == 0, errors),
+            null, responder);
+    }
+
     /// <summary>MassTransit sends Fault&lt;TRequest&gt; (urn:message:MassTransit:Fault[[...]]) to the response address.</summary>
     public const string FaultUrnPrefix = "urn:message:MassTransit:Fault";
 

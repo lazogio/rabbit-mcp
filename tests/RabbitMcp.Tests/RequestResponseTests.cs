@@ -78,7 +78,8 @@ public class RequestResponseTests
         Assert.True(pending.TryComplete(Reply(requestId, "urn:x", "{}")));
 
         var reply = await task.WaitAsync(TimeSpan.FromSeconds(1));
-        Assert.Equal(requestId.ToString(), reply.RequestId);
+        Assert.Equal(requestId.ToString(), reply.Envelope!.RequestId);
+        Assert.Null(reply.Raw);
         Assert.Equal(0, pending.Count);
     }
 

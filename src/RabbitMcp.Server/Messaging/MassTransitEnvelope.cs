@@ -99,7 +99,8 @@ public sealed class EnvelopeFactory(TimeProvider time)
             ResponseAddress = request?.ResponseAddress,
             ExpirationTime = request?.ExpirationTimeUtc,
             SourceAddress = BrokerAddress.ForEntity(brokerUri, sourceName),
-            DestinationAddress = BrokerAddress.ForEntity(brokerUri, contract.Exchange),
+            // The exchange, or for the default exchange the queue it routes to (MassTransit's queue:name address).
+            DestinationAddress = BrokerAddress.ForEntity(brokerUri, contract.DestinationName),
             MessageType = [contract.MessageTypeUrn],
             Message = JsonSerializer.SerializeToElement(message, contract.Type, MassTransitJson.Options),
             SentTime = time.GetUtcNow().UtcDateTime,
@@ -127,6 +128,14 @@ public static class HeaderNames
     public const string DeadLetteredFrom = "X-Dead-Lettered-From";
     public const string DeadLetteredAt = "X-Dead-Lettered-At";
     public const string DeadLetterReason = "X-Dead-Letter-Reason";
+
+    /// <summary>Workflow correlation id of a raw request (its correlation_id property is the request id).</summary>
+    public const string CorrelationId = "X-Correlation-Id";
+
+    // RabbitMQ dead-lettering (DLX): history of a message a queue rejected, expired or dropped.
+    public const string Death = "x-death";
+    public const string FirstDeathPrefix = "x-first-death-";
+    public const string LastDeathPrefix = "x-last-death-";
 
     // MassTransit
     public const string Reason = "MT-Reason";

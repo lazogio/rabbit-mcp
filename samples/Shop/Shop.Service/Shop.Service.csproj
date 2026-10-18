@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- A MassTransit 8 service: the "real" side that rabbit-mcp talks to in the sample. -->
+  <!-- A MassTransit 8 service (plus one plain RabbitMQ.Client worker): the "real" side that rabbit-mcp talks to in the sample. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="MassTransit.RabbitMQ" />
+    <!-- ShippingDesk talks to RabbitMQ directly, without MassTransit. -->
+    <PackageReference Include="RabbitMQ.Client" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>
   <ItemGroup>

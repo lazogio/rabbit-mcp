@@ -5,36 +5,52 @@ using System.Collections.Concurrent;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using RabbitMcp.Contracts;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 namespace RabbitMcp.Server.Messaging;
 
-/// <summary>Requests waiting for a reply, keyed by RequestId.</summary>
+/// <summary>
+/// Requests waiting for a reply, keyed by RequestId. A MassTransit request is completed by an envelope with that
+/// requestId; a raw request by a reply whose correlation_id is the request id — never the other way round.
+/// </summary>
 public sealed class PendingRequests
 {
-    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<MassTransitEnvelope>> _pending = new();
+    private sealed record Entry(TaskCompletionSource<ReceivedReply> Reply, bool Raw);
+
+    private readonly ConcurrentDictionary<Guid, Entry> _pending = new();
 
     public int Count => _pending.Count;
 
-    public Task<MassTransitEnvelope> Register(Guid requestId)
+    public Task<ReceivedReply> Register(Guid requestId, MessageFormat format = MessageFormat.MassTransit)
     {
-        var tcs = new TaskCompletionSource<MassTransitEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_pending.TryAdd(requestId, tcs))
+        var entry = new Entry(new TaskCompletionSource<ReceivedReply>(TaskCreationOptions.RunContinuationsAsynchronously),
+            format == MessageFormat.Raw);
+        if (!_pending.TryAdd(requestId, entry))
             throw new InvalidOperationException($"Request {requestId} is already pending.");
-        return tcs.Task;
+        return entry.Reply.Task;
     }
 
     public void Forget(Guid requestId) => _pending.TryRemove(requestId, out _);
 
-    /// <summary>Completes the request the reply belongs to. False for late or unknown replies.</summary>
+    /// <summary>Completes the MassTransit request the reply belongs to. False for late or unknown replies.</summary>
     public bool TryComplete(MassTransitEnvelope reply) =>
-        Guid.TryParse(reply.RequestId, out var requestId)
-        && _pending.TryRemove(requestId, out var tcs)
-        && tcs.TrySetResult(reply);
+        Guid.TryParse(reply.RequestId, out var requestId) && Complete(requestId, raw: false, ReceivedReply.Of(reply));
+
+    /// <summary>Completes the raw request whose id is the reply's correlation_id. False for late or unknown replies.</summary>
+    public bool TryComplete(RawReply reply) =>
+        Guid.TryParse(reply.CorrelationId, out var requestId) && Complete(requestId, raw: true, ReceivedReply.Of(reply));
+
+    private bool Complete(Guid requestId, bool raw, ReceivedReply reply) =>
+        _pending.TryGetValue(requestId, out var entry) && entry.Raw == raw
+        && _pending.TryRemove(new KeyValuePair<Guid, Entry>(requestId, entry))
+        && entry.Reply.TrySetResult(reply);
 }
 
-public sealed record PendingReply(string ResponseAddress, Task<MassTransitEnvelope> Reply);
+/// <param name="ResponseAddress">MassTransit responseAddress of the reply endpoint.</param>
+/// <param name="QueueName">The same endpoint's queue, the reply_to of raw requests.</param>
+public sealed record PendingReply(string ResponseAddress, string QueueName, Task<ReceivedReply> Reply);
 
 /// <summary>Naming of the server's temporary reply endpoint.</summary>
 public static class ReplyEndpoint
@@ -65,7 +81,8 @@ public static class ReplyEndpoint
 
 /// <summary>
 /// One temporary reply queue per server process (like a MassTransit bus endpoint).
-/// Requests carry its address as responseAddress; replies are matched back by requestId.
+/// MassTransit requests carry its address as responseAddress and replies are matched back by requestId; raw requests
+/// carry its queue name as reply_to and replies are matched by correlation_id.
 /// The exchange/queue/consumer are re-created if the channel was lost.
 /// </summary>
 public sealed class ReplyListener(
@@ -76,26 +93,29 @@ public sealed class ReplyListener(
     private readonly PendingRequests _pending = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IChannel? _channel;
-    private string? _responseAddress;
+    private Endpoint? _endpoint;
+
+    private sealed record Endpoint(string Address, string Queue);
 
     /// <summary>Register before publishing, so a fast reply can never arrive unobserved.</summary>
-    public async Task<PendingReply> RegisterAsync(Guid requestId, CancellationToken ct)
+    public async Task<PendingReply> RegisterAsync(Guid requestId, CancellationToken ct,
+        MessageFormat format = MessageFormat.MassTransit)
     {
-        var address = await EnsureListeningAsync(ct);
-        return new PendingReply(address, _pending.Register(requestId));
+        var endpoint = await EnsureListeningAsync(ct);
+        return new PendingReply(endpoint.Address, endpoint.Queue, _pending.Register(requestId, format));
     }
 
     public void Forget(Guid requestId) => _pending.Forget(requestId);
 
-    private async Task<string> EnsureListeningAsync(CancellationToken ct)
+    private async Task<Endpoint> EnsureListeningAsync(CancellationToken ct)
     {
-        if (_channel is { IsOpen: true } && _responseAddress is { } address)
-            return address;
+        if (_channel is { IsOpen: true } && _endpoint is { } endpoint)
+            return endpoint;
 
         await _gate.WaitAsync(ct);
         try
         {
-            if (_channel is { IsOpen: true } && _responseAddress is { } existing)
+            if (_channel is { IsOpen: true } && _endpoint is { } existing)
                 return existing;
 
             if (_channel is not null)
@@ -113,9 +133,9 @@ public sealed class ReplyListener(
             await channel.BasicConsumeAsync(name, autoAck: true, consumer, ct);
 
             _channel = channel;
-            _responseAddress = ReplyEndpoint.Address(connection.BrokerUri, name);
+            _endpoint = new Endpoint(ReplyEndpoint.Address(connection.BrokerUri, name), name);
             logger.LogInformation("Listening for replies on {ReplyQueue}", name);
-            return _responseAddress;
+            return _endpoint;
         }
         finally
         {
@@ -125,12 +145,24 @@ public sealed class ReplyListener(
 
     private Task OnReplyAsync(object sender, BasicDeliverEventArgs delivery)
     {
-        // The body buffer is only valid during this handler; TryParse copies what it keeps.
-        var reply = MassTransitEnvelope.TryParse(delivery.Body.Span);
-        if (reply is null)
-            logger.LogWarning("Ignoring a reply that is not a MassTransit envelope ({Bytes} bytes)", delivery.Body.Length);
-        else if (!_pending.TryComplete(reply))
-            logger.LogInformation("Ignoring late or unknown reply for request {RequestId}", reply.RequestId);
+        // The body buffer is only valid during this handler; TryParse/From copy what they keep.
+        var envelope = MassTransitEnvelope.TryParse(delivery.Body.Span);
+        if (envelope is not null)
+        {
+            if (!_pending.TryComplete(envelope))
+                logger.LogInformation("Ignoring late or unknown reply for request {RequestId}", envelope.RequestId);
+        }
+        else if (!string.IsNullOrEmpty(delivery.BasicProperties.CorrelationId))
+        {
+            var raw = RawReply.From(delivery.BasicProperties, delivery.Body.Span, options.Value.MaxPayloadChars);
+            if (!_pending.TryComplete(raw))
+                logger.LogInformation("Ignoring late or unknown raw reply with correlation id {CorrelationId}", raw.CorrelationId);
+        }
+        else
+        {
+            logger.LogWarning("Ignoring a reply that is neither a MassTransit envelope nor has a correlation_id ({Bytes} bytes)",
+                delivery.Body.Length);
+        }
 
         return Task.CompletedTask;
     }

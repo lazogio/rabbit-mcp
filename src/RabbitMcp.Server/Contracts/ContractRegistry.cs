@@ -21,11 +21,41 @@ public sealed record ContractDescriptor(
     /// <summary>Possible replies. Non-empty means this contract is a request.</summary>
     public IReadOnlyList<ResponseDescriptor> Responses { get; init; } = [];
 
+    /// <summary>MassTransit envelope (default) or plain JSON.</summary>
+    public MessageFormat Format { get; init; } = MessageFormat.MassTransit;
+
+    /// <summary>Routing key of every message; with the default exchange (<see cref="Exchange"/> "") a queue name.</summary>
+    public string RoutingKey { get; init; } = "";
+
     public bool IsRequest => Responses.Count > 0;
+
+    public bool IsRaw => Format == MessageFormat.Raw;
+
+    /// <summary>Sent through the default exchange, straight to the queue named <see cref="RoutingKey"/>.</summary>
+    public bool UsesDefaultExchange => Exchange.Length == 0;
+
+    /// <summary>"masstransit" or "raw", as shown to the model.</summary>
+    public string FormatName => IsRaw ? "raw" : "masstransit";
+
+    /// <summary>Where messages go, for descriptions and errors: "exchange 'X'", "... with routing key 'k'" or "queue 'q'".</summary>
+    public string Destination =>
+        UsesDefaultExchange ? $"queue '{RoutingKey}'"
+        : RoutingKey.Length == 0 ? $"exchange '{Exchange}'"
+        : $"exchange '{Exchange}' with routing key '{RoutingKey}'";
+
+    /// <summary>Name for spans and audit: the exchange, or the queue for the default exchange.</summary>
+    public string DestinationName => UsesDefaultExchange ? RoutingKey : Exchange;
 
     public ResponseDescriptor? FindResponse(IEnumerable<string>? urns) =>
         urns?.Select(u => Responses.FirstOrDefault(r => string.Equals(r.MessageTypeUrn, u, StringComparison.OrdinalIgnoreCase)))
             .FirstOrDefault(r => r is not null);
+
+    /// <summary>A raw reply's AMQP type: a response URN or name (case-insensitive).</summary>
+    public ResponseDescriptor? FindResponseByType(string? type) =>
+        string.IsNullOrWhiteSpace(type)
+            ? null
+            : FindResponse([type.Trim()])
+              ?? Responses.FirstOrDefault(r => string.Equals(r.Name, type.Trim(), StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>A reply type of a request contract.</summary>
@@ -89,6 +119,9 @@ public sealed partial class ContractRegistry
         if (attr.Version < 1)
             throw new InvalidOperationException($"Contract '{type.FullName}' has an invalid version {attr.Version}.");
 
+        if (!Enum.IsDefined(attr.Format))
+            throw new InvalidOperationException($"Contract '{type.FullName}' has an unknown Format {(int)attr.Format}.");
+
         var responses = attr.Responses.Distinct().Select(DescribeResponse).ToArray();
 
         // MassTransit defaults: urn:message:Namespace:Type and exchange Namespace:Type.
@@ -99,17 +132,52 @@ public sealed partial class ContractRegistry
             throw new InvalidOperationException(
                 $"Tool name '{toolName}' for '{type.FullName}' must match {ToolNameRegex()}.");
 
+        var routingKey = attr.RoutingKey ?? "";
+        var urn = attr.Urn ?? "urn:message:" + messageName;
+        string exchange;
+        if (attr.Format == MessageFormat.Raw)
+        {
+            // A plain-JSON service has its own topology: there is no naming convention to fall back on.
+            if (attr.Exchange is null && routingKey.Length == 0)
+                throw new InvalidOperationException(
+                    $"Raw contract '{type.FullName}' needs Exchange and/or RoutingKey (RoutingKey alone sends to that queue " +
+                    "through the default exchange).");
+            exchange = attr.Exchange ?? "";
+        }
+        else
+        {
+            exchange = attr.Exchange ?? messageName;
+        }
+
+        if (exchange.Length == 0 && routingKey.Length == 0)
+            throw new InvalidOperationException(
+                $"Contract '{type.FullName}' uses the default exchange (Exchange = \"\") and needs RoutingKey = the queue name.");
+        CheckName(type, "Exchange", exchange);
+        CheckName(type, "RoutingKey", routingKey);
+        CheckName(type, "Urn", urn);
+        if (urn.Trim().Length == 0)
+            throw new InvalidOperationException($"Contract '{type.FullName}' has an empty Urn.");
+
         return new ContractDescriptor(
             Type: type,
             Name: type.Name,
             ToolName: toolName,
-            MessageTypeUrn: attr.Urn ?? "urn:message:" + messageName,
-            Exchange: attr.Exchange ?? messageName,
+            MessageTypeUrn: urn,
+            Exchange: exchange,
             Version: attr.Version,
             Description: attr.Description)
         {
             Responses = responses,
+            Format = attr.Format,
+            RoutingKey = routingKey,
         };
+    }
+
+    /// <summary>AMQP short strings: at most 255 bytes.</summary>
+    private static void CheckName(Type type, string property, string value)
+    {
+        if (Encoding.UTF8.GetByteCount(value) > 255)
+            throw new InvalidOperationException($"Contract '{type.FullName}': {property} is longer than 255 bytes.");
     }
 
     private static ResponseDescriptor DescribeResponse(Type type)

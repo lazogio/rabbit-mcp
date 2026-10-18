@@ -25,15 +25,15 @@ public sealed class BrokerTools(
 {
     [McpServerTool(Name = "list_contracts", Title = "List message contracts",
         ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
-    [Description("Lists the message contracts this server knows: events (publish_*) and requests (request_*, with their possible replies), with version, MassTransit message type and exchange.")]
+    [Description("Lists the message contracts this server knows: events (publish_*) and requests (request_*, with their possible replies), with version, wire format (masstransit or raw plain JSON), message type, exchange and routing key.")]
     public ContractList ListContracts(ClaimsPrincipal? user = null)
     {
         var permissions = access.For(user);
         return new(
             [.. contracts.Contracts.Select(c =>
                 new ContractInfo(
-                    c.Name, c.IsRequest ? "request" : "event", c.ToolName, c.Version, c.MessageTypeUrn, c.Exchange,
-                    c.Description, [.. c.Responses.Select(r => r.Name)],
+                    c.Name, c.IsRequest ? "request" : "event", c.ToolName, c.Version, c.FormatName, c.MessageTypeUrn,
+                    c.Exchange, c.RoutingKey.Length == 0 ? null : c.RoutingKey, c.Description, [.. c.Responses.Select(r => r.Name)],
                     Sendable: options.Value.EnablePublish && policy.IsAllowed(c) &&
                               permissions.Allows(c.IsRequest ? Permission.Request : Permission.Publish, c)))],
             options.Value.EnablePublish);
@@ -79,7 +79,8 @@ public sealed class BrokerTools(
         ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = true, UseStructuredContent = true)]
     [Description(
         "Shows the first messages of a queue without removing them: payload, matching contract with validation result, " +
-        "and MassTransit fault details (exception, consumer, retry count) for _error/_skipped queues. " +
+        "MassTransit fault details (exception, consumer, retry count) for _error/_skipped queues, and RabbitMQ dead-lettering " +
+        "history (x-death) for dead-letter queues. " +
         "Messages are fetched unacknowledged and immediately requeued, so they get the redelivered flag and may change order; " +
         "on quorum queues each peek counts towards the delivery limit. Queues with active consumers are refused unless force=true.")]
     public Task<PeekResult> PeekMessagesAsync(

@@ -36,7 +36,8 @@ public sealed class ManagementTools(ManagementClient management, TopologyInspect
     [McpServerTool(Name = "contract_consumers", Title = "Who consumes each contract",
         ReadOnly = true, Idempotent = true, OpenWorld = true, UseStructuredContent = true)]
     [Description(
-        "For each contract (or one): follows the broker bindings from its exchange to the queues that receive it, with " +
+        "For each contract (or one): follows the broker bindings from its exchange to the queues that receive it (matching " +
+        "the contract's routing key on direct and topic exchanges; the default exchange reaches the queue it names), with " +
         "consumer counts and the backlog of each queue's _error and _skipped queue. Status shows problems at a glance: " +
         "no-exchange (nobody consumes or publishes it), no-queue (sending it now is unroutable), no-consumers (messages pile " +
         "up / requests time out). Use before publishing, or to find where messages of a contract end up.")]

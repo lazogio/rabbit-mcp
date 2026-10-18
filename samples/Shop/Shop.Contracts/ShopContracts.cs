@@ -98,3 +98,40 @@ public sealed record OrderRejected
     [Required, StringLength(500, MinimumLength = 1)]
     public required string Reason { get; init; }
 }
+
+// Request answered by a service WITHOUT MassTransit → request_get_shipping_quote. The shipping desk (ShippingDesk.cs) is
+// a plain RabbitMQ.Client service: it reads the message as plain JSON from the "shipping-quotes" queue and replies to
+// reply_to with the request's correlation_id, naming the reply type in the AMQP type property (RabbitMQ RPC).
+[MessageContract("Asks the shipping desk for a delivery quote. The desk is a plain RabbitMQ service, not MassTransit.",
+    Format = MessageFormat.Raw, RoutingKey = "shipping-quotes",
+    Responses = new[] { typeof(ShippingQuote), typeof(ShippingUnavailable) })]
+public sealed record GetShippingQuote
+{
+    [Description("Destination country, two-letter code, e.g. GE. AQ (Antarctica) is not served.")]
+    [RegularExpression("^[A-Z]{2}$")]
+    public required string Country { get; init; }
+
+    [Description("Parcel weight in kilograms.")]
+    [Range(0.1, 50)]
+    public required double WeightKg { get; init; }
+}
+
+public sealed record ShippingQuote
+{
+    public required string Country { get; init; }
+
+    public required string Carrier { get; init; }
+
+    [Range(typeof(decimal), "0.01", "10000")]
+    public required decimal Price { get; init; }
+
+    [Description("Delivery time in days.")]
+    public required int Days { get; init; }
+}
+
+public sealed record ShippingUnavailable
+{
+    public required string Country { get; init; }
+
+    public required string Reason { get; init; }
+}

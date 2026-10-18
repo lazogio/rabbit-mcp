@@ -21,9 +21,22 @@ public sealed record FaultInfo(
     int? RedeliveryCount,
     string? FaultedOnHost);
 
-/// <summary>Reads and strips MassTransit fault headers (MT-Reason, MT-Fault-*, MT-Host-*).</summary>
+/// <summary>One entry of RabbitMQ's x-death header: a queue dead-lettered the message (DLX).</summary>
+public sealed record DeathEvent(
+    [property: System.ComponentModel.Description("Queue that dead-lettered the message.")] string? Queue,
+    [property: System.ComponentModel.Description("rejected | expired | maxlen | delivery_limit")] string? Reason,
+    [property: System.ComponentModel.Description("How many times this queue dead-lettered it for this reason.")] long? Count,
+    [property: System.ComponentModel.Description("First time it happened.")] string? Time,
+    [property: System.ComponentModel.Description("Exchange the message had been published to.")] string? Exchange,
+    IReadOnlyList<string>? RoutingKeys);
+
+/// <summary>
+/// Reads and strips fault headers: MassTransit's (MT-Reason, MT-Fault-*, MT-Host-*) and RabbitMQ dead-lettering's
+/// (x-death, x-first-death-*, x-last-death-*).
+/// </summary>
 public static class FaultHeaders
 {
+    private const int MaxDeathEvents = 5;
     private const int MaxStackTraceLines = 12;
 
     public static FaultInfo? Parse(IDictionary<string, object?>? headers)
@@ -53,7 +66,45 @@ public static class FaultHeaders
     public static bool IsFaultHeader(string key) =>
         key.Equals(HeaderNames.Reason, StringComparison.OrdinalIgnoreCase)
         || key.StartsWith(HeaderNames.FaultPrefix, StringComparison.OrdinalIgnoreCase)
-        || key.StartsWith(HeaderNames.HostPrefix, StringComparison.OrdinalIgnoreCase);
+        || key.StartsWith(HeaderNames.HostPrefix, StringComparison.OrdinalIgnoreCase)
+        || key.Equals(HeaderNames.Death, StringComparison.Ordinal)
+        || key.StartsWith(HeaderNames.FirstDeathPrefix, StringComparison.Ordinal)
+        || key.StartsWith(HeaderNames.LastDeathPrefix, StringComparison.Ordinal);
+
+    /// <summary>The x-death history, newest first (at most 5 entries); null when the message was never dead-lettered.</summary>
+    public static IReadOnlyList<DeathEvent>? ParseDeaths(IDictionary<string, object?>? headers)
+    {
+        // AMQP arrays arrive as lists of objects, tables as dictionaries (byte[] and string are not IEnumerable<object>).
+        if (headers is null || !headers.TryGetValue(HeaderNames.Death, out var value) || value is not IEnumerable<object?> list)
+            return null;
+
+        var deaths = new List<DeathEvent>();
+        foreach (var item in list)
+        {
+            if (item is not IDictionary<string, object?> entry)
+                continue;
+            deaths.Add(new DeathEvent(
+                Queue: GetString(entry, "queue"),
+                Reason: GetString(entry, "reason"),
+                Count: GetInt(entry, "count"),
+                Time: GetString(entry, "time"),
+                Exchange: GetString(entry, "exchange"),
+                RoutingKeys: entry.TryGetValue("routing-keys", out var keys) && keys is IEnumerable<object?> k
+                    ? k.Select(ToDisplayString).OfType<string>().ToArray()
+                    : null));
+            if (deaths.Count == MaxDeathEvents)
+                break;
+        }
+        return deaths.Count == 0 ? null : deaths;
+    }
+
+    /// <summary>The queue that dead-lettered the message most recently (x-death is newest first).</summary>
+    public static string? LastDeathQueue(IDictionary<string, object?>? headers) =>
+        ParseDeaths(headers)?.FirstOrDefault()?.Queue is { Length: > 0 } queue
+            ? queue
+            : GetString(headers, HeaderNames.LastDeathPrefix + "queue") is { Length: > 0 } last
+                ? last
+                : GetString(headers, HeaderNames.FirstDeathPrefix + "queue") is { Length: > 0 } first ? first : null;
 
     /// <summary>Copy of the headers without fault information, for republishing.</summary>
     public static Dictionary<string, object?> WithoutFaultHeaders(IDictionary<string, object?>? headers)
@@ -96,7 +147,7 @@ public static class FaultHeaders
         return value switch
         {
             int i => i,
-            long l => (int)l,
+            long l => (int)Math.Clamp(l, int.MinValue, int.MaxValue),
             short s => s,
             byte b => b,
             sbyte sb => sb,
@@ -132,11 +183,24 @@ public static class FaultHeaders
 }
 
 /// <summary>
-/// Where a faulted message goes back to. <see cref="Conflict"/> is set when the message's own MT-Fault-InputAddress
-/// header disagrees with the queue the error queue belongs to: headers are written by whoever published the message,
-/// so such a target is not used without an explicit targetExchange.
+/// Where a faulted message goes back to: an exchange (MassTransit endpoints), or a queue reached directly through the
+/// default exchange (<see cref="Exchange"/> "", <see cref="RoutingKey"/> = queue; RabbitMQ dead-lettering).
+/// <see cref="Conflict"/> is set when the message's own MT-Fault-InputAddress or x-death header disagrees with the
+/// queue the error queue belongs to: headers are written by whoever published the message, so such a target is not
+/// used without an explicit targetExchange/targetQueue.
 /// </summary>
-public sealed record RepublishTarget(string Exchange, string ResolvedFrom, string? Conflict = null);
+public sealed record RepublishTarget(string Exchange, string ResolvedFrom, string? Conflict = null, string RoutingKey = "")
+{
+    public const string QueuePrefix = "queue:";
+
+    public static RepublishTarget ToQueue(string queue, string resolvedFrom, string? conflict = null) =>
+        new("", resolvedFrom, conflict, queue);
+
+    public bool IsQueue => Exchange.Length == 0;
+
+    /// <summary>"exchange" or "queue:name", as shown to the model and written to the audit.</summary>
+    public string Display => IsQueue ? QueuePrefix + RoutingKey : Exchange;
+}
 
 public static class RepublishTargetResolver
 {
@@ -146,10 +210,10 @@ public static class RepublishTargetResolver
     public static string? OwnerQueue(string queue) => OwnerOf(queue)?.Queue;
 
     /// <summary>
-    /// MassTransit binds every receive endpoint queue to a fanout exchange of the
-    /// same name, so the original queue is reached by publishing to that exchange.
-    /// The queue is taken from MT-Fault-InputAddress, falling back to the error
-    /// queue name without its _error/_skipped suffix.
+    /// MassTransit binds every receive endpoint queue to a fanout exchange of the same name, so the original queue is
+    /// reached by publishing to that exchange; the queue is taken from MT-Fault-InputAddress. A message RabbitMQ
+    /// dead-lettered (x-death, e.g. a plain-JSON service rejected it) goes straight back to the queue that rejected it,
+    /// through the default exchange. Without either, the error queue name without its _error/_skipped/_dead suffix.
     /// </summary>
     public static RepublishTarget? Resolve(string errorQueue, IDictionary<string, object?>? headers)
     {
@@ -163,6 +227,18 @@ public static class RepublishTargetResolver
                   "Message headers can be set by whoever published the message, so pass targetExchange to choose explicitly."
                 : null;
             return new RepublishTarget(fromHeader, HeaderNames.FaultInputAddress, conflict);
+        }
+
+        if (FaultHeaders.LastDeathQueue(headers) is { } died)
+        {
+            var conflict =
+                string.Equals(died, errorQueue, StringComparison.Ordinal)
+                    ? $"x-death names '{errorQueue}' itself; pass targetQueue or targetExchange to choose where it goes."
+                    : fromName is not null && !string.Equals(died, fromName.Value.Queue, StringComparison.Ordinal)
+                        ? $"x-death names '{died}', but '{errorQueue}' belongs to '{fromName.Value.Queue}'. Message headers can " +
+                          "be set by whoever published the message, so pass targetQueue to choose explicitly."
+                        : null;
+            return RepublishTarget.ToQueue(died, "x-death (RabbitMQ dead-lettering)", conflict);
         }
 
         return fromName is { } owner

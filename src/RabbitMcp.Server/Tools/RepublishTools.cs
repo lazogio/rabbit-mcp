@@ -16,16 +16,20 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
     [McpServerTool(Name = "republish_from_error", Title = "Republish faulted messages",
         ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = true, UseStructuredContent = true)]
     [Description(
-        "Moves messages from a MassTransit _error/_skipped queue back to the queue they faulted on, for reprocessing. " +
+        "Moves messages from an error queue back to the queue they faulted on, for reprocessing: MassTransit " +
+        "_error/_skipped/_dead queues (back to the endpoint's exchange) and RabbitMQ dead-letter queues (x-death header: " +
+        "straight back to the queue that rejected the message). " +
         "Two steps: call without confirm to preview (nothing changes), then call with confirm=true, ideally passing the " +
         "messageIds from the preview so only those are moved. Each message is acknowledged in the error queue only after " +
-        "the broker confirmed the republish; failures stay in the error queue. Fault headers are removed, the body is unchanged.")]
+        "the broker confirmed the republish; failures stay in the error queue. Fault and x-death headers are removed, " +
+        "the body is unchanged.")]
     public async Task<RepublishResult> RepublishFromErrorAsync(
         [Description("Error queue name, e.g. submit-order_error.")] string errorQueue,
         [Description("How many messages from the head of the queue to process (default 1).")] int count = 1,
         [Description("Set to true to execute. Without it, only a preview is returned.")] bool confirm = false,
         [Description("Only republish messages with these MessageIds (from the preview). Others are left in place.")] string[]? messageIds = null,
         [Description("Override the destination exchange. By default it is taken from MT-Fault-InputAddress.")] string? targetExchange = null,
+        [Description("Override the destination with a queue, reached directly (default exchange). By default it is taken from x-death.")] string? targetQueue = null,
         [Description("Preview even if the error queue has active consumers.")] bool force = false,
         McpServer? server = null,
         ClaimsPrincipal? user = null,
@@ -33,12 +37,13 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
     {
         if (!confirm)
         {
-            var preview = await browser.PeekAsync(errorQueue, count, force, cancellationToken, targetExchange);
+            var target = QueueBrowser.Override(targetExchange, targetQueue);
+            var preview = await browser.PeekAsync(errorQueue, count, force, cancellationToken, target?.Display);
             return new RepublishResult(errorQueue, Executed: false, preview, Outcomes: [], Republished: 0, Requeued: 0);
         }
 
         return await browser.RepublishAsync(errorQueue, count, messageIds, targetExchange, cancellationToken,
-            AuditLog.ClientOf(server, user));
+            AuditLog.ClientOf(server, user), targetQueue);
     }
 
     [McpServerTool(Name = "dead_letter_from_error", Title = "Park faulted messages in the dead-letter queue",

@@ -13,8 +13,9 @@ namespace RabbitMcp.Server.Contracts;
 public sealed record ContractChange(string Severity, string Contract, string Path, string Message);
 
 /// <summary>
-/// Compares two versions of a contracts assembly on the wire, the way MassTransit sees them: message type URNs and
-/// the JSON shape (camelCase, as serialized). DataAnnotations rules are not compared — only the structure.
+/// Compares two versions of a contracts assembly on the wire, the way consumers see them: format, message type URNs,
+/// exchange and routing key, and the JSON shape (camelCase, as serialized). DataAnnotations rules are not compared —
+/// only the structure.
 /// </summary>
 public static class ContractDiff
 {
@@ -54,8 +55,14 @@ public static class ContractDiff
             if (!Same(current.MessageTypeUrn, old.MessageTypeUrn))
                 own.Add(new(Breaking, old.Name, "", $"Message type changed from {old.MessageTypeUrn} to {current.MessageTypeUrn} " +
                                                     "(namespace or name): consumers of the old type no longer receive it."));
+            if (current.Format != old.Format)
+                own.Add(new(Breaking, old.Name, "", $"Wire format changed from {old.FormatName} to {current.FormatName}: " +
+                                                    "existing consumers cannot read the new messages."));
             if (current.Exchange != old.Exchange)
                 own.Add(new(Breaking, old.Name, "", $"Exchange changed from '{old.Exchange}' to '{current.Exchange}'."));
+            if (current.RoutingKey != old.RoutingKey)
+                own.Add(new(Breaking, old.Name, "", $"Routing key changed from '{old.RoutingKey}' to '{current.RoutingKey}': " +
+                                                    "queues bound for the old key no longer receive it."));
 
             CompareSchemas(old.Name, "", Schema(old.Type), Schema(current.Type), own);
             CompareResponses(old, current, own);

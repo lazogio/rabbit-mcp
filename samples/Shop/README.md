@@ -3,12 +3,15 @@
 **English** · [ქართული](README.ka.md)
 
 This sample shows rabbit-mcp next to a real MassTransit service: the model places orders, asks for their status,
-recovers failed messages, parks poison messages and approves large orders.
+recovers failed messages, parks poison messages and approves large orders. A shipping desk written without MassTransit
+answers quotes over plain RabbitMQ.
 
 ```
 Shop.Contracts   contracts: OrderPlaced, GetOrderStatus → OrderStatus | OrderNotFound,
-                 ApproveLargeOrder → OrderApproved | OrderRejected
-Shop.Service     MassTransit 8 service: takes orders, answers status requests, asks for approval of large orders
+                 ApproveLargeOrder → OrderApproved | OrderRejected,
+                 GetShippingQuote → ShippingQuote | ShippingUnavailable (Format = Raw)
+Shop.Service     MassTransit 8 service: takes orders, answers status requests, asks for approval of large orders;
+                 ShippingDesk: plain RabbitMQ.Client, no MassTransit, answers shipping quotes
 docker-compose   RabbitMQ + Shop.Service + rabbit-mcp (HTTP, with Shop.Contracts.dll)
 ```
 
@@ -29,8 +32,8 @@ RabbitMQ UI: http://localhost:15672 (`shop` / `shop`). All ports are bound to `l
 
 Ask Claude, in this order:
 
-1. **"Which contracts do we have and who consumes them?"** — `list_contracts` and `contract_consumers`. `OrderPlaced`
-   and `GetOrderStatus` are `ok` because Shop.Service consumes them.
+1. **"Which contracts do we have and who consumes them?"** — `list_contracts` and `contract_consumers`. `OrderPlaced`,
+   `GetOrderStatus` and `GetShippingQuote` are `ok` because Shop.Service consumes them.
 2. **"What is the status of order 5ca1ab1e-0000-4000-8000-000000000001?"** — the service answers
    `request_get_order_status`: `Shipped`.
 3. **"Place an order: ana@example.ge, FLAKY-LAMP, 1 piece, 20."** — `publish_order_placed` sends it. A `FLAKY-` item
@@ -44,6 +47,9 @@ Ask Claude, in this order:
 7. **"Is there anything to approve? Approve it, approver: Ana."** — `pending_requests` shows the request and
    `reply_order_approved` answers the service. The status becomes `Approved by Ana`. To refuse, say "reject it, reason:
    …": `reply_order_rejected` or `reject_request` is used.
+8. **"How much is shipping a 2 kg parcel to Georgia?"** — `request_get_shipping_quote` asks the shipping desk, which
+   does not use MassTransit: the request is plain JSON in the `shipping-quotes` queue, and the desk replies to
+   `reply_to` with the same `correlation_id` (RabbitMQ RPC). Antarctica (`AQ`) gets `ShippingUnavailable`.
 
 Everything rabbit-mcp does is audited, and you can ask Claude about it too: **"What was moved to a dead-letter queue in
 the last hour?"** (`recent_activity`) or **"Where is order …?"** (`find_message`). The prompts `diagnose_errors`,
@@ -55,6 +61,10 @@ the last hour?"** (`recent_activity`) or **"Where is order …?"** (`find_messag
   DataAnnotations (e-mail, SKU format, quantity 1–100): the model cannot send an invalid order.
 - **The service** (`Shop.Service`) is a plain MassTransit application that knows nothing about rabbit-mcp. It asks for
   approval with `IRequestClient<ApproveLargeOrder>`; rabbit-mcp's responder answers (`RabbitMcp__RespondTo=ApproveLargeOrder`).
+- **The shipping desk** (`Shop.Service/ShippingDesk.cs`) uses only RabbitMQ.Client, like a service in another language
+  would. Its contract says `Format = MessageFormat.Raw, RoutingKey = "shipping-quotes"`. Requests it cannot read are
+  rejected into `shipping-quotes.dlq` by RabbitMQ dead-lettering; `peek_messages` shows why (`x-death`) and
+  `republish_from_error` sends them back to `shipping-quotes`.
 - **rabbit-mcp** loads the contracts from `Shop.Contracts.dll` (`RabbitMcp__ContractAssemblies`).
   `PublishDeny=ApproveLargeOrder` makes sure the model only answers approval requests and never sends one itself.
 - **Roles:** `docker-compose.yml` has a commented example for a second, read-only key.

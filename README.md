@@ -4,7 +4,7 @@
 
 **English** · [ქართული](README.ka.md)
 
-An MCP server for RabbitMQ built on **message contracts** (.NET 10). Every C# record contract becomes its own typed tool whose `inputSchema` is the contract itself. Messages use the MassTransit wire format, so MassTransit services receive them without any configuration — while the server itself does not depend on MassTransit.
+An MCP server for RabbitMQ built on **message contracts** (.NET 10). Every C# record contract becomes its own typed tool whose `inputSchema` is the contract itself. Messages use the MassTransit wire format, so MassTransit services receive them without any configuration — while the server itself does not depend on MassTransit. Services without MassTransit get plain JSON with their own exchanges and routing keys instead.
 
 ## What it does
 
@@ -50,17 +50,17 @@ Local RabbitMQ: `docker compose up -d` (UI: http://localhost:15672, guest/guest)
 
 | Tool | What it does | Enabled by |
 |---|---|---|
-| `list_contracts` | Contracts: event/request, version, exchange, reply types | always |
+| `list_contracts` | Contracts: event/request, version, format (MassTransit or plain JSON), exchange, routing key, reply types | always |
 | `validate_message` | Checks JSON against a contract without sending anything | always |
 | `queue_stats` | Ready messages and consumers of queues | always |
-| `peek_messages` | Shows messages without removing them: payload, contract check, fault | always |
+| `peek_messages` | Shows messages without removing them: payload, contract check, fault, RabbitMQ dead-lettering history (`x-death`) | always |
 | `find_message` | Finds a message by messageId, correlationId or text (e.g. an order id) and shows which queue it is in. Searches every `_error`/`_skipped`/`_dead` queue by default (`ManagementUri`), or the queues you name | always |
 | `list_queues` | Queues with filters; error queues show the queue they belong to | `ManagementUri` |
 | `contract_consumers` | Which queues a contract reaches, whether anything consumes it, its `_error`/`_skipped` backlog | `ManagementUri` |
 | `recent_activity` | Latest audit events with filters (action, outcome, contract, user, queue, id, `since: 2h`): "who republished yesterday?" | `AuditLogPath` |
 | `publish_<contract>` | Publishes an event | `EnablePublish` |
 | `request_<contract>` | Sends a request and returns the reply | `EnablePublish` |
-| `republish_from_error` | Moves messages from an `_error`/`_skipped`/`_dead` queue back: preview first, then `confirm=true` | `EnableRepublish` |
+| `republish_from_error` | Moves messages from an `_error`/`_skipped`/`_dead` queue or a RabbitMQ dead-letter queue back: preview first, then `confirm=true` | `EnableRepublish` |
 | `dead_letter_from_error` | Parks messages that can never succeed in the dead-letter queue (`<queue>_dead`) with a reason. Deletes nothing | `EnableRepublish` |
 | `pending_requests` | Requests from services waiting for an answer (`waitSeconds` = long poll) | `RespondTo` |
 | `reply_<response>` / `reject_request` | Answers a request or rejects it | `RespondTo` |
@@ -80,7 +80,7 @@ Clients that support MCP prompts offer these as slash commands:
 
 Prompts only tell the model what to do: every change still needs your confirmation and goes through the tools, with their permissions and audit.
 
-Every contract is also a resource, `contract://<Name>`: its description, MassTransit names and the JSON schema of the message and of its replies. Reading it needs the `read` permission.
+Every contract is also a resource, `contract://<Name>`: its description, wire format and names and the JSON schema of the message and of its replies. Reading it needs the `read` permission.
 
 ## Contracts
 
@@ -109,6 +109,28 @@ public sealed record GetOrderStatus
 - **Names:** the URN is `urn:message:Namespace:Type` and the exchange `Namespace:Type`, as in MassTransit. Use `Urn`/`Exchange` to bind to a different name.
 - **Your own contracts:** create a class library that references the `RabbitMcp.Contracts` package (the nupkg is attached to each release), build it and point the server at it: `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`. Its dependencies must sit next to the DLL. No need to rebuild the server.
 
+### Services without MassTransit
+
+A service that uses RabbitMQ directly — another language, plain RabbitMQ.Client, an older system — gets the same typed tools with `Format = MessageFormat.Raw`:
+
+```csharp
+// Plain JSON to a topic exchange → publish_stock_adjusted
+[MessageContract("Stock of a product changed.", Format = MessageFormat.Raw,
+    Exchange = "inventory", RoutingKey = "stock.adjusted", Urn = "stock.adjusted")]
+public sealed record StockAdjusted { … }
+
+// RabbitMQ RPC straight to a queue → request_get_shipping_quote
+[MessageContract("Asks the shipping desk for a quote.", Format = MessageFormat.Raw, RoutingKey = "shipping-quotes",
+    Responses = new[] { typeof(ShippingQuote), typeof(ShippingUnavailable) })]
+public sealed record GetShippingQuote { … }
+```
+
+- **Body:** the message itself as JSON (`application/json`, camelCase, enums as numbers; `[JsonPropertyName]` for other names). Message id, correlation id, the type (`Urn`, here `stock.adjusted`) and the sender (`app_id`) go into AMQP properties, `Contract-Version` into a header.
+- **Routing:** `Exchange` and `RoutingKey` the way the service expects them — there is no default. `RoutingKey` alone sends straight to that queue (the default exchange). Before sending, the server checks that the exchange or queue exists; an unroutable message is an error, never a silent loss.
+- **Requests:** RabbitMQ RPC. The request carries `reply_to` and `correlation_id` (the request id). The service replies to `reply_to` with the same `correlation_id` and names the reply type (`ShippingQuote` or its URN) in the AMQP `type` property — optional when there is only one reply type. A workflow `correlationId` goes into the `X-Correlation-Id` header.
+- **Seeing and recovering:** `peek_messages` matches plain JSON to its contract by the `type` property and shows RabbitMQ's dead-lettering history (`x-death`). `republish_from_error` on a dead-letter queue sends each message straight back to the queue that rejected it (`targetQueue` chooses another one). `contract_consumers` follows direct and topic bindings by the routing key.
+- Responder mode answers MassTransit requests only.
+
 ### Compatibility check
 
 A change that still compiles can break running services on the wire. Compare two builds:
@@ -124,7 +146,7 @@ WARNING  OrderPlaced: Breaking change without a version bump (still v1).
 INFO     OrderPlaced coupon: New optional property.
 ```
 
-- **breaking:** a removed contract, reply type, required field or enum value; a changed URN, exchange or type; a new or newly required field.
+- **breaking:** a removed contract, reply type, required field or enum value; a changed URN, format, exchange, routing key or type; a new or newly required field.
 - **warning:** a removed optional field, a field that may now be `null`, a new reply type or enum value, a breaking change without a version bump.
 - **exit code:** `0` compatible, `1` breaking changes, `2` error. The JSON structure is compared; DataAnnotations rules are not. Only compare builds you trust: loading a DLL runs its attribute code.
 
@@ -146,9 +168,11 @@ The model asks a service with `request_<contract>`, and a MassTransit consumer a
 - `response` and `responseCheck`: whether the reply satisfies its contract;
 - the consumer's exception, if MassTransit returned a `Fault<T>`.
 
+For [services without MassTransit](#services-without-masstransit) the same tool uses RabbitMQ RPC (`reply_to` + `correlation_id`).
+
 ### Responder: a service asks, the model answers
 
-`RabbitMcp__RespondTo=AskHuman` (or `Get*`) turns the server into a consumer. A service asks as usual, e.g. `GetResponse<HumanAnswer, HumanDeclined>(new AskHuman { … })`, and the model answers:
+`RabbitMcp__RespondTo=AskHuman` (or `Get*`, MassTransit request contracts) turns the server into a consumer. A service asks as usual, e.g. `GetResponse<HumanAnswer, HumanDeclined>(new AskHuman { … })`, and the model answers:
 
 1. The request shows up in `pending_requests`: the message, its contract check, the reply tools and `expiresAt`. `waitSeconds: 50` waits for the next request, so there is no need to poll.
 2. The model answers with `reply_<response>` (the reply is validated against its contract first) or `reject_request`. A rejection makes the requester's call fail at once with `RequestFaultException`.
@@ -232,8 +256,8 @@ Environment variable `RabbitMcp__Name`, or `"RabbitMcp": { "Name": … }` in `ap
 
 ## Reliability and security
 
-- **No message is lost.** Nothing is sent when validation fails. The exchange is checked first. Publisher confirms and `mandatory` turn an undeliverable message into an error.
-- **Republish:** a message leaves the error queue only after the broker confirmed the republish. The body is unchanged; only fault headers are removed. Delivery is at-least-once.
+- **No message is lost.** Nothing is sent when validation fails. The exchange (or, for the default exchange, the queue) is checked first. Publisher confirms and `mandatory` turn an undeliverable message into an error.
+- **Republish:** a message leaves the error queue only after the broker confirmed the republish. The body is unchanged; only fault and `x-death` headers are removed. Delivery is at-least-once.
 - **Dead-letter:** there is no tool that deletes messages. Poison messages move to a durable `_dead` queue the same way, after confirmation, with body and every header (fault details included) unchanged, plus `X-Dead-Lettered-By/-From/-At` and `X-Dead-Letter-Reason`. `republish_from_error` brings them back.
 - **Peek:** needs `force=true` on queues with active consumers. Messages stay in the queue but become `redelivered`.
 - **Audit:** every send, request, republish, dead-lettering and answer is recorded with its outcome and the user — failed and refused attempts too:
@@ -242,7 +266,7 @@ Environment variable `RabbitMcp__Name`, or `"RabbitMcp": { "Name": … }` in `ap
   ```
 - **Secrets:** passwords never appear in logs, errors or the audit. API keys are kept as SHA-256 hashes.
 - **HTTP:** authentication is mandatory, JWT scopes are enforced, foreign `Origin`s are refused.
-- **Message contents are not trusted.** The responder only answers MassTransit's temporary reply endpoints; republish does not follow a forged `MT-Fault-InputAddress`; text seen through peek is data, not instructions.
+- **Message contents are not trusted.** The responder only answers MassTransit's temporary reply endpoints; republish does not follow a forged `MT-Fault-InputAddress` or `x-death`; text seen through peek is data, not instructions.
 - **Least privilege:** give the RabbitMQ user only the permissions it needs; the `monitoring` tag is enough for the Management API. On a 403 the tool says what is missing.
 
 ## License

@@ -13,7 +13,9 @@ var rabbit = new Uri(builder.Configuration["RABBITMQ_URI"] ?? "amqp://guest:gues
 builder.Services
     .AddSingleton<OrderStore>()
     .AddSingleton<ApprovalQueue>()
-    .AddHostedService<ApprovalWorker>();
+    .AddHostedService<ApprovalWorker>()
+    // Not MassTransit: a plain RabbitMQ.Client service in the same process (Format = Raw in the contracts).
+    .AddHostedService<ShippingDesk>();
 
 builder.Services.AddMassTransit(x =>
 {

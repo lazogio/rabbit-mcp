@@ -2,7 +2,7 @@
 
 Contract-first MCP server for RabbitMQ (.NET 10, ModelContextProtocol 2.2, RabbitMQ.Client 7.2).
 Every `[MessageContract]` record becomes a typed MCP tool; messages use the MassTransit wire
-format but the server does **not** reference MassTransit packages.
+format (or plain JSON for `Format = MessageFormat.Raw` contracts) but the server does **not** reference MassTransit packages.
 
 The user writes in Georgian: answer in Georgian, keep code, identifiers, commit messages and
 code comments in English. Documentation is bilingual: `README.md`, `CONTRIBUTING.md`, `samples/Shop/README.md` in
@@ -33,14 +33,14 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 
 | Path | Responsibility |
 |---|---|
-| `src/RabbitMcp.Contracts` | the `[MessageContract]` attribute only (the NuGet package). **No dependencies** — services reference it. Never add contracts here. |
+| `src/RabbitMcp.Contracts` | the `[MessageContract]` attribute and the `MessageFormat` enum only (the NuGet package). **No dependencies** — services reference it. Never add contracts here. |
 | `src/RabbitMcp.Samples` | built-in sample contracts (orders), bundled with the server as the fallback when `ContractAssemblies` is empty |
 | `src/RabbitMcp.Server/Contracts` | `ContractRegistry` (naming conventions), `ContractValidator` (DataAnnotations, nested paths), `ContractAssemblyLoader` (`ContractAssemblies` option) |
-| `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish/dead-letter), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only), responder mode (`ResponderService`, `RequestInbox`, `ResponderEnvelopes`) |
+| `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, `RawMessages` (plain JSON, `RawReply`), fault + `x-death` headers, `QueueBrowser` (peek/republish/dead-letter), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only), responder mode (`ResponderService`, `RequestInbox`, `ResponderEnvelopes`) |
 | `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas); `OperatorPrompts` (MCP prompts); `ContractResources` (`contract://<Name>`) |
 | `tests/RabbitMcp.Tests` | xUnit unit tests, no broker needed |
 | `tests/RabbitMcp.ExternalContracts` | a user-style contracts DLL, loaded at runtime by loader tests and smoke tests |
-| `samples/Shop` | runnable sample (contracts, MassTransit service, compose); CI walks it with `scripts/sample-e2e.py` — keep it working when tools change |
+| `samples/Shop` | runnable sample (contracts, MassTransit service + a plain RabbitMQ.Client shipping desk, compose); CI walks it with `scripts/sample-e2e.py` — keep it working when tools change |
 | `tests/RabbitMcp.IntegrationTests` | end-to-end against real RabbitMQ + MassTransit v8 (`BrokerFixture`); test-only contracts in `TestContracts.cs` |
 
 ## Conventions (must not break)
@@ -78,7 +78,18 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   `dead_letter_from_error` (same get → confirmed publish → ack sequence as republish, all headers kept).
 - **Never trust message content for routing**: envelope addresses and AMQP headers are written by whoever published
   the message. Responder replies only to temporary reply endpoints (`CheckTemporaryExchangeAsync`); republish does not
-  follow an `MT-Fault-InputAddress` that disagrees with the error queue's owner (`RepublishTarget.Conflict`).
+  follow an `MT-Fault-InputAddress` or `x-death` that disagrees with the error queue's owner (`RepublishTarget.Conflict`).
+- **Raw contracts** (`Format = MessageFormat.Raw`, `RawMessages`): body = the message serialized with `MassTransitJson`
+  options, metadata in AMQP properties (message_id, correlation_id, type = `Urn`, app_id) plus Contract-Version /
+  X-Published-By headers. No default exchange: `Exchange` and/or `RoutingKey` are required; `Exchange` "" = the default
+  exchange (passive declare is impossible there, so the queue is checked). Requests are RabbitMQ RPC: reply_to = the
+  reply queue name, correlation_id = requestId, the workflow correlation id in `X-Correlation-Id`; the reply type comes
+  from the AMQP `type` (a single response type is assumed) and is **never guessed from the body**. `PendingRequests`
+  completes MassTransit requests only by envelope requestId and raw ones only by correlation_id. Responder mode is
+  MassTransit-only and refuses contracts with a RoutingKey. `RoutingKey` works for MassTransit contracts too.
+- **RabbitMQ dead-lettering** (`x-death`): republish targets the queue that dead-lettered the message (default exchange,
+  routing key = queue; shown as `queue:<name>`); MassTransit's `MT-Fault-InputAddress` wins when both exist. `x-death`,
+  `x-first-death-*`, `x-last-death-*` are fault headers: stripped on republish, kept on dead-letter.
 - Broker exceptions: tools may let RabbitMQ exceptions propagate — the call-tool filter in `ServerComposition` turns
   them into readable `McpException`s (`BrokerErrors`). Sending paths still catch `Exception` themselves to audit.
 - `contracts diff` compares the System.Text.Json schema with `MassTransitJson` naming; keep it in sync if the

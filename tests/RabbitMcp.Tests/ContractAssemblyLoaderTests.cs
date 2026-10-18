@@ -81,11 +81,15 @@ public class ContractAssemblyLoaderTests
     }
 
     [Fact]
-    public void The_contracts_package_holds_only_the_attribute()
+    public void The_contracts_package_holds_only_the_attribute_and_its_format()
     {
         // Services reference RabbitMcp.Contracts; the built-in samples live in RabbitMcp.Samples, bundled with the server.
-        Assert.Equal(new[] { typeof(RabbitMcp.Contracts.MessageContractAttribute) },
-            typeof(RabbitMcp.Contracts.MessageContractAttribute).Assembly.GetExportedTypes());
+        Assert.Equal(
+            new[] { typeof(RabbitMcp.Contracts.MessageContractAttribute), typeof(RabbitMcp.Contracts.MessageFormat) }
+                .Select(t => t.FullName).Order(),
+            typeof(RabbitMcp.Contracts.MessageContractAttribute).Assembly.GetExportedTypes().Select(t => t.FullName).Order());
+        // MassTransit is the default, also for contract DLLs built before Format existed.
+        Assert.Equal(0, (int)RabbitMcp.Contracts.MessageFormat.MassTransit);
         Assert.Equal("RabbitMcp.Samples", typeof(OrderSubmitted).Assembly.GetName().Name);
     }
 

@@ -26,7 +26,7 @@ public sealed class QueueBrowser(
     /// peeked messages are held they are invisible to those consumers, and they come back
     /// redelivered and possibly out of order.
     /// </summary>
-    /// <param name="targetExchangeOverride">Shown as each message's RepublishTarget (republish preview).</param>
+    /// <param name="targetExchangeOverride">Shown as each message's RepublishTarget (republish preview): an exchange or "queue:name".</param>
     public async Task<PeekResult> PeekAsync(
         string queue, int count, bool force, CancellationToken ct, string? targetExchangeOverride = null)
     {
@@ -66,9 +66,22 @@ public sealed class QueueBrowser(
         return new PeekResult(queue, messages.Count, remaining, messages);
     }
 
+    /// <summary>The explicit destination of a republish: <paramref name="targetQueue"/> wins over <paramref name="targetExchange"/>.</summary>
+    public static RepublishTarget? Override(string? targetExchange, string? targetQueue)
+    {
+        if (!string.IsNullOrWhiteSpace(targetQueue))
+        {
+            if (!string.IsNullOrWhiteSpace(targetExchange))
+                throw new McpException("Pass targetExchange or targetQueue, not both.");
+            DeadLetterNaming.Validate(targetQueue.Trim());
+            return RepublishTarget.ToQueue(targetQueue.Trim(), "targetQueue");
+        }
+        return string.IsNullOrWhiteSpace(targetExchange) ? null : new RepublishTarget(targetExchange.Trim(), "targetExchange");
+    }
+
     /// <summary>
-    /// For each message: get (no ack) → publish to its original queue's exchange with
-    /// publisher confirms → ack only after the broker confirmed. Anything that is
+    /// For each message: get (no ack) → publish to its original queue (its exchange, or the queue itself through the
+    /// default exchange) with publisher confirms → ack only after the broker confirmed. Anything that is
     /// skipped or fails stays unacked and is requeued at the end, so no message is lost.
     /// A crash between confirm and ack can produce a duplicate (at-least-once).
     /// </summary>
@@ -78,7 +91,8 @@ public sealed class QueueBrowser(
         IReadOnlyCollection<string>? onlyMessageIds,
         string? targetExchangeOverride,
         CancellationToken ct,
-        string? client = null)
+        string? client = null,
+        string? targetQueueOverride = null)
     {
         // Every per-message outcome is audited, including those reached before a failure.
         var outcomes = new List<RepublishOutcome>();
@@ -91,7 +105,8 @@ public sealed class QueueBrowser(
 
         try
         {
-            var result = await RepublishCoreAsync(errorQueue, count, onlyMessageIds, targetExchangeOverride, outcomes, ct);
+            var target = Override(targetExchangeOverride, targetQueueOverride);
+            var result = await RepublishCoreAsync(errorQueue, count, onlyMessageIds, target, outcomes, ct);
             AuditOutcomes();
             return result;
         }
@@ -103,7 +118,8 @@ public sealed class QueueBrowser(
             var moved = outcomes.Count(o => o.Status == "republished");
             var detail = (error?.Message ?? "cancelled") +
                          $" {moved} message(s) were republished before that; the others remain in {errorQueue}.";
-            audit.Write(audit.Event(AuditActions.Republish, "error", client, exchange: targetExchangeOverride,
+            audit.Write(audit.Event(AuditActions.Republish, "error", client,
+                exchange: targetQueueOverride is { Length: > 0 } q ? RepublishTarget.QueuePrefix + q : targetExchangeOverride,
                 queue: errorQueue, detail: detail));
             if (error is null || ReferenceEquals(error, ex))
                 throw;
@@ -115,7 +131,7 @@ public sealed class QueueBrowser(
         string errorQueue,
         int count,
         IReadOnlyCollection<string>? onlyMessageIds,
-        string? targetExchangeOverride,
+        RepublishTarget? targetOverride,
         List<RepublishOutcome> outcomes,
         CancellationToken ct)
     {
@@ -152,29 +168,35 @@ public sealed class QueueBrowser(
                     continue;
                 }
 
-                var resolved = targetExchangeOverride is null ? RepublishTargetResolver.Resolve(errorQueue, props.Headers) : null;
+                var resolved = targetOverride is null ? RepublishTargetResolver.Resolve(errorQueue, props.Headers) : null;
                 if (resolved?.Conflict is { } conflict)
                 {
                     toRequeue.Add(delivery.DeliveryTag);
-                    outcomes.Add(new RepublishOutcome(messageId, "skipped", resolved.Exchange, conflict));
+                    outcomes.Add(new RepublishOutcome(messageId, "skipped", resolved.Display, conflict));
                     continue;
                 }
 
-                var target = targetExchangeOverride ?? resolved?.Exchange;
-                if (target is null)
+                var destination = targetOverride ?? resolved;
+                if (destination is null)
                 {
                     toRequeue.Add(delivery.DeliveryTag);
                     outcomes.Add(new RepublishOutcome(messageId, "skipped", null,
-                        "Cannot determine the original queue (no MT-Fault-InputAddress header and no _error/_skipped suffix). Pass targetExchange."));
+                        "Cannot determine the original queue (no MT-Fault-InputAddress or x-death header and no " +
+                        "_error/_skipped/_dead suffix). Pass targetExchange or targetQueue."));
                     continue;
                 }
 
+                var target = destination.Display;
                 if (!exchangeExists.TryGetValue(target, out var exists))
-                    exchangeExists[target] = exists = await connection.ExchangeExistsAsync(target, ct);
+                    exchangeExists[target] = exists = destination.IsQueue
+                        ? await connection.GetQueueAsync(destination.RoutingKey, ct) is not null
+                        : await connection.ExchangeExistsAsync(destination.Exchange, ct);
                 if (!exists)
                 {
                     toRequeue.Add(delivery.DeliveryTag);
-                    outcomes.Add(new RepublishOutcome(messageId, "failed", target, $"Exchange '{target}' does not exist."));
+                    outcomes.Add(new RepublishOutcome(messageId, "failed", target, destination.IsQueue
+                        ? $"Queue '{destination.RoutingKey}' does not exist."
+                        : $"Exchange '{destination.Exchange}' does not exist."));
                     continue;
                 }
 
@@ -199,23 +221,26 @@ public sealed class QueueBrowser(
                 try
                 {
                     // Original body bytes, never re-serialized or truncated.
-                    await channel.BasicPublishAsync(target, routingKey: "", mandatory: true, newProps, delivery.Body, ct);
+                    await channel.BasicPublishAsync(destination.Exchange, destination.RoutingKey, mandatory: true, newProps,
+                        delivery.Body, ct);
                 }
                 catch (OperationInterruptedException ex) when (RabbitConnection.IsNotFound(ex))
                 {
                     Telemetry.Fail(activity, "exchange deleted");
                     // The broker closed the channel: every message not yet acked goes back to the error queue.
-                    connection.InvalidateExchange(target);
+                    connection.InvalidateExchange(destination.Exchange);
                     throw new McpException(
-                        $"Exchange '{target}' was deleted during the republish. {republished} message(s) were republished " +
-                        $"before that; all others remain in {errorQueue}.");
+                        $"Exchange '{destination.Exchange}' was deleted during the republish. {republished} message(s) were " +
+                        $"republished before that; all others remain in {errorQueue}.");
                 }
                 catch (PublishException ex)
                 {
                     Telemetry.Fail(activity, ex.IsReturn ? "not routed" : "rejected");
                     toRequeue.Add(delivery.DeliveryTag);
                     outcomes.Add(new RepublishOutcome(messageId, "failed", target, ex.IsReturn
-                        ? $"Not routed: no queue is bound to exchange '{target}'. Message kept in {errorQueue}."
+                        ? destination.IsQueue
+                            ? $"Not routed: queue '{destination.RoutingKey}' no longer exists. Message kept in {errorQueue}."
+                            : $"Not routed: no queue is bound to exchange '{destination.Exchange}'. Message kept in {errorQueue}."
                         : $"Broker rejected the publish. Message kept in {errorQueue}."));
                     continue;
                 }
@@ -223,7 +248,7 @@ public sealed class QueueBrowser(
                 await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
                 republished++;
                 outcomes.Add(new RepublishOutcome(messageId, "republished", target, null));
-                logger.LogInformation("Republished {MessageId} from {ErrorQueue} to {Exchange}", messageId, errorQueue, target);
+                logger.LogInformation("Republished {MessageId} from {ErrorQueue} to {Target}", messageId, errorQueue, target);
             }
         }
         finally

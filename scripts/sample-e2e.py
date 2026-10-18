@@ -9,6 +9,7 @@ Walks through the Shop sample the way a model would, over MCP Streamable HTTP:
      and a BROKEN- item → dead_letter_from_error → parked in order-placed_dead (nothing deleted)
   4. publish_order_placed above the limit → pending_requests → reply_order_approved → Approved
   5. another large order → reject_request → Rejected with the reason
+  6. request_get_shipping_quote → a plain RabbitMQ service (no MassTransit) answers over RabbitMQ RPC (Format = Raw)
 
 usage: scripts/sample-e2e.py <mcp-url> <api-key>
 """
@@ -93,17 +94,18 @@ def main():
     tools = {t["name"] for t in rpc("tools/list")["tools"]}
     expected = {"publish_order_placed", "request_get_order_status", "peek_messages", "republish_from_error",
                 "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request", "dead_letter_from_error",
-                "find_message", "recent_activity"}
+                "find_message", "recent_activity", "request_get_shipping_quote"}
     assert expected <= tools, f"missing tools: {expected - tools}"
     assert "request_approve_large_order" not in tools, "PublishDeny should hide request_approve_large_order"
     step(f"{len(tools)} tools, including the shop's contracts")
 
     def shop_consuming():
         statuses = {c["contract"]: c["status"] for c in call("contract_consumers")["contracts"]}
-        return statuses.get("OrderPlaced") == "ok" and statuses.get("GetOrderStatus") == "ok"
+        return (statuses.get("OrderPlaced") == "ok" and statuses.get("GetOrderStatus") == "ok"
+                and statuses.get("GetShippingQuote") == "ok")
 
 
-    eventually("shop service consuming OrderPlaced and GetOrderStatus", shop_consuming, 120)
+    eventually("shop service consuming OrderPlaced, GetOrderStatus and GetShippingQuote", shop_consuming, 120)
     eventually("responder listening", lambda: call("pending_requests")["status"] == "listening")
     step("shop service is consuming, responder is listening")
 
@@ -180,6 +182,17 @@ def main():
     order = eventually("order rejected", lambda: (s := status_of(rejected)) and s["status"] == "Rejected" and s)
     assert "credit limit" in order.get("note", ""), order
     step(f"reject_request → shop stored: {order['status']} ({order['note']})")
+
+    # --- 5. a service without MassTransit: plain JSON + RabbitMQ RPC (reply_to / correlation_id)
+    contracts = {c["name"]: c for c in call("list_contracts")["contracts"]}
+    assert contracts["GetShippingQuote"]["format"] == "raw", contracts["GetShippingQuote"]
+    quote = call("request_get_shipping_quote", message={"country": "GE", "weightKg": 2}, timeoutSeconds=30)
+    assert quote["status"] == "responded" and quote["responseType"] == "ShippingQuote", quote
+    assert quote["responseCheck"]["valid"] and quote["response"]["carrier"] == "Georgian Post", quote
+    unavailable = call("request_get_shipping_quote", message={"country": "AQ", "weightKg": 1}, timeoutSeconds=30)
+    assert unavailable["responseType"] == "ShippingUnavailable", unavailable
+    step(f"request_get_shipping_quote (raw RPC, no MassTransit): {quote['response']['carrier']} "
+         f"{quote['response']['price']} in {quote['response']['days']} days; AQ → {unavailable['response']['reason']}")
 
     print("ok: the Shop sample works end to end over MCP")
 

@@ -25,6 +25,15 @@ public sealed record ResponderContracts(IReadOnlyList<ContractDescriptor> Reques
     {
         var policy = new PublishPolicy(respondTo, null);
         var requests = registry.Contracts.Where(c => c.IsRequest && policy.IsAllowed(c)).ToArray();
+        if (requests.Where(c => c.IsRaw).Select(c => c.Name).ToArray() is { Length: > 0 } raw)
+            throw new RabbitMcp.Server.Hosting.StartupException(
+                $"RabbitMcp:RespondTo matches raw contract(s) {string.Join(", ", raw)}: responder mode answers MassTransit " +
+                "requests only. Narrow RespondTo to MassTransit request contracts.");
+        // The responder binds its queue to the contract's fanout exchange, as MassTransit endpoints do.
+        if (requests.Where(c => c.RoutingKey.Length > 0).Select(c => c.Name).ToArray() is { Length: > 0 } routed)
+            throw new RabbitMcp.Server.Hosting.StartupException(
+                $"RabbitMcp:RespondTo matches contract(s) with a RoutingKey ({string.Join(", ", routed)}): responder mode " +
+                "listens on MassTransit's fanout exchange of a contract and does not support routing keys.");
         if (requests.Length == 0)
             throw new RabbitMcp.Server.Hosting.StartupException(
                 $"RabbitMcp:RespondTo '{respondTo}' matches no request contract (contracts with Responses).");

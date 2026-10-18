@@ -49,19 +49,16 @@ public sealed class ContractPublisher(
         var contract = contracts.Get(typeof(T));
         var client = AuditLog.ClientOf(server, user);
         var messageId = Guid.NewGuid();
-        using var activity = Telemetry.StartSend("publish", contract.Exchange);
+        using var activity = Telemetry.StartSend("publish", contract.DestinationName);
         activity?.SetTag("messaging.message.id", messageId.ToString());
         activity?.SetTag("rabbitmcp.contract", contract.Name);
         activity?.SetTag("rabbitmcp.client", client);
-        MassTransitEnvelope envelope;
+        Outgoing outgoing;
         try
         {
             await EnsureSendableAsync(contract, message, correlationId, cancellationToken);
-
-            envelope = envelopes.Create(
-                contract, message, connection.BrokerUri, options.Value.ClientName, messageId, correlationId);
-
-            await SendAsync(contract, envelope, timeToLive: null, cancellationToken);
+            outgoing = Build(contract, message, messageId, correlationId, request: null);
+            await SendAsync(contract, outgoing, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -69,26 +66,29 @@ public sealed class ContractPublisher(
             var error = ex is OperationCanceledException ? null : BrokerErrors.ToMcp(ex);
             var detail = error?.Message ?? "cancelled (the message may or may not have been sent)";
             Telemetry.Fail(activity, detail);
-            audit.Write(audit.Event(AuditActions.Publish, "error", client, contract.Name, contract.Exchange,
-                correlationId: correlationId, detail: detail, message: message, messageType: typeof(T)));
+            audit.Write(audit.Event(AuditActions.Publish, "error", client, contract.Name, AuditExchange(contract),
+                AuditQueue(contract), correlationId: correlationId, detail: detail, message: message, messageType: typeof(T)));
             if (error is null || ReferenceEquals(error, ex))
                 throw;
             throw error;
         }
 
-        logger.LogInformation("Published {Contract} {MessageId} to {Exchange}", contract.Name, messageId, contract.Exchange);
-        audit.Write(audit.Event(AuditActions.Publish, "sent", client, contract.Name, contract.Exchange,
-            messageId: envelope.MessageId, correlationId: correlationId, message: message, messageType: typeof(T)));
+        logger.LogInformation("Published {Contract} {MessageId} to {Destination}", contract.Name, messageId, contract.Destination);
+        audit.Write(audit.Event(AuditActions.Publish, "sent", client, contract.Name, AuditExchange(contract),
+            AuditQueue(contract), messageId: outgoing.MessageId, correlationId: correlationId, message: message,
+            messageType: typeof(T)));
 
         return new PublishResult(
-            MessageId: envelope.MessageId!,
-            ConversationId: envelope.ConversationId!,
+            MessageId: outgoing.MessageId,
+            ConversationId: outgoing.ConversationId,
             CorrelationId: correlationId,
             Contract: contract.Name,
             ContractVersion: contract.Version,
+            Format: contract.FormatName,
             MessageType: contract.MessageTypeUrn,
             Exchange: contract.Exchange,
-            SentTimeUtc: envelope.SentTime!.Value,
+            RoutingKey: contract.RoutingKey.Length == 0 ? null : contract.RoutingKey,
+            SentTimeUtc: outgoing.SentTimeUtc,
             Routed: true);
     }
 
@@ -96,6 +96,7 @@ public sealed class ContractPublisher(
     /// MassTransit request client semantics: the request carries requestId + responseAddress
     /// (this server's temporary reply queue) and a TTL equal to the timeout; the consumer's
     /// RespondAsync (or its Fault) comes back to that queue and is matched by requestId.
+    /// Raw contracts use RabbitMQ RPC instead: reply_to = the same queue, correlation_id = requestId.
     /// </summary>
     public async Task<RequestResult> RequestAsync<T>(
         [Description("The request message. Must satisfy the contract schema and its validation rules.")]
@@ -115,11 +116,11 @@ public sealed class ContractPublisher(
         var requestId = Guid.NewGuid();
 
         void Audit(string outcome, string? detail = null) =>
-            audit.Write(audit.Event(AuditActions.Request, outcome, client, contract.Name, contract.Exchange,
-                messageId: messageId.ToString(), requestId: requestId.ToString(), correlationId: correlationId,
-                detail: detail, message: message, messageType: typeof(T)));
+            audit.Write(audit.Event(AuditActions.Request, outcome, client, contract.Name, AuditExchange(contract),
+                AuditQueue(contract), messageId: messageId.ToString(), requestId: requestId.ToString(),
+                correlationId: correlationId, detail: detail, message: message, messageType: typeof(T)));
 
-        using var activity = Telemetry.StartSend("request", contract.Exchange, ActivityKind.Client);
+        using var activity = Telemetry.StartSend("request", contract.DestinationName, ActivityKind.Client);
         activity?.SetTag("messaging.message.id", messageId.ToString());
         activity?.SetTag("rabbitmcp.request_id", requestId.ToString());
         activity?.SetTag("rabbitmcp.contract", contract.Name);
@@ -163,18 +164,17 @@ public sealed class ContractPublisher(
         var timeout = TimeSpan.FromSeconds(timeoutSeconds);
 
         // Listen first, then send: a fast reply can never be missed.
-        var pending = await replies.RegisterAsync(requestId, cancellationToken);
+        var pending = await replies.RegisterAsync(requestId, cancellationToken, contract.Format);
         try
         {
-            var envelope = envelopes.Create(
-                contract, message, connection.BrokerUri, options.Value.ClientName, messageId, correlationId,
-                new RequestEnvelopeInfo(requestId, pending.ResponseAddress, time.GetUtcNow().UtcDateTime + timeout));
+            var outgoing = Build(contract, message, messageId, correlationId,
+                new RequestTarget(requestId, pending, time.GetUtcNow().UtcDateTime + timeout, timeout));
 
             var started = time.GetTimestamp();
-            await SendAsync(contract, envelope, timeToLive: timeout, cancellationToken);
-            logger.LogInformation("Sent request {Contract} {RequestId} to {Exchange}", contract.Name, requestId, contract.Exchange);
+            await SendAsync(contract, outgoing, cancellationToken);
+            logger.LogInformation("Sent request {Contract} {RequestId} to {Destination}", contract.Name, requestId, contract.Destination);
 
-            MassTransitEnvelope reply;
+            ReceivedReply reply;
             try
             {
                 reply = await pending.Reply.WaitAsync(timeout, time, cancellationToken);
@@ -186,7 +186,10 @@ public sealed class ContractPublisher(
                     null, null, null, null, null, null,
                     (long)time.GetElapsedTime(started).TotalMilliseconds,
                     $"No reply within {timeoutSeconds}s. The request had the same TTL, so the broker drops it if no consumer " +
-                    "picked it up. Check the consumer's queue and its _error queue with queue_stats / peek_messages.");
+                    (contract.IsRaw
+                        ? "picked it up. Check the consumer's queue with contract_consumers / queue_stats, and that the replier " +
+                          "answers to reply_to with the request's correlation_id."
+                        : "picked it up. Check the consumer's queue and its _error queue with queue_stats / peek_messages."));
             }
 
             var elapsed = (long)time.GetElapsedTime(started).TotalMilliseconds;
@@ -194,18 +197,65 @@ public sealed class ContractPublisher(
 
             return new RequestResult(
                 requestId.ToString(), messageId.ToString(), contract.Name, r.Status,
-                r.ResponseType, reply.MessageType, r.Response, r.ResponseCheck, r.Fault, r.RespondedBy, elapsed,
+                r.ResponseType, reply.MessageTypes, r.Response, r.ResponseCheck, r.Fault, r.RespondedBy, elapsed,
                 r.ResponseCheck is { Valid: false }
                     ? $"The consumer replied with a {r.ResponseType} that violates its contract."
-                    : r.Status == "responded" && r.ResponseCheck is null
-                        ? $"Reply type is not one of the declared responses ({string.Join(", ", contract.Responses.Select(x => x.Name))})."
-                        : null);
+                    : r.Note
+                      ?? (r.Status == "responded" && r.ResponseCheck is null
+                          ? $"Reply type is not one of the declared responses ({string.Join(", ", contract.Responses.Select(x => x.Name))})."
+                          : null));
         }
         finally
         {
             replies.Forget(requestId);
         }
     }
+
+    /// <summary>What a request adds to the outgoing message: where the reply goes and when the request expires.</summary>
+    private sealed record RequestTarget(Guid RequestId, PendingReply Reply, DateTime ExpiresUtc, TimeSpan TimeToLive);
+
+    /// <summary>The message as it goes on the wire.</summary>
+    private sealed record Outgoing(BasicProperties Properties, ReadOnlyMemory<byte> Body, string MessageId,
+        string? ConversationId, DateTime SentTimeUtc);
+
+    /// <summary>MassTransit envelope, or plain JSON with AMQP properties for raw contracts.</summary>
+    private Outgoing Build(ContractDescriptor contract, object message, Guid messageId, string? correlationId, RequestTarget? request)
+    {
+        var now = time.GetUtcNow();
+        var clientName = options.Value.ClientName;
+
+        if (contract.IsRaw)
+        {
+            var props = RawMessages.CreateProperties(contract, messageId, correlationId, clientName, now,
+                request is null ? null : new RawRequestInfo(request.RequestId, request.Reply.QueueName), request?.TimeToLive);
+            return new Outgoing(props, RawMessages.Serialize(contract, message), messageId.ToString(), null, now.UtcDateTime);
+        }
+
+        var envelope = envelopes.Create(contract, message, connection.BrokerUri, clientName, messageId, correlationId,
+            request is null ? null : new RequestEnvelopeInfo(request.RequestId, request.Reply.ResponseAddress, request.ExpiresUtc));
+        var properties = new BasicProperties
+        {
+            ContentType = MassTransitJson.ContentType,
+            MessageId = envelope.MessageId,
+            CorrelationId = envelope.CorrelationId,
+            DeliveryMode = DeliveryModes.Persistent,
+            Timestamp = new AmqpTimestamp(now.ToUnixTimeSeconds()),
+            Expiration = request is null
+                ? null
+                : ((long)request.TimeToLive.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
+            Headers = new Dictionary<string, object?>
+            {
+                [HeaderNames.ContractVersion] = contract.Version,
+                [HeaderNames.PublishedBy] = clientName,
+            },
+        };
+        return new Outgoing(properties, EnvelopeFactory.Serialize(envelope), envelope.MessageId!, envelope.ConversationId,
+            envelope.SentTime!.Value);
+    }
+
+    private static string? AuditExchange(ContractDescriptor contract) => contract.UsesDefaultExchange ? null : contract.Exchange;
+
+    private static string? AuditQueue(ContractDescriptor contract) => contract.UsesDefaultExchange ? contract.RoutingKey : null;
 
     private async Task EnsureSendableAsync(ContractDescriptor contract, object message, string? correlationId, CancellationToken ct)
     {
@@ -223,46 +273,42 @@ public sealed class ContractPublisher(
         if (correlationId is not null && !Guid.TryParse(correlationId, out _))
             throw new McpException("correlationId must be a GUID.");
 
+        // The default exchange always exists (and cannot be declared, not even passively): check the queue instead.
+        if (contract.UsesDefaultExchange)
+        {
+            if (await connection.GetQueueAsync(contract.RoutingKey, ct) is null)
+                throw new McpException(
+                    $"Queue '{contract.RoutingKey}' does not exist, so no service consumes {contract.Name} yet. Nothing was sent.");
+            return;
+        }
+
         // Publishing to a missing exchange closes the channel and loses the message.
         if (!await connection.ExchangeExistsAsync(contract.Exchange, ct))
             throw new McpException(
-                $"Exchange '{contract.Exchange}' does not exist, so no service consumes {contract.Name} yet " +
-                "(MassTransit creates it when a consumer starts). Nothing was sent.");
+                $"Exchange '{contract.Exchange}' does not exist, so no service consumes {contract.Name} yet" +
+                (contract.IsRaw ? "." : " (MassTransit creates it when a consumer starts).") + " Nothing was sent.");
     }
 
     /// <summary>Publisher confirms + mandatory: an unroutable message is an error, not a silent drop.</summary>
-    private async Task SendAsync(ContractDescriptor contract, MassTransitEnvelope envelope, TimeSpan? timeToLive, CancellationToken ct)
+    private async Task SendAsync(ContractDescriptor contract, Outgoing outgoing, CancellationToken ct)
     {
-        var props = new BasicProperties
-        {
-            ContentType = MassTransitJson.ContentType,
-            MessageId = envelope.MessageId,
-            CorrelationId = envelope.CorrelationId,
-            DeliveryMode = DeliveryModes.Persistent,
-            Timestamp = new AmqpTimestamp(time.GetUtcNow().ToUnixTimeSeconds()),
-            Expiration = timeToLive is { } ttl
-                ? ((long)ttl.TotalMilliseconds).ToString(CultureInfo.InvariantCulture)
-                : null,
-            Headers = new Dictionary<string, object?>
-            {
-                [HeaderNames.ContractVersion] = contract.Version,
-                [HeaderNames.PublishedBy] = options.Value.ClientName,
-            },
-        };
         // The consumer's span becomes a child of ours (traceparent + MassTransit's MT-Activity-Id).
-        Telemetry.Inject(Activity.Current, props.Headers!);
+        Telemetry.Inject(Activity.Current, outgoing.Properties.Headers!);
 
         await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
         try
         {
             await channel.BasicPublishAsync(
-                contract.Exchange, routingKey: "", mandatory: true, props,
-                EnvelopeFactory.Serialize(envelope), ct);
+                contract.Exchange, contract.RoutingKey, mandatory: true, outgoing.Properties, outgoing.Body, ct);
         }
         catch (PublishException ex) when (ex.IsReturn)
         {
-            throw new McpException(
-                $"Exchange '{contract.Exchange}' exists but no queue is bound to it; the broker returned the message. Nothing was delivered.");
+            throw new McpException(contract.UsesDefaultExchange
+                ? $"Queue '{contract.RoutingKey}' no longer exists; the broker returned the message. Nothing was delivered."
+                : contract.RoutingKey.Length == 0
+                    ? $"Exchange '{contract.Exchange}' exists but no queue is bound to it; the broker returned the message. Nothing was delivered."
+                    : $"No queue is bound to exchange '{contract.Exchange}' for routing key '{contract.RoutingKey}'; the broker " +
+                      "returned the message. Nothing was delivered.");
         }
         catch (OperationInterruptedException ex) when (RabbitConnection.IsNotFound(ex))
         {
@@ -309,14 +355,21 @@ public static class ContractToolFactory
 
     private static string PublishDescription(ContractDescriptor c) =>
         $"{c.Description}\n\n" +
-        $"Publishes a {c.MessageTypeUrn} message (contract v{c.Version}) to exchange '{c.Exchange}' in MassTransit format. " +
+        (c.IsRaw
+            ? $"Publishes the message as plain JSON (AMQP type {c.MessageTypeUrn}, contract v{c.Version}) to {c.Destination}. "
+            : $"Publishes a {c.MessageTypeUrn} message (contract v{c.Version}) to {c.Destination} in MassTransit format. ") +
         "The message is validated against the contract first; an invalid message is rejected and nothing is sent. " +
         "Use validate_message to check a message without publishing.";
 
     private static string RequestDescription(ContractDescriptor c) =>
         $"{c.Description}\n\n" +
-        $"Sends a {c.MessageTypeUrn} request (contract v{c.Version}) to exchange '{c.Exchange}' and waits for the consumer's reply " +
-        $"(MassTransit request/response). Possible replies: {string.Join(", ", c.Responses.Select(r => r.Name))}; " +
-        "the reply is validated against its contract. If the consumer throws, Status is 'faulted' with the exception details. " +
+        (c.IsRaw
+            ? $"Sends the request as plain JSON (AMQP type {c.MessageTypeUrn}, contract v{c.Version}) to {c.Destination} with " +
+              "reply_to and correlation_id (RabbitMQ RPC) and waits for the reply. " +
+              $"Possible replies: {string.Join(", ", c.Responses.Select(r => r.Name))}, named by the reply's AMQP type; " +
+              "the reply is validated against its contract. "
+            : $"Sends a {c.MessageTypeUrn} request (contract v{c.Version}) to {c.Destination} and waits for the consumer's reply " +
+              $"(MassTransit request/response). Possible replies: {string.Join(", ", c.Responses.Select(r => r.Name))}; " +
+              "the reply is validated against its contract. If the consumer throws, Status is 'faulted' with the exception details. ") +
         "If nobody answers in time, Status is 'timeout'.";
 }

@@ -11,7 +11,7 @@ using RabbitMcp.Server.Messaging;
 namespace RabbitMcp.Server.Tools;
 
 /// <summary>
-/// Every contract as an MCP resource (contract://Name): what it means, its MassTransit names and the JSON schema of the
+/// Every contract as an MCP resource (contract://Name): what it means, its wire format and names and the JSON schema of the
 /// message and of each reply — the same schema the tools use. Clients can show or attach them without a tool call.
 /// </summary>
 public static class ContractResources
@@ -38,18 +38,22 @@ public static class ContractResources
             ["kind"] = contract.IsRequest ? "request" : "event",
             ["tool"] = contract.ToolName,
             ["version"] = contract.Version,
+            ["format"] = contract.FormatName,
             ["messageType"] = contract.MessageTypeUrn,
             ["exchange"] = contract.Exchange,
             ["description"] = contract.Description,
             ["schema"] = Schema(contract.Type),
         };
+        if (contract.RoutingKey.Length > 0)
+            json["routingKey"] = contract.RoutingKey;
         if (contract.IsRequest)
         {
             json["responses"] = new JsonArray([.. contract.Responses.Select(r => (JsonNode)new JsonObject
             {
                 ["name"] = r.Name,
                 ["messageType"] = r.MessageTypeUrn,
-                ["replyTool"] = ResponderContracts.ReplyToolName(r),
+                // Responder mode (reply_*) answers MassTransit requests only.
+                ["replyTool"] = contract.IsRaw ? null : ResponderContracts.ReplyToolName(r),
                 ["schema"] = Schema(r.Type),
             })]);
         }

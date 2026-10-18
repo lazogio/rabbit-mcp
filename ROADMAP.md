@@ -93,10 +93,18 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
 30. ✅ English documentation (default chosen, 2026-10-18): `README.md`, `CONTRIBUTING.md`, `samples/Shop/README.md`
     in English, Georgian twins in `*.ka.md` with a language switch at the top; both kept in sync.
 
-## Phase 11 — Reach (`phase-11/reach`) ⬜
-31. ⬜ Raw JSON contracts (`[MessageContract(Format = Raw)]`): publish/request without the MassTransit envelope
-    for services that do not use MassTransit (routing key, headers and correlation configurable).
-32. ⬜ Several brokers/vhosts in one server (`Brokers__prod__Uri`, `Brokers__staging__Uri`): tools take `broker`,
-    roles can be limited per broker. **Decision needed:** worth it, or one server per broker (works today).
-33. ⬜ Listing in the official MCP registry (`server.json`) — needs a published release, so after the release.
-
+## Phase 11 — Reach (`phase-11/raw`) ✅ (2026-10-18)
+31. ✅ Raw JSON contracts (`[MessageContract(Format = MessageFormat.Raw, Exchange, RoutingKey)]`) for services
+    without MassTransit: the body is the message itself (`application/json`), message id / correlation id / type
+    (`Urn`) / app id in AMQP properties; no default exchange (`RoutingKey` alone = the default exchange → that queue,
+    checked to exist); requests are RabbitMQ RPC (`reply_to` + `correlation_id`, reply type from the AMQP `type`
+    property, never guessed from the body). Around it: `RoutingKey` for every contract; `contract_consumers` matches
+    direct/topic bindings and follows the default exchange; `peek_messages` matches plain JSON by `type` and shows
+    `x-death`; `republish_from_error` sends RabbitMQ-dead-lettered messages back to the queue that rejected them
+    (`targetQueue` override, same conflict rule as `MT-Fault-InputAddress`); `contracts diff` reports format and
+    routing-key changes; responder mode stays MassTransit-only. Shop sample: a plain RabbitMQ.Client shipping desk.
+32. ⏸ Several brokers/vhosts in one server — **decided 2026-10-18: not doing it.** One rabbit-mcp per broker
+    (`claude mcp add rabbit-prod …`, `rabbit-staging …`) already works, keeps credentials, roles and audit separate
+    per environment, and a model cannot send to the wrong broker by passing the wrong `broker` argument.
+33. ⏸ Listing in the official MCP registry (`server.json`, `mcp-publisher`) — needs a published release; after the
+    first release, when the owner decides to release.

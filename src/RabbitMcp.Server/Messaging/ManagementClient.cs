@@ -127,16 +127,22 @@ public sealed class ManagementClient : IDisposable
     }
 
     /// <summary>
-    /// Bindings whose source is this exchange; null if the exchange does not exist. (The bindings endpoint itself
-    /// answers [] for a missing exchange, so existence is checked first.)
+    /// An exchange's type and the bindings whose source it is; null if the exchange does not exist. (The bindings
+    /// endpoint itself answers [] for a missing exchange, so existence is checked first.)
     /// </summary>
-    public async Task<IReadOnlyList<ManagementBinding>?> GetSourceBindingsAsync(string exchange, CancellationToken ct)
+    public async Task<ManagementExchange?> GetExchangeAsync(string exchange, CancellationToken ct)
     {
         var path = $"api/exchanges/{Uri.EscapeDataString(_vhost)}/{Uri.EscapeDataString(exchange)}";
-        if (await GetAsync<System.Text.Json.Nodes.JsonObject>(path, NotFoundIs.Null, ct) is null)
+        if (await GetAsync<System.Text.Json.Nodes.JsonObject>(path, NotFoundIs.Null, ct) is not { } info)
             return null;
-        return await GetAsync<IReadOnlyList<ManagementBinding>>(path + "/bindings/source", NotFoundIs.Null, ct) ?? [];
+        var type = info["type"] is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var t) ? t : "fanout";
+        var bindings = await GetAsync<IReadOnlyList<ManagementBinding>>(path + "/bindings/source", NotFoundIs.Null, ct) ?? [];
+        return new ManagementExchange(exchange, type, bindings);
     }
+
+    /// <summary>Bindings whose source is this exchange; null if the exchange does not exist.</summary>
+    public async Task<IReadOnlyList<ManagementBinding>?> GetSourceBindingsAsync(string exchange, CancellationToken ct) =>
+        (await GetExchangeAsync(exchange, ct))?.Bindings;
 
     /// <summary>One queue's statistics; null if it does not exist.</summary>
     public Task<ManagementQueue?> GetQueueAsync(string queue, CancellationToken ct) =>
@@ -204,6 +210,9 @@ public sealed record ManagementQueue(
     [property: JsonPropertyName("messages_ready")] long? MessagesReady,
     [property: JsonPropertyName("messages_unacknowledged")] long? MessagesUnacknowledged,
     [property: JsonPropertyName("consumers")] long? Consumers);
+
+/// <summary>An exchange (GET /api/exchanges/{vhost}/{name}) with its outgoing bindings.</summary>
+public sealed record ManagementExchange(string Name, string Type, IReadOnlyList<ManagementBinding> Bindings);
 
 /// <summary>One item of GET /api/exchanges/{vhost}/{name}/bindings/source.</summary>
 public sealed record ManagementBinding(

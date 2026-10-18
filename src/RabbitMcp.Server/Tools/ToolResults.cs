@@ -12,12 +12,14 @@ namespace RabbitMcp.Server.Tools;
 
 public sealed record PublishResult(
     [property: Description("MessageId of the published message.")] string MessageId,
-    string ConversationId,
+    [property: Description("MassTransit conversationId; null for raw messages.")] string? ConversationId,
     string? CorrelationId,
     string Contract,
     int ContractVersion,
-    string MessageType,
-    string Exchange,
+    [property: Description("masstransit (envelope) or raw (plain JSON).")] string Format,
+    [property: Description("Message type URN (MassTransit) or AMQP type property (raw).")] string MessageType,
+    [property: Description("Exchange the message was published to; empty for the default exchange.")] string Exchange,
+    [property: Description("Routing key; for the default exchange the destination queue. Null when empty.")] string? RoutingKey,
     DateTime SentTimeUtc,
     [property: Description("True when the broker confirmed and routed the message to at least one queue.")] bool Routed);
 
@@ -26,8 +28,10 @@ public sealed record ContractInfo(
     [property: Description("event (publish_*) or request (request_*, waits for a reply)")] string Kind,
     string ToolName,
     int Version,
-    string MessageTypeUrn,
-    string Exchange,
+    [property: Description("masstransit (MassTransit envelope) or raw (plain JSON, AMQP properties; requests use reply_to/correlation_id).")] string Format,
+    [property: Description("MassTransit message type URN, or the AMQP type property of raw messages.")] string MessageTypeUrn,
+    [property: Description("Exchange messages are published to; empty for the default exchange (RoutingKey = queue).")] string Exchange,
+    [property: Description("Routing key of every message; null when empty.")] string? RoutingKey,
     string Description,
     [property: Description("For requests: reply types the consumer may answer with.")] IReadOnlyList<string> Responses,
     [property: Description("Whether you can send it: EnablePublish, PublishAllow/PublishDeny and your roles.")] bool Sendable);
@@ -66,7 +70,8 @@ public sealed record PeekedMessage(
     DateTime? SentTimeUtc,
     [property: Description("Contract matched by message type, with validation result. Null if no registered contract matches.")] ContractCheck? Contract,
     [property: Description("MassTransit fault details, present for messages in _error/_skipped queues.")] FaultInfo? Fault,
-    [property: Description("Exchange republish_from_error would send this message to.")] string? RepublishTarget,
+    [property: Description("RabbitMQ dead-lettering history (x-death), newest first: why a queue rejected, expired or dropped it.")] IReadOnlyList<DeathEvent>? DeadLettered,
+    [property: Description("Where republish_from_error would send this message: an exchange, or 'queue:<name>' for a queue reached directly (default exchange).")] string? RepublishTarget,
     [property: Description("Why republish_from_error will not use RepublishTarget without an explicit targetExchange.")] string? RepublishWarning,
     [property: Description("The message (envelope 'message' field, or the whole JSON body).")] JsonElement? Payload,
     [property: Description("Body as text when it is not JSON or is too large (truncated for display only).")] string? RawBody,
@@ -83,7 +88,7 @@ public sealed record PeekResult(
 public sealed record RepublishOutcome(
     string? MessageId,
     [property: Description("republished | skipped | failed")] string Status,
-    string? TargetExchange,
+    [property: Description("Exchange, or 'queue:<name>' for a queue reached directly (default exchange).")] string? TargetExchange,
     string? Detail);
 
 public sealed record RepublishResult(

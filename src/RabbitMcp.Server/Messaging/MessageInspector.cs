@@ -47,17 +47,24 @@ public sealed class MessageInspector(ContractRegistry contracts, IOptions<Rabbit
             rawBody = Encoding.UTF8.GetString(body);
         }
 
+        // Raw (plain JSON) messages name their type in the AMQP type property instead of the envelope.
+        var rawType = envelope is null && props.IsTypePresent() && !string.IsNullOrWhiteSpace(props.Type) ? props.Type : null;
+
         return new PeekedMessage(
             Index: index,
             MessageId: props.MessageId ?? envelope?.MessageId,
             CorrelationId: props.CorrelationId ?? envelope?.CorrelationId,
             Redelivered: redelivered,
             ContentType: props.ContentType,
-            MessageTypes: envelope?.MessageType,
-            SentTimeUtc: envelope?.SentTime,
-            Contract: CheckContract(envelope),
+            MessageTypes: envelope?.MessageType ?? (rawType is null ? null : new[] { rawType }),
+            SentTimeUtc: envelope?.SentTime
+                         ?? (props.IsTimestampPresent() && props.Timestamp.UnixTime > 0
+                             ? DateTimeOffset.FromUnixTimeSeconds(props.Timestamp.UnixTime).UtcDateTime
+                             : null),
+            Contract: envelope is not null ? CheckContract(envelope) : CheckRaw(rawType, payload),
             Fault: FaultHeaders.Parse(headers),
-            RepublishTarget: target?.Exchange,
+            DeadLettered: FaultHeaders.ParseDeaths(headers),
+            RepublishTarget: target?.Display,
             RepublishWarning: target?.Conflict,
             Payload: payload,
             RawBody: rawBody,
@@ -74,6 +81,16 @@ public sealed class MessageInspector(ContractRegistry contracts, IOptions<Rabbit
             return null;
 
         var errors = Validate(contract, message, MassTransitJson.Options);
+        return new ContractCheck(contract.Name, contract.Version, errors.Count == 0, errors);
+    }
+
+    /// <summary>Validates a plain-JSON body against the contract its AMQP type names (raw contracts and their Urn).</summary>
+    public ContractCheck? CheckRaw(string? type, JsonElement? body)
+    {
+        if (type is null || body is not { } json || contracts.FindByUrns([type]) is not { } contract)
+            return null;
+
+        var errors = Validate(contract, json, MassTransitJson.Options);
         return new ContractCheck(contract.Name, contract.Version, errors.Count == 0, errors);
     }
 
