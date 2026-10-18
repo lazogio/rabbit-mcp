@@ -1,5 +1,19 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Phase 12 — human in the loop (phase-12/human) — commits bb99eef, ef49c66
+- `Security/HumanConfirmation` + call-tool filter: `HumanConfirmation` auto|required|off, `ConfirmTools` patterns
+  (default republish_from_error;dead_letter_from_error;resend_corrected; preview tools asked only with confirm=true).
+  `ElicitationPrompt` = one boolean field `approve`; unavailable without client capability or when ElicitAsync throws
+  InvalidOperationException (stateless HTTP) → auto falls back to the argument, required refuses. Audit action `confirm`
+  (allowed-person / allowed-argument / refused-person / refused-unavailable).
+- Decision (default, user did not choose): stdio first; HTTP keeps confirm=true until stateful HTTP vs URL-mode page is decided.
+- `resend_corrected` (`Tools/CorrectionTools`, EnableRepublish+EnablePublish, permission republish + publish on the
+  contract inside the tool): one message, validated, `JsonDiff` preview, copy with new messageId + X-Corrected-From to
+  the resolved target, original unchanged to the DLQ with X-Corrected-To (same queue when correcting from a _dead
+  queue), ack last; if parking fails the original stays and the result says so. Requests refused. Audit `correct`.
+- Tests: real MCP client over anonymous pipes (`StreamClientTransport` + `WithStreamServerTransport`) answering
+  elicitation; shared `it-order-cancelled_dead` → ErrorQueueTests counts relatively.
+
 ### 2026-10-18 Plan: phases 12–15 (ROADMAP #34–#44)
 - 12 Human in the loop: MCP elicitation confirmations (`HumanConfirmation` auto/required/off; stdio first — stateless
   HTTP cannot send server→client requests, open decision: stateful HTTP mode vs URL-mode approval page) and

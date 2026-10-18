@@ -22,6 +22,10 @@
   request parked in a DLQ does not expire again when republished.
 
 ## C# / tests
+- An in-process MCP session for tests: two AnonymousPipeServerStream/ClientStream pairs, server
+  `.WithStreamServerTransport(in, out)`, client `McpClient.CreateAsync(new StreamClientTransport(toServer, fromServer), options)`
+  — elicitation works there (stdio-like), unlike the stateless HTTP TestServer.
+- Integration tests share queues across classes (e.g. `it-order-cancelled_dead`): assert counts relative to before.
 - Changing a positional record (e.g. `PeekedMessage`) breaks target-typed `new(...)` calls too — grep for `new(` in
   helpers, not only `new PeekedMessage(` (missed once in SearchAndAuditTests, phase 11).
 
