@@ -258,7 +258,9 @@ public sealed class QueueBrowser(
                 await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
                 republished++;
                 outcomes.Add(new RepublishOutcome(messageId, "republished", target, null));
-                logger.LogInformation("Republished {MessageId} from {ErrorQueue} to {Target}", messageId, errorQueue, target);
+                // messageId and target come from the message (properties, fault/x-death headers): one line each.
+                logger.LogInformation("Republished {MessageId} from {ErrorQueue} to {Target}",
+                    AuditLog.OneLine(messageId), errorQueue, AuditLog.OneLine(target));
             }
         }
         finally
@@ -401,7 +403,7 @@ public sealed class QueueBrowser(
                 await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
                 moved++;
                 outcomes.Add(new DeadLetterOutcome(messageId, "moved", null));
-                logger.LogInformation("Dead-lettered {MessageId} from {ErrorQueue} to {Queue}", messageId, errorQueue, target);
+                logger.LogInformation("Dead-lettered {MessageId} from {ErrorQueue} to {Queue}", AuditLog.OneLine(messageId), errorQueue, target);
             }
         }
         finally

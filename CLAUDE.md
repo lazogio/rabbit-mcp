@@ -98,6 +98,14 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   from `Roles`/`UserRoles`/`DefaultRoles`/JWT roles claim. The MCP filters in `ServerComposition` hide tools in
   tools/list and re-check tools/call (audited as `access denied`). **Every new tool needs a rule in `ToolAccess`**
   (unknown tools are denied once roles are on). Stdio is unrestricted; Enable*/PublishAllow stay the ceiling.
+  Arguments that redirect messages (`targetExchange`, `targetQueue`, `deadLetterQueue`: `ToolRule.OverrideArguments`)
+  need the permission without patterns; queue patterns are case-sensitive, contract patterns are not.
+- **Caller identity**: an API-key caller is recognised by its identity's AuthenticationType (`ApiKeyAuthenticationHandler
+  .IsApiKeyCaller`), never by a claim — tokens can carry any claim. UserRoles match an API-key caller by key name only,
+  a token caller by sub / preferred_username / e-mail (only with `email_verified=true`), and token names equal to an
+  API key name are ignored (`AccessControl.NamesOf`).
+- **Logs**: values that come from messages (ids, addresses, header-derived targets) go through `AuditLog.OneLine` in
+  every log call, not only in AUDIT lines — otherwise a message can forge log lines.
 - **Prompts** only instruct the model and must keep the "confirm before any change" sentence; **resources**
   (`contract://`) need the read permission (list/read filters in `ServerComposition`).
 - Tools get the MCP client via an injected `McpServer? server = null` parameter (excluded from the schema).

@@ -69,6 +69,13 @@ namespace RabbitMcp.Tests.Raw
         public required Guid Id { get; init; }
     }
 
+    [MessageContract("A MassTransit request with a URN that does not start with urn:message:.", Urn = "custom-type",
+        Responses = new[] { typeof(RawPong) })]
+    public sealed record OddUrnRequest
+    {
+        public required Guid Id { get; init; }
+    }
+
     [MessageContract("Default exchange without a queue: invalid.", Exchange = "")]
     public sealed record DefaultExchangeWithoutQueue
     {
@@ -530,6 +537,15 @@ namespace RabbitMcp.Tests
 
             Assert.Contains(changes, c => c.Severity == ContractDiff.Breaking && c.Message.Contains("Wire format changed from masstransit to raw"));
             Assert.Contains(changes, c => c.Severity == ContractDiff.Breaking && c.Message.Contains("Routing key changed"));
+        }
+
+        [Fact]
+        public void Fault_urn_of_a_custom_urn_does_not_throw()
+        {
+            Assert.Equal("urn:message:MassTransit:Fault[[custom-type]]",
+                ResponderEnvelopes.FaultUrnFor(ContractRegistry.Describe(typeof(OddUrnRequest))));
+            Assert.Equal("urn:message:MassTransit:Fault[[RabbitMcp.Samples.Orders:GetOrderStatus]]",
+                ResponderEnvelopes.FaultUrnFor(ContractRegistry.Describe(typeof(RabbitMcp.Samples.Orders.GetOrderStatus))));
         }
 
         [Fact]

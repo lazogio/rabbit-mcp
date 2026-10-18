@@ -102,7 +102,7 @@ public sealed class ResponderService(
                     : ex.Message;
                 // Log a changed situation once, not every retry.
                 if (problem != lastProblem)
-                    logger.LogWarning("Responder is not listening ({Reason}); retrying every {Delay}s", problem, RetryDelay.TotalSeconds);
+                    logger.LogWarning("Responder is not listening ({Reason}); retrying every {Delay}s", AuditLog.OneLine(problem), RetryDelay.TotalSeconds);
                 lastProblem = problem;
             }
 
@@ -186,7 +186,7 @@ public sealed class ResponderService(
             // MassTransit-style temporary reply endpoints are answered (or faulted, e.g. "busy"), never other exchanges.
             if (await UnsafeReplyAddressAsync(request) is { } refusal)
             {
-                logger.LogWarning("Responder refused {Contract} {RequestId}: {Reason}", contract.Name, requestId, refusal);
+                logger.LogWarning("Responder refused {Contract} {RequestId}: {Reason}", contract.Name, requestId, AuditLog.OneLine(refusal));
                 audit.Write(audit.Event(AuditActions.Receive, "refused", envelope.SourceAddress, contract.Name, contract.Exchange,
                     queue: QueueName, messageId: envelope.MessageId, requestId: envelope.RequestId,
                     correlationId: envelope.CorrelationId, detail: refusal));

@@ -16,9 +16,14 @@ public static class ResponderEnvelopes
     public const string FaultUrn = "urn:message:MassTransit:Fault";
     public const string RejectedExceptionType = "RabbitMcp.RequestRejectedException";
 
+    private const string UrnPrefix = "urn:message:";
+
     /// <summary>urn:message:MassTransit:Fault[[Ns:Type]] — MassTransit's URN for Fault&lt;Ns.Type&gt;.</summary>
+    /// <remarks>A custom Urn that does not start with urn:message: is used as it is (it must not crash a rejection).</remarks>
     public static string FaultUrnFor(ContractDescriptor request) =>
-        $"{FaultUrn}[[{request.MessageTypeUrn["urn:message:".Length..]}]]";
+        $"{FaultUrn}[[{(request.MessageTypeUrn.StartsWith(UrnPrefix, StringComparison.OrdinalIgnoreCase)
+            ? request.MessageTypeUrn[UrnPrefix.Length..]
+            : request.MessageTypeUrn)}]]";
 
     public static MassTransitEnvelope Reply(
         PendingRequest request, ResponseDescriptor response, object message,

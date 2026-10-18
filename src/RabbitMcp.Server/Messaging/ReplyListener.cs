@@ -146,17 +146,18 @@ public sealed class ReplyListener(
     private Task OnReplyAsync(object sender, BasicDeliverEventArgs delivery)
     {
         // The body buffer is only valid during this handler; TryParse/From copy what they keep.
+        // Ids come from whoever sent the reply: logged through OneLine, so they cannot forge log lines.
         var envelope = MassTransitEnvelope.TryParse(delivery.Body.Span);
         if (envelope is not null)
         {
             if (!_pending.TryComplete(envelope))
-                logger.LogInformation("Ignoring late or unknown reply for request {RequestId}", envelope.RequestId);
+                logger.LogInformation("Ignoring late or unknown reply for request {RequestId}", AuditLog.OneLine(envelope.RequestId));
         }
         else if (!string.IsNullOrEmpty(delivery.BasicProperties.CorrelationId))
         {
             var raw = RawReply.From(delivery.BasicProperties, delivery.Body.Span, options.Value.MaxPayloadChars);
             if (!_pending.TryComplete(raw))
-                logger.LogInformation("Ignoring late or unknown raw reply with correlation id {CorrelationId}", raw.CorrelationId);
+                logger.LogInformation("Ignoring late or unknown raw reply with correlation id {CorrelationId}", AuditLog.OneLine(raw.CorrelationId));
         }
         else
         {
