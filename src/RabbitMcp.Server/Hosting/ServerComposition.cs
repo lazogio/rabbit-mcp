@@ -232,13 +232,20 @@ public static class ServerComposition
             // The audit file must be writable before anything is sent.
             new AuditLog(Options.Create(settings), TimeProvider.System, NullLogger<AuditLog>.Instance).EnsureWritable();
 
-            var assemblies = ContractAssemblyLoader.Load(
-                settings.ContractAssemblies, AppContext.BaseDirectory, typeof(OrderSubmitted).Assembly);
-            var contracts = ContractRegistry.FromAssemblies([.. assemblies]);
+            // AsyncAPI files alone replace the built-in samples, like ContractAssemblies do.
+            var onlyFiles = string.IsNullOrWhiteSpace(settings.ContractAssemblies) && !string.IsNullOrWhiteSpace(settings.ContractFiles);
+            var assemblies = onlyFiles
+                ? []
+                : ContractAssemblyLoader.Load(settings.ContractAssemblies, AppContext.BaseDirectory, typeof(OrderSubmitted).Assembly);
+            var files = AsyncApiLoader.LoadFiles(settings.ContractFiles, AppContext.BaseDirectory);
+            var contracts = new ContractRegistry(
+                assemblies.SelectMany(a => a.GetExportedTypes())
+                    .Where(t => t.GetCustomAttribute<RabbitMcp.Contracts.MessageContractAttribute>() is not null),
+                files);
 
             if (contracts.Contracts.Count == 0)
                 throw new InvalidOperationException(
-                    $"No [MessageContract] types found in: {string.Join(", ", assemblies.Select(a => a.GetName().Name))}.");
+                    $"No contracts found in: {string.Join(", ", assemblies.Select(a => a.GetName().Name).Concat([settings.ContractFiles ?? ""]).Where(n => n is { Length: > 0 }))}.");
             return contracts;
         }
         catch (Exception ex) when (ex is InvalidOperationException or ReflectionTypeLoadException or FileNotFoundException or FileLoadException)

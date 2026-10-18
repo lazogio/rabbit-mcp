@@ -59,7 +59,7 @@ public static class ReplyInterpreter
             };
         }
 
-        var errors = MessageInspector.Validate(response.Type, body, MassTransitJson.Options);
+        var errors = MessageInspector.Validate(response, body, MassTransitJson.Options, numericStrings: false);
         return new ReplyInterpretation(
             "responded", response.Name, body,
             new ContractCheck(response.Name, Version: null, errors.Count == 0, errors),
@@ -82,7 +82,7 @@ public static class ReplyInterpreter
         if (response is null || reply.Message is not { } message)
             return new ReplyInterpretation("responded", types.FirstOrDefault(), reply.Message, null, null, responder);
 
-        var errors = MessageInspector.Validate(response.Type, message, MassTransitJson.Options);
+        var errors = MessageInspector.Validate(response, message, MassTransitJson.Options, numericStrings: true);
         return new ReplyInterpretation(
             "responded", response.Name, message,
             new ContractCheck(response.Name, Version: null, errors.Count == 0, errors),

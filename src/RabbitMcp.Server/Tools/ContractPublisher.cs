@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.Security.Claims;
 using System.Globalization;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -36,7 +38,7 @@ public sealed class ContractPublisher(
 {
     public const int MaxTimeoutSeconds = 120;
 
-    public async Task<PublishResult> PublishAsync<T>(
+    public Task<PublishResult> PublishAsync<T>(
         [Description("The message. Must satisfy the contract schema and its validation rules.")]
         T message,
         [Description("Optional correlation id (GUID) linking this message to an existing workflow.")]
@@ -44,9 +46,19 @@ public sealed class ContractPublisher(
         McpServer? server = null,
         ClaimsPrincipal? user = null,
         CancellationToken cancellationToken = default)
-        where T : class
+        where T : class =>
+        PublishMessageAsync(contracts.Get(typeof(T)), message, typeof(T), correlationId, server, user, cancellationToken);
+
+    /// <summary>publish_* of a contract from an AsyncAPI file: the message is JSON checked against the file's schema.</summary>
+    public Task<PublishResult> PublishJsonAsync(
+        ContractDescriptor contract, JsonElement message, string? correlationId = null, McpServer? server = null,
+        ClaimsPrincipal? user = null, CancellationToken cancellationToken = default) =>
+        PublishMessageAsync(contract, message, typeof(JsonElement), correlationId, server, user, cancellationToken);
+
+    private async Task<PublishResult> PublishMessageAsync(
+        ContractDescriptor contract, object message, Type messageType, string? correlationId, McpServer? server,
+        ClaimsPrincipal? user, CancellationToken cancellationToken)
     {
-        var contract = contracts.Get(typeof(T));
         var client = AuditLog.ClientOf(server, user);
         var messageId = Guid.NewGuid();
         using var activity = Telemetry.StartSend("publish", contract.DestinationName);
@@ -67,7 +79,7 @@ public sealed class ContractPublisher(
             var detail = error?.Message ?? "cancelled (the message may or may not have been sent)";
             Telemetry.Fail(activity, detail);
             audit.Write(audit.Event(AuditActions.Publish, "error", client, contract.Name, AuditExchange(contract),
-                AuditQueue(contract), correlationId: correlationId, detail: detail, message: message, messageType: typeof(T)));
+                AuditQueue(contract), correlationId: correlationId, detail: detail, message: message, messageType: messageType));
             if (error is null || ReferenceEquals(error, ex))
                 throw;
             throw error;
@@ -76,7 +88,7 @@ public sealed class ContractPublisher(
         logger.LogInformation("Published {Contract} {MessageId} to {Destination}", contract.Name, messageId, contract.Destination);
         audit.Write(audit.Event(AuditActions.Publish, "sent", client, contract.Name, AuditExchange(contract),
             AuditQueue(contract), messageId: outgoing.MessageId, correlationId: correlationId, message: message,
-            messageType: typeof(T)));
+            messageType: messageType));
 
         return new PublishResult(
             MessageId: outgoing.MessageId,
@@ -98,7 +110,7 @@ public sealed class ContractPublisher(
     /// RespondAsync (or its Fault) comes back to that queue and is matched by requestId.
     /// Raw contracts use RabbitMQ RPC instead: reply_to = the same queue, correlation_id = requestId.
     /// </summary>
-    public async Task<RequestResult> RequestAsync<T>(
+    public Task<RequestResult> RequestAsync<T>(
         [Description("The request message. Must satisfy the contract schema and its validation rules.")]
         T message,
         [Description("Seconds to wait for the reply, 1-120. The request expires in the broker after the same time.")]
@@ -108,9 +120,19 @@ public sealed class ContractPublisher(
         McpServer? server = null,
         ClaimsPrincipal? user = null,
         CancellationToken cancellationToken = default)
-        where T : class
+        where T : class =>
+        RequestMessageAsync(contracts.Get(typeof(T)), message, typeof(T), timeoutSeconds, correlationId, server, user, cancellationToken);
+
+    /// <summary>request_* of a contract from an AsyncAPI file.</summary>
+    public Task<RequestResult> RequestJsonAsync(
+        ContractDescriptor contract, JsonElement message, int timeoutSeconds = 30, string? correlationId = null,
+        McpServer? server = null, ClaimsPrincipal? user = null, CancellationToken cancellationToken = default) =>
+        RequestMessageAsync(contract, message, typeof(JsonElement), timeoutSeconds, correlationId, server, user, cancellationToken);
+
+    private async Task<RequestResult> RequestMessageAsync(
+        ContractDescriptor contract, object message, Type messageType, int timeoutSeconds, string? correlationId,
+        McpServer? server, ClaimsPrincipal? user, CancellationToken cancellationToken)
     {
-        var contract = contracts.Get(typeof(T));
         var client = AuditLog.ClientOf(server, user);
         var messageId = Guid.NewGuid();
         var requestId = Guid.NewGuid();
@@ -118,7 +140,7 @@ public sealed class ContractPublisher(
         void Audit(string outcome, string? detail = null) =>
             audit.Write(audit.Event(AuditActions.Request, outcome, client, contract.Name, AuditExchange(contract),
                 AuditQueue(contract), messageId: messageId.ToString(), requestId: requestId.ToString(),
-                correlationId: correlationId, detail: detail, message: message, messageType: typeof(T)));
+                correlationId: correlationId, detail: detail, message: message, messageType: messageType));
 
         using var activity = Telemetry.StartSend("request", contract.DestinationName, ActivityKind.Client);
         activity?.SetTag("messaging.message.id", messageId.ToString());
@@ -151,10 +173,9 @@ public sealed class ContractPublisher(
         }
     }
 
-    private async Task<RequestResult> SendRequestAsync<T>(
-        ContractDescriptor contract, T message, int timeoutSeconds, string? correlationId,
+    private async Task<RequestResult> SendRequestAsync(
+        ContractDescriptor contract, object message, int timeoutSeconds, string? correlationId,
         Guid messageId, Guid requestId, CancellationToken cancellationToken)
-        where T : class
     {
         if (timeoutSeconds is < 1 or > MaxTimeoutSeconds)
             throw new McpException($"timeoutSeconds must be between 1 and {MaxTimeoutSeconds}.");
@@ -263,8 +284,10 @@ public sealed class ContractPublisher(
         if (!policy.IsAllowed(contract))
             throw new McpException($"Sending {contract.Name} is not allowed by this server's configuration (RabbitMcp:PublishAllow/PublishDeny).");
 
-        // Contract rules (DataAnnotations). Nothing is sent when they fail.
-        var errors = ContractValidator.Validate(message);
+        // Contract rules (DataAnnotations, or the AsyncAPI file's JSON Schema). Nothing is sent when they fail.
+        var errors = contract.Schema is { } schema && message is JsonElement json
+            ? SchemaValidator.Validate(schema, json, numericStrings: !contract.IsRaw)
+            : ContractValidator.Validate(message);
         if (errors.Count > 0)
             throw new McpException(
                 $"Message violates contract {contract.Name} v{contract.Version}; nothing was sent. " +
@@ -336,22 +359,56 @@ public static class ContractToolFactory
     public static IEnumerable<McpServerTool> CreateTools(ContractRegistry registry, PublishPolicy? policy = null) =>
         registry.Contracts.Where(c => (policy ?? PublishPolicy.AllowAll).IsAllowed(c)).Select(CreateTool);
 
+    private static readonly MethodInfo JsonPublishMethod =
+        typeof(JsonContractTool).GetMethod(nameof(JsonContractTool.PublishAsync))!;
+
+    private static readonly MethodInfo JsonRequestMethod =
+        typeof(JsonContractTool).GetMethod(nameof(JsonContractTool.RequestAsync))!;
+
     public static McpServerTool CreateTool(ContractDescriptor contract) =>
+        contract.IsSchemaBased ? CreateJsonTool(contract) : CreateTypedTool(contract);
+
+    /// <summary>
+    /// A contract from an AsyncAPI file has no C# type: the tool takes the message as JSON, and its inputSchema's
+    /// "message" property is replaced by the file's schema, so the model sees the same structure as for C# contracts.
+    /// </summary>
+    private static McpServerTool CreateJsonTool(ContractDescriptor contract)
+    {
+        var tool = McpServerTool.Create(
+            contract.IsRequest ? JsonRequestMethod : JsonPublishMethod,
+            ctx => new JsonContractTool(contract, ctx.Services!.GetRequiredService<ContractPublisher>()),
+            Options(contract));
+
+        var input = JsonNode.Parse(tool.ProtocolTool.InputSchema.GetRawText())!.AsObject();
+        if (input["properties"] is JsonObject properties)
+        {
+            var schema = contract.Schema!.DeepClone();
+            if (schema is JsonObject described && properties["message"] is JsonObject old && old["description"] is { } text)
+                described["description"] ??= text.DeepClone();
+            properties["message"] = schema;
+        }
+        tool.ProtocolTool.InputSchema = JsonSerializer.SerializeToElement(input);
+        return tool;
+    }
+
+    private static McpServerToolCreateOptions Options(ContractDescriptor contract) => new()
+    {
+        Name = contract.ToolName,
+        Title = $"{(contract.IsRequest ? "Request" : "Publish")} {contract.Name} (v{contract.Version})",
+        Description = contract.IsRequest ? RequestDescription(contract) : PublishDescription(contract),
+        ReadOnly = false,
+        Destructive = false,
+        Idempotent = false,
+        OpenWorld = true,
+        UseStructuredContent = true,
+        SerializerOptions = ToolJson.Options,
+    };
+
+    private static McpServerTool CreateTypedTool(ContractDescriptor contract) =>
         McpServerTool.Create(
             (contract.IsRequest ? RequestMethod : PublishMethod).MakeGenericMethod(contract.Type),
             ctx => ctx.Services!.GetRequiredService<ContractPublisher>(),
-            new McpServerToolCreateOptions
-            {
-                Name = contract.ToolName,
-                Title = $"{(contract.IsRequest ? "Request" : "Publish")} {contract.Name} (v{contract.Version})",
-                Description = contract.IsRequest ? RequestDescription(contract) : PublishDescription(contract),
-                ReadOnly = false,
-                Destructive = false,
-                Idempotent = false,
-                OpenWorld = true,
-                UseStructuredContent = true,
-                SerializerOptions = ToolJson.Options,
-            });
+            Options(contract));
 
     private static string PublishDescription(ContractDescriptor c) =>
         $"{c.Description}\n\n" +
@@ -372,4 +429,25 @@ public static class ContractToolFactory
               $"(MassTransit request/response). Possible replies: {string.Join(", ", c.Responses.Select(r => r.Name))}; " +
               "the reply is validated against its contract. If the consumer throws, Status is 'faulted' with the exception details. ") +
         "If nobody answers in time, Status is 'timeout'.";
+}
+
+/// <summary>The target of a tool for a contract from an AsyncAPI file: the contract plus the shared publisher.</summary>
+public sealed class JsonContractTool(ContractDescriptor contract, ContractPublisher publisher)
+{
+    public Task<PublishResult> PublishAsync(
+        [Description("The message. Must satisfy the contract schema.")] JsonElement message,
+        [Description("Optional correlation id (GUID) linking this message to an existing workflow.")] string? correlationId = null,
+        McpServer? server = null,
+        ClaimsPrincipal? user = null,
+        CancellationToken cancellationToken = default) =>
+        publisher.PublishJsonAsync(contract, message, correlationId, server, user, cancellationToken);
+
+    public Task<RequestResult> RequestAsync(
+        [Description("The request message. Must satisfy the contract schema.")] JsonElement message,
+        [Description("Seconds to wait for the reply, 1-120. The request expires in the broker after the same time.")] int timeoutSeconds = 30,
+        [Description("Optional correlation id (GUID) linking this request to an existing workflow.")] string? correlationId = null,
+        McpServer? server = null,
+        ClaimsPrincipal? user = null,
+        CancellationToken cancellationToken = default) =>
+        publisher.RequestJsonAsync(contract, message, timeoutSeconds, correlationId, server, user, cancellationToken);
 }

@@ -42,7 +42,7 @@ public sealed class PublishPolicy
 
     private static bool Matches(Regex regex, ContractDescriptor c) =>
         regex.IsMatch(c.Name) || regex.IsMatch(c.ToolName) ||
-        regex.IsMatch(c.Type.FullName ?? c.Name) || regex.IsMatch(c.MessageTypeUrn);
+        regex.IsMatch(c.TypeName) || regex.IsMatch(c.MessageTypeUrn);
 
     private static (string, Regex)[] Parse(string? patterns) =>
         string.IsNullOrWhiteSpace(patterns)

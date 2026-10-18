@@ -116,6 +116,11 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   audited). **Streams** (`read_stream`): basic.consume with x-stream-offset and a prefetch; a delivery without
   x-stream-offset means "not a stream" → nack everything back. **RateLimits** (`Security/RateLimiter`): counted in the
   call-tool filter before the person is asked; only changing calls (permission ≠ read, previews excluded).
+- **AsyncAPI contracts** (`ContractFiles`, `Contracts/AsyncApiLoader`, `SchemaValidator`, `YamlJson`): descriptors with
+  `Schema` (refs inlined) and `Type = JsonElement`; validation goes through `MessageInspector.Validate(contract|response …)`
+  — never call `ContractValidator` with a JsonElement. Tools via `JsonContractTool` with the "message" inputSchema
+  replaced. Use `contract.TypeName` (not `Type.FullName`) for pattern matching. `AsyncApiExporter` must round-trip
+  with the loader (test `Csharp_contracts_round_trip_through_asyncapi`). Responder refuses schema contracts.
 - **Logs**: values that come from messages (ids, addresses, header-derived targets) go through `AuditLog.OneLine` in
   every log call, not only in AUDIT lines — otherwise a message can forge log lines.
 - **Prompts** only instruct the model and must keep the "confirm before any change" sentence; **resources**

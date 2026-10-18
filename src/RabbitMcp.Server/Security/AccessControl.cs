@@ -71,7 +71,7 @@ public sealed class UserPermissions
     /// <summary>May use <paramref name="permission"/> on this contract (patterns match name, tool name, type or URN).</summary>
     public bool Allows(Permission permission, ContractDescriptor contract) =>
         _grants is null || _grants.Any(g => g.Permission == permission &&
-            g.Covers(contract.Name, contract.ToolName, contract.Type.FullName ?? contract.Name, contract.MessageTypeUrn));
+            g.Covers(contract.Name, contract.ToolName, contract.TypeName, contract.MessageTypeUrn));
 
     /// <summary>May use <paramref name="permission"/> on this queue (republish patterns match the error queue name).</summary>
     public bool AllowsQueue(Permission permission, string queue) =>

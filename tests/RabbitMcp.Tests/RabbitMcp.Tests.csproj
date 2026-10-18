@@ -23,4 +23,8 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The documented AsyncAPI example is the one the tests load. -->
+    <None Include="..\..\samples\asyncapi\warehouse.yaml" Link="asyncapi\warehouse.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

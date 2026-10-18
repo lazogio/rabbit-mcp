@@ -50,6 +50,13 @@ public sealed class RabbitMcpOptions
     /// </summary>
     public string? ContractAssemblies { get; set; }
 
+    /// <summary>
+    /// AsyncAPI 3.0/2.x documents (YAML or JSON) whose messages become contracts, ";"-separated, relative to the server's
+    /// folder — for services described without C#. Combined with ContractAssemblies; when only files are given, the
+    /// built-in sample contracts are not loaded.
+    /// </summary>
+    public string? ContractFiles { get; set; }
+
     /// <summary>Seconds an "exchange exists" check is cached. 0 disables the cache.</summary>
     public int ExchangeCacheSeconds { get; set; } = 30;
 

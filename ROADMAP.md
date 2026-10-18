@@ -143,15 +143,17 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
     (optionally per role). A runaway agent loop stops at the limit with a readable error; refusals audited as
     `limited`; metrics. In memory per instance (documented).
 
-## Phase 14 — Beyond C# (`phase-14/asyncapi`) ⬜ — planned 2026-10-18
-39. ⬜ **Contracts from AsyncAPI / JSON Schema files** (`RabbitMcp:ContractFiles`): teams without .NET describe their
+## Phase 14 — Beyond C# (`phase-14/asyncapi`) ✅ (2026-10-18)
+39. ✅ **Contracts from AsyncAPI / JSON Schema files** (`RabbitMcp:ContractFiles`): teams without .NET describe their
     messages in AsyncAPI 2.6/3.0 (channels, operations, message payload schemas, AMQP bindings → exchange, routing key)
     or plain JSON Schema + a small mapping file. Each message becomes the same typed `publish_*`/`request_*` tool
     (inputSchema = the file's schema), validated with a JSON Schema validator instead of DataAnnotations; format raw
-    by default, MassTransit when declared. Library choice (AsyncAPI parser, JSON Schema validator) in the design step.
-40. ⬜ **AsyncAPI export**: `rabbit-mcp contracts asyncapi Billing.Contracts.dll > asyncapi.yaml` — documentation of
+    by default, MassTransit when declared. Done with an own JSON Schema subset validator and YamlDotNet's representation
+    model (no AsyncAPI parser dependency); plain JSON Schema files are covered by embedding them in a minimal AsyncAPI
+    document (no separate mapping format).
+40. ✅ **AsyncAPI export**: `rabbit-mcp contracts asyncapi Billing.Contracts.dll > asyncapi.yaml` — documentation of
     the C# contracts (exchanges, routing keys, formats, request/reply pairs) for other teams and tooling.
-41. ⬜ `contracts diff` for AsyncAPI files (same breaking/warning rules).
+41. ✅ `contracts diff` for AsyncAPI files (same breaking/warning rules).
 
 ## Phase 15 — Distribution ⏸ (when the owner decides to release)
 42. ⏸ First release `v0.1.0` (tag pushed by the owner): binaries, Docker image on GHCR (public package), NuGet.

@@ -64,7 +64,7 @@ public static class ContractDiff
                 own.Add(new(Breaking, old.Name, "", $"Routing key changed from '{old.RoutingKey}' to '{current.RoutingKey}': " +
                                                     "queues bound for the old key no longer receive it."));
 
-            CompareSchemas(old.Name, "", Schema(old.Type), Schema(current.Type), own);
+            CompareSchemas(old.Name, "", SchemaOf(old), SchemaOf(current), own);
             CompareResponses(old, current, own);
 
             if (current.Version < old.Version)
@@ -89,7 +89,7 @@ public static class ContractDiff
             if (match is null)
                 changes.Add(new(Breaking, old.Name, $"→{r.Name}", $"Reply type {r.Name} removed: requesters waiting for it get no answer."));
             else
-                CompareSchemas(old.Name, $"→{r.Name}", Schema(r.Type), Schema(match.Type), changes);
+                CompareSchemas(old.Name, $"→{r.Name}", SchemaOf(r), SchemaOf(match), changes);
         }
         foreach (var r in current.Responses.Where(x => !old.Responses.Any(o => Same(o.MessageTypeUrn, x.MessageTypeUrn))))
             changes.Add(new(Warning, old.Name, $"→{r.Name}",
@@ -97,6 +97,11 @@ public static class ContractDiff
     }
 
     public static JsonNode Schema(Type type) => SchemaJson.GetJsonSchemaAsNode(type, ExporterOptions);
+
+    /// <summary>The wire schema: the C# type's, or the one from the AsyncAPI file.</summary>
+    public static JsonNode SchemaOf(ContractDescriptor contract) => contract.Schema?.DeepClone() ?? Schema(contract.Type);
+
+    public static JsonNode SchemaOf(ResponseDescriptor response) => response.Schema?.DeepClone() ?? Schema(response.Type);
 
     /// <summary>Compares two JSON schemas produced by <see cref="Schema"/>, recursively.</summary>
     public static void CompareSchemas(string contract, string path, JsonNode? old, JsonNode? current, List<ContractChange> changes)

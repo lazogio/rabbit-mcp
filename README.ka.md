@@ -133,6 +133,23 @@ public sealed record GetShippingQuote { … }
 - **ნახვა და აღდგენა:** `peek_messages` უბრალო JSON-ს კონტრაქტს `type` property-ით უკავშირებს და RabbitMQ-ის dead-lettering-ის ისტორიას (`x-death`) აჩვენებს. dead-letter რიგზე `republish_from_error` თითო შეტყობინებას პირდაპირ იმ რიგში აბრუნებს, რომელმაც ის უარყო (`targetQueue`-ით სხვა რიგს აირჩევთ). `contract_consumers` direct და topic binding-ებს routing key-ით მიჰყვება.
 - responder რეჟიმი მხოლოდ MassTransit-ის request-ებს პასუხობს.
 
+### კონტრაქტები C#-ის გარეშე (AsyncAPI)
+
+გუნდები, რომლებიც .NET-ს არ წერენ, შეტყობინებებს [AsyncAPI](https://www.asyncapi.com) 3.0-ში ან 2.x-ში (YAML ან JSON) აღწერენ და სერვერს ფაილს უთითებენ — DLL საჭირო არ არის: `RabbitMcp__ContractFiles=warehouse.yaml`. ოპერაციის ყოველი შეტყობინება იგივე ტიპიზებულ ხელსაწყოდ იქცევა, `inputSchema`-დ ფაილის JSON Schema აქვს. 3.0-ის ოპერაცია `reply`-ით `request_*` ხდება. ნიმუში: [samples/asyncapi/warehouse.yaml](samples/asyncapi/warehouse.yaml).
+
+```yaml
+channels:
+  stockAdjusted:
+    address: stock.adjusted                      # routing key
+    bindings: { amqp: { is: routingKey, exchange: { name: warehouse, type: topic } } }
+    messages: { StockAdjusted: { $ref: '#/components/messages/StockAdjusted' } }
+```
+
+- **მარშრუტი** არხის AMQP binding-იდან მოდის: `is: queue` პირდაპირ ამ რიგში აგზავნის, სხვა შემთხვევაში binding-ის exchange-ში, არხის address-ით როგორც routing key.
+- **ფორმატი:** ნაგულისხმევად უბრალო JSON (raw); MassTransit სერვისებისთვის შეტყობინებაზე `x-rabbit-mcp: { format: masstransit, urn: 'urn:message:Ns:Type' }`. `x-rabbit-mcp.version` და `toolName` ისევე მუშაობს, როგორც `[MessageContract]`-ზე.
+- **შემოწმება:** type, required, enum, სტრიქონის სიგრძე/pattern/format, რიცხვის საზღვრები, items, `allOf`/`anyOf`/`oneOf`; ლოკალური `$ref`-ები იხსნება. responder რეჟიმს C# კონტრაქტები სჭირდება.
+- **პირიქით:** `rabbit-mcp contracts asyncapi Billing.Contracts.dll > asyncapi.json` C# კონტრაქტებს AsyncAPI 3.0-ად აღწერს სხვა გუნდებისა და ხელსაწყოებისთვის, `contracts diff` კი ორ AsyncAPI ფაილსაც ადარებს.
+
 ### თავსებადობის შემოწმება
 
 ცვლილება, რომელიც build-ს არ არღვევს, უკვე გაშვებულ სერვისებს wire-ზე მაინც შეიძლება დაარღვევდეს. ორ build-ს ასე შეადარებთ:
@@ -238,6 +255,7 @@ env ცვლადი `RabbitMcp__Name`, ან `appsettings.json`-ში `"Rab
 | `Uri` | `amqp://guest:guest@localhost:5672/` | AMQP URI, vhost ბოლოშია (`…/prod`) |
 | `ClientName` | `rabbit-mcp` | კავშირის სახელი, envelope-ის `sourceAddress` |
 | `ContractAssemblies` | — | თქვენი კონტრაქტების DLL-ები. ცარიელისას ნიმუშის კონტრაქტები გამოიყენება |
+| `ContractFiles` | — | AsyncAPI ფაილები (YAML/JSON), რომელთა შეტყობინებები კონტრაქტებად იქცევა; მარტო მითითებისას ნიმუშის კონტრაქტებს ცვლის |
 | `ManagementUri` | — | Management API (`http://localhost:15672`), რთავს `list_queues`-ს და `contract_consumers`-ს |
 | `EnablePublish` / `EnableRepublish` | `false` | რთავს გაგზავნას / republish-ს |
 | `PublishAllow` / `PublishDeny` | — | რომელი კონტრაქტების გაგზავნაა ნებადართული / აკრძალული (deny უპირატესია), მაგ. `Get*` |

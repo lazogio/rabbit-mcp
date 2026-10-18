@@ -15,11 +15,17 @@ namespace RabbitMcp.Server.Cli;
 public static class ContractsCommand
 {
     public const string Usage =
-        "usage: rabbit-mcp contracts diff <old.dll> <new.dll> [--json]\n" +
-        "  Compares two builds of a [MessageContract] assembly. Exit code: 0 compatible, 1 breaking changes, 2 error.";
+        "usage: rabbit-mcp contracts diff <old> <new> [--json]\n" +
+        "         Compares two versions of the contracts (a [MessageContract] DLL or an AsyncAPI .yaml/.json file).\n" +
+        "         Exit code: 0 compatible, 1 breaking changes, 2 error.\n" +
+        "       rabbit-mcp contracts asyncapi <contracts> [--title NAME]\n" +
+        "         Writes the contracts as an AsyncAPI 3.0 document (JSON) to stdout.";
 
     public static int Run(string[] args, TextWriter output, TextWriter error)
     {
+        if (args is ["asyncapi", .. var rest])
+            return Export(rest, output, error);
+
         var json = args.Contains("--json");
         var positional = args.Where(a => a != "--json").ToArray();
         if (positional is not ["diff", var oldPath, var newPath])
@@ -65,12 +71,47 @@ public static class ContractsCommand
         _ => 2,
     };
 
-    /// <summary>Each build in its own load context, so two versions of the same assembly can be compared.</summary>
+    private static int Export(string[] args, TextWriter output, TextWriter error)
+    {
+        var title = "Contracts";
+        var paths = new List<string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--title" && i + 1 < args.Length)
+                title = args[++i];
+            else
+                paths.Add(args[i]);
+        }
+        if (paths.Count != 1)
+        {
+            error.WriteLine(Usage);
+            return 2;
+        }
+        try
+        {
+            var document = AsyncApiExporter.Export(Load(paths[0]), title);
+            output.WriteLine(document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FileNotFoundException or FileLoadException
+                                       or BadImageFormatException or ReflectionTypeLoadException)
+        {
+            error.WriteLine($"rabbit-mcp: {ContractAssemblyLoader.Describe(ex)}");
+            return 2;
+        }
+    }
+
+    /// <summary>
+    /// An AsyncAPI file (.yaml/.yml/.json), or a contracts DLL — each build in its own load context, so two versions of
+    /// the same assembly can be compared.
+    /// </summary>
     public static ContractRegistry Load(string path)
     {
         var full = Path.GetFullPath(path);
         if (!File.Exists(full))
             throw new InvalidOperationException($"'{full}' does not exist.");
+        if (Path.GetExtension(full).ToLowerInvariant() is ".yaml" or ".yml" or ".json")
+            return new ContractRegistry([], AsyncApiLoader.Load(full));
         var assembly = new IsolatedContractContext(full).LoadFromAssemblyPath(full);
         return ContractRegistry.FromAssemblies(assembly);
     }

@@ -3,6 +3,8 @@
 
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using RabbitMcp.Contracts;
 
@@ -23,6 +25,17 @@ public sealed record ContractDescriptor(
 
     /// <summary>MassTransit envelope (default) or plain JSON.</summary>
     public MessageFormat Format { get; init; } = MessageFormat.MassTransit;
+
+    /// <summary>
+    /// For contracts from AsyncAPI files: the message's JSON Schema (refs inlined). <see cref="Type"/> is then
+    /// <see cref="JsonElement"/> and validation uses this schema instead of DataAnnotations.
+    /// </summary>
+    public JsonNode? Schema { get; init; }
+
+    /// <summary>Where the contract was defined: the C# type's full name, or "&lt;document&gt;.&lt;message&gt;" for AsyncAPI.</summary>
+    public string TypeName { get; init; } = Type.FullName ?? Name;
+
+    public bool IsSchemaBased => Schema is not null;
 
     /// <summary>Routing key of every message; with the default exchange (<see cref="Exchange"/> "") a queue name.</summary>
     public string RoutingKey { get; init; } = "";
@@ -59,7 +72,11 @@ public sealed record ContractDescriptor(
 }
 
 /// <summary>A reply type of a request contract.</summary>
-public sealed record ResponseDescriptor(Type Type, string Name, string MessageTypeUrn);
+public sealed record ResponseDescriptor(Type Type, string Name, string MessageTypeUrn)
+{
+    /// <summary>For replies declared in AsyncAPI files: their JSON Schema (<see cref="Type"/> is JsonElement).</summary>
+    public JsonNode? Schema { get; init; }
+}
 
 /// <summary>Discovers [MessageContract] types and resolves them by type, name or URN.</summary>
 public sealed partial class ContractRegistry
@@ -68,12 +85,11 @@ public sealed partial class ContractRegistry
     private readonly Dictionary<string, ContractDescriptor> _byUrn = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ContractDescriptor> _byName = new(StringComparer.OrdinalIgnoreCase);
 
-    public ContractRegistry(IEnumerable<Type> contractTypes)
+    public ContractRegistry(IEnumerable<Type> contractTypes, IEnumerable<ContractDescriptor>? schemaContracts = null)
     {
-        foreach (var type in contractTypes)
+        var all = new List<ContractDescriptor>();
+        foreach (var d in contractTypes.Select(Describe).Concat(schemaContracts ?? []))
         {
-            var d = Describe(type);
-
             if (!_byUrn.TryAdd(d.MessageTypeUrn, d))
                 throw new InvalidOperationException($"Two contracts share the message type '{d.MessageTypeUrn}'.");
             if (!_byName.TryAdd(d.ToolName, d))
@@ -81,10 +97,12 @@ public sealed partial class ContractRegistry
             if (!_byName.TryAdd(d.Name, d) && !ReferenceEquals(_byName[d.Name], d))
                 throw new InvalidOperationException($"Two contracts share the name '{d.Name}'. Use distinct type names.");
 
-            _byType.Add(type, d);
+            if (!d.IsSchemaBased)
+                _byType.Add(d.Type, d);
+            all.Add(d);
         }
 
-        Contracts = [.. _byType.Values.OrderBy(c => c.Name, StringComparer.Ordinal)];
+        Contracts = [.. all.OrderBy(c => c.Name, StringComparer.Ordinal)];
     }
 
     public IReadOnlyList<ContractDescriptor> Contracts { get; }
@@ -174,11 +192,46 @@ public sealed partial class ContractRegistry
     }
 
     /// <summary>AMQP short strings: at most 255 bytes.</summary>
-    private static void CheckName(Type type, string property, string value)
+    private static void CheckName(Type type, string property, string value) => CheckName(type.FullName ?? type.Name, property, value);
+
+    private static void CheckName(string contract, string property, string value)
     {
         if (Encoding.UTF8.GetByteCount(value) > 255)
-            throw new InvalidOperationException($"Contract '{type.FullName}': {property} is longer than 255 bytes.");
+            throw new InvalidOperationException($"Contract '{contract}': {property} is longer than 255 bytes.");
     }
+
+    /// <summary>A contract defined by a JSON Schema (AsyncAPI) instead of a C# type; same rules as <see cref="Describe"/>.</summary>
+    public static ContractDescriptor FromSchema(
+        string typeName, string name, string? toolName, string urn, string exchange, string routingKey, MessageFormat format,
+        int version, string description, JsonNode schema, IReadOnlyList<ResponseDescriptor> responses)
+    {
+        if (!IdentifierRegex().IsMatch(name))
+            throw new InvalidOperationException($"'{typeName}': '{name}' is not a usable message name (letters, digits, '_').");
+        var tool = toolName ?? (responses.Count > 0 ? "request_" : "publish_") + ToSnakeCase(name);
+        if (!ToolNameRegex().IsMatch(tool))
+            throw new InvalidOperationException($"Tool name '{tool}' for '{typeName}' must match {ToolNameRegex()}.");
+        if (version < 1)
+            throw new InvalidOperationException($"'{typeName}' has an invalid version {version}.");
+        if (string.IsNullOrWhiteSpace(urn))
+            throw new InvalidOperationException($"'{typeName}' has an empty message type.");
+        if (exchange.Length == 0 && routingKey.Length == 0)
+            throw new InvalidOperationException($"'{typeName}' has no destination: give its channel an AMQP exchange or queue binding, or an address.");
+        CheckName(typeName, "exchange", exchange);
+        CheckName(typeName, "routing key", routingKey);
+        CheckName(typeName, "message type", urn);
+
+        return new ContractDescriptor(typeof(JsonElement), name, tool, urn, exchange, version, description)
+        {
+            Responses = responses,
+            Format = format,
+            RoutingKey = routingKey,
+            Schema = schema,
+            TypeName = typeName,
+        };
+    }
+
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]{0,99}$")]
+    private static partial Regex IdentifierRegex();
 
     private static ResponseDescriptor DescribeResponse(Type type)
     {

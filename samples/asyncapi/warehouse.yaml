@@ -1,0 +1,122 @@
+# Copyright (c) 2026 lazogio
+# SPDX-License-Identifier: MIT
+#
+# A warehouse service written without .NET, described in AsyncAPI 3.0. Start rabbit-mcp with
+#   RabbitMcp__ContractFiles=samples/asyncapi/warehouse.yaml
+# and every message below becomes a typed tool: publish_stock_adjusted (topic exchange "warehouse") and
+# request_reserve_stock (RabbitMQ RPC to the queue "warehouse-reservations"; replies StockReserved | OutOfStock).
+asyncapi: 3.0.0
+info:
+  title: Warehouse
+  version: 1.0.0
+  description: Stock and reservations of the warehouse service.
+
+channels:
+  stockAdjusted:
+    address: stock.adjusted          # the routing key
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: warehouse
+          type: topic
+    messages:
+      StockAdjusted:
+        $ref: '#/components/messages/StockAdjusted'
+  reservations:
+    address: warehouse-reservations
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: warehouse-reservations
+    messages:
+      ReserveStock:
+        $ref: '#/components/messages/ReserveStock'
+      StockReserved:
+        $ref: '#/components/messages/StockReserved'
+      OutOfStock:
+        $ref: '#/components/messages/OutOfStock'
+
+operations:
+  adjustStock:
+    action: receive
+    channel:
+      $ref: '#/channels/stockAdjusted'
+    messages:
+      - $ref: '#/channels/stockAdjusted/messages/StockAdjusted'
+  reserveStock:
+    action: receive
+    channel:
+      $ref: '#/channels/reservations'
+    messages:
+      - $ref: '#/channels/reservations/messages/ReserveStock'
+    reply:
+      messages:
+        - $ref: '#/channels/reservations/messages/StockReserved'
+        - $ref: '#/channels/reservations/messages/OutOfStock'
+
+components:
+  messages:
+    StockAdjusted:
+      name: StockAdjusted                # sent as the AMQP type property
+      summary: The stock of a product changed (counted, damaged or returned).
+      payload:
+        $ref: '#/components/schemas/StockAdjustment'
+    ReserveStock:
+      summary: Reserves items for an order. The warehouse answers StockReserved or OutOfStock.
+      x-rabbit-mcp:
+        version: 2
+      payload:
+        type: object
+        required: [orderId, sku, quantity]
+        properties:
+          orderId:
+            type: string
+            format: uuid
+          sku:
+            $ref: '#/components/schemas/Sku'
+          quantity:
+            type: integer
+            minimum: 1
+            maximum: 100
+    StockReserved:
+      payload:
+        type: object
+        required: [orderId, reservedUntil]
+        properties:
+          orderId:
+            type: string
+            format: uuid
+          reservedUntil:
+            type: string
+            format: date-time
+    OutOfStock:
+      payload:
+        type: object
+        required: [orderId, available]
+        properties:
+          orderId:
+            type: string
+            format: uuid
+          available:
+            type: integer
+            minimum: 0
+
+  schemas:
+    Sku:
+      type: string
+      pattern: '^[A-Z0-9-]{3,32}$'
+      description: Stock keeping unit, e.g. LAMP-01.
+    StockAdjustment:
+      type: object
+      required: [sku, delta]
+      properties:
+        sku:
+          $ref: '#/components/schemas/Sku'
+        delta:
+          type: integer
+          description: Change in pieces; negative when stock leaves.
+        reason:
+          type: string
+          enum: [counted, damaged, returned]

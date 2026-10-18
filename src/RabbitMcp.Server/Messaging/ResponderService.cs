@@ -29,6 +29,10 @@ public sealed record ResponderContracts(IReadOnlyList<ContractDescriptor> Reques
             throw new RabbitMcp.Server.Hosting.StartupException(
                 $"RabbitMcp:RespondTo matches raw contract(s) {string.Join(", ", raw)}: responder mode answers MassTransit " +
                 "requests only. Narrow RespondTo to MassTransit request contracts.");
+        if (requests.Where(c => c.IsSchemaBased).Select(c => c.Name).ToArray() is { Length: > 0 } fromFiles)
+            throw new RabbitMcp.Server.Hosting.StartupException(
+                $"RabbitMcp:RespondTo matches contract(s) from AsyncAPI files ({string.Join(", ", fromFiles)}): responder mode " +
+                "needs C# contracts (its reply tools are typed).");
         // The responder binds its queue to the contract's fanout exchange, as MassTransit endpoints do.
         if (requests.Where(c => c.RoutingKey.Length > 0).Select(c => c.Name).ToArray() is { Length: > 0 } routed)
             throw new RabbitMcp.Server.Hosting.StartupException(

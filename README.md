@@ -133,6 +133,23 @@ public sealed record GetShippingQuote { … }
 - **Seeing and recovering:** `peek_messages` matches plain JSON to its contract by the `type` property and shows RabbitMQ's dead-lettering history (`x-death`). `republish_from_error` on a dead-letter queue sends each message straight back to the queue that rejected it (`targetQueue` chooses another one). `contract_consumers` follows direct and topic bindings by the routing key.
 - Responder mode answers MassTransit requests only.
 
+### Contracts without C# (AsyncAPI)
+
+Teams that do not write .NET describe their messages in [AsyncAPI](https://www.asyncapi.com) 3.0 or 2.x (YAML or JSON) and point the server at the file — no DLL needed: `RabbitMcp__ContractFiles=warehouse.yaml`. Every message of an operation becomes the same typed tool, with the file's JSON Schema as its `inputSchema`; a 3.0 operation with a `reply` becomes `request_*`. Example: [samples/asyncapi/warehouse.yaml](samples/asyncapi/warehouse.yaml).
+
+```yaml
+channels:
+  stockAdjusted:
+    address: stock.adjusted                      # routing key
+    bindings: { amqp: { is: routingKey, exchange: { name: warehouse, type: topic } } }
+    messages: { StockAdjusted: { $ref: '#/components/messages/StockAdjusted' } }
+```
+
+- **Routing** comes from the channel's AMQP binding: `is: queue` sends straight to that queue; otherwise the binding's exchange with the channel address as routing key.
+- **Format:** plain JSON (raw) by default; `x-rabbit-mcp: { format: masstransit, urn: 'urn:message:Ns:Type' }` on a message for MassTransit services. `x-rabbit-mcp.version` and `toolName` work like on `[MessageContract]`.
+- **Validation:** type, required, enum, string length/pattern/format, numeric bounds, items, `allOf`/`anyOf`/`oneOf`; local `$ref`s are resolved. Responder mode needs C# contracts.
+- **The other way round:** `rabbit-mcp contracts asyncapi Billing.Contracts.dll > asyncapi.json` describes C# contracts as AsyncAPI 3.0 for other teams and tooling, and `contracts diff` also compares two AsyncAPI files.
+
 ### Compatibility check
 
 A change that still compiles can break running services on the wire. Compare two builds:
@@ -238,6 +255,7 @@ Environment variable `RabbitMcp__Name`, or `"RabbitMcp": { "Name": … }` in `ap
 | `Uri` | `amqp://guest:guest@localhost:5672/` | AMQP URI, vhost at the end (`…/prod`) |
 | `ClientName` | `rabbit-mcp` | Connection name and the envelope's `sourceAddress` |
 | `ContractAssemblies` | — | Your contract DLLs. Empty: the built-in sample contracts |
+| `ContractFiles` | — | AsyncAPI files (YAML/JSON) whose messages become contracts; alone, they replace the sample contracts |
 | `ManagementUri` | — | Management API (`http://localhost:15672`), enables `list_queues` and `contract_consumers` |
 | `EnablePublish` / `EnableRepublish` | `false` | Enables sending / republishing and dead-lettering |
 | `PublishAllow` / `PublishDeny` | — | Contracts that may / may never be sent (deny wins), e.g. `Get*` |

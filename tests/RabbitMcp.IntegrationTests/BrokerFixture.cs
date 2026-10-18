@@ -103,8 +103,11 @@ public sealed class BrokerFixture : IAsyncLifetime
     private Microsoft.Extensions.Options.IOptions<RabbitMcpOptions> _options = null!;
 
     /// <summary>A publisher with a different allow/deny policy, sharing everything else.</summary>
-    public ContractPublisher CreatePublisher(PublishPolicy policy) =>
-        new(Connection, Registry, new EnvelopeFactory(TimeProvider.System), _replies, policy, Audit,
+    public ContractPublisher CreatePublisher(PublishPolicy policy) => CreatePublisher(Registry, policy);
+
+    /// <summary>A publisher for other contracts (e.g. from an AsyncAPI file), sharing the connection and reply queue.</summary>
+    public ContractPublisher CreatePublisher(ContractRegistry registry, PublishPolicy? policy = null) =>
+        new(Connection, registry, new EnvelopeFactory(TimeProvider.System), _replies, policy ?? PublishPolicy.AllowAll, Audit,
             TimeProvider.System, _options, NullLogger<ContractPublisher>.Instance);
 
     /// <summary>All audit events written so far (JSON Lines file).</summary>

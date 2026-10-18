@@ -42,7 +42,7 @@ public static class ContractResources
             ["messageType"] = contract.MessageTypeUrn,
             ["exchange"] = contract.Exchange,
             ["description"] = contract.Description,
-            ["schema"] = Schema(contract.Type),
+            ["schema"] = contract.Schema?.DeepClone() ?? Schema(contract.Type),
         };
         if (contract.RoutingKey.Length > 0)
             json["routingKey"] = contract.RoutingKey;
@@ -54,7 +54,7 @@ public static class ContractResources
                 ["messageType"] = r.MessageTypeUrn,
                 // Responder mode (reply_*) answers MassTransit requests only.
                 ["replyTool"] = contract.IsRaw ? null : ResponderContracts.ReplyToolName(r),
-                ["schema"] = Schema(r.Type),
+                ["schema"] = r.Schema?.DeepClone() ?? Schema(r.Type),
             })]);
         }
         return json.ToJsonString(new JsonSerializerOptions { WriteIndented = true });

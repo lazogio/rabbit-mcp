@@ -102,7 +102,16 @@ public sealed class MessageInspector(ContractRegistry contracts, IOptions<Rabbit
 
     /// <summary>Deserializes JSON into the contract type and runs its validation rules.</summary>
     public static IReadOnlyList<string> Validate(ContractDescriptor contract, JsonElement json, JsonSerializerOptions jsonOptions) =>
-        Validate(contract.Type, json, jsonOptions);
+        contract.Schema is { } schema
+            ? SchemaValidator.Validate(schema, json, numericStrings: !contract.IsRaw)
+            : Validate(contract.Type, json, jsonOptions);
+
+    /// <summary>A reply against its type, or its JSON Schema for replies declared in AsyncAPI files.</summary>
+    public static IReadOnlyList<string> Validate(ResponseDescriptor response, JsonElement json, JsonSerializerOptions jsonOptions,
+        bool numericStrings) =>
+        response.Schema is { } schema
+            ? SchemaValidator.Validate(schema, json, numericStrings)
+            : Validate(response.Type, json, jsonOptions);
 
     /// <summary>Deserializes JSON into <paramref name="type"/> and runs its validation rules.</summary>
     public static IReadOnlyList<string> Validate(Type type, JsonElement json, JsonSerializerOptions jsonOptions)
