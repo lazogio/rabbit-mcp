@@ -113,4 +113,47 @@ public sealed class ErrorQueueTests(BrokerFixture broker)
         Assert.Equal("skipped", Assert.Single(result.Outcomes).Status);
         await broker.WaitForQueueCount(queue, 1);
     }
+
+    [Fact]
+    public async Task Poison_message_is_parked_with_all_its_headers_and_can_come_back()
+    {
+        const string deadQueue = BrokerFixture.OrderCancelledQueue + "_dead";
+        var orderId = Guid.NewGuid();
+        await broker.Publisher.PublishAsync(new OrderCancelled { OrderId = orderId, Reason = "Parked" });
+        await broker.WaitForQueueCount(ErrorQueue, 1);
+        var id = Assert.Single((await broker.Browser.PeekAsync(ErrorQueue, 5, false, CancellationToken.None)).Messages).MessageId!;
+
+        var result = await broker.Browser.DeadLetterAsync(ErrorQueue, 5, [id], null, "cannot be fixed", CancellationToken.None, "it");
+
+        Assert.Equal(1, result.Moved);
+        Assert.Equal(deadQueue, result.DeadLetterQueue);
+        await broker.WaitForQueueCount(ErrorQueue, 0);
+        await broker.WaitForQueueCount(deadQueue, 1);
+
+        // Nothing is lost: fault details stay, ours are added, and the target is still the original queue.
+        var parked = Assert.Single((await broker.Browser.PeekAsync(deadQueue, 5, false, CancellationToken.None)).Messages);
+        Assert.Equal(id, parked.MessageId);
+        Assert.NotNull(parked.Fault);
+        Assert.Equal(ErrorQueue, parked.Headers["X-Dead-Lettered-From"]);
+        Assert.Equal("cannot be fixed", parked.Headers["X-Dead-Letter-Reason"]);
+        Assert.Equal(BrokerFixture.OrderCancelledQueue, parked.RepublishTarget);
+        Assert.Null(parked.RepublishWarning);
+
+        var audit = broker.AuditEvents();
+        Assert.Contains(audit, e => e.GetProperty("action").GetString() == "deadletter"
+                                    && e.GetProperty("outcome").GetString() == "moved");
+
+        // ... and it can be brought back from the dead-letter queue.
+        await broker.Browser.RepublishAsync(deadQueue, 5, [id], null, CancellationToken.None);
+        await broker.WaitForCancelled(orderId);
+        await broker.WaitForQueueCount(deadQueue, 0);
+    }
+
+    [Fact]
+    public async Task Dead_lettering_refuses_queues_with_consumers()
+    {
+        var ex = await Assert.ThrowsAsync<McpException>(() =>
+            broker.Browser.DeadLetterAsync(BrokerFixture.OrderSubmittedQueue, 1, null, null, null, CancellationToken.None));
+        Assert.Contains("active consumer", ex.Message);
+    }
 }

@@ -22,6 +22,11 @@ public sealed class OrderPlacedConsumer(OrderStore orders, ApprovalQueue approva
             orders.IsFirstAttempt(order.OrderId))
             throw new InvalidOperationException("Inventory service unavailable (demo: FLAKY-* items fail once).");
 
+        // Demo of the dead-letter queue: a BROKEN-* item fails every time (a poison message). Republishing does not help;
+        // dead_letter_from_error parks it in order-placed_dead, nothing is deleted.
+        if (order.Lines.Any(l => l.Sku.StartsWith("BROKEN-", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Product no longer exists (demo: BROKEN-* items always fail).");
+
         var total = order.Lines.Sum(l => l.Quantity * l.UnitPrice);
         if (total > ApprovalLimit)
         {

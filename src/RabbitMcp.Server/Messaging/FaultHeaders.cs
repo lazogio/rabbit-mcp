@@ -140,7 +140,10 @@ public sealed record RepublishTarget(string Exchange, string ResolvedFrom, strin
 
 public static class RepublishTargetResolver
 {
-    private static readonly string[] Suffixes = ["_error", "_skipped"];
+    private static readonly string[] Suffixes = ["_error", "_skipped", "_dead"];
+
+    /// <summary>The queue an _error/_skipped/_dead queue belongs to; null for other names.</summary>
+    public static string? OwnerQueue(string queue) => OwnerOf(queue)?.Queue;
 
     /// <summary>
     /// MassTransit binds every receive endpoint queue to a fanout exchange of the
@@ -177,3 +180,22 @@ public static class RepublishTargetResolver
         return null;
     }
 }
+
+/// <summary>Name of the dead-letter queue for an error queue (RabbitMcp:DeadLetterQueue, "{queue}" = owner queue).</summary>
+public static class DeadLetterNaming
+{
+    public static string For(string errorQueue, string pattern) =>
+        (string.IsNullOrWhiteSpace(pattern) ? "{queue}_dead" : pattern)
+            .Replace("{queue}", RepublishTargetResolver.OwnerQueue(errorQueue) ?? errorQueue, StringComparison.Ordinal)
+            .Trim();
+
+    /// <exception cref="ModelContextProtocol.McpException">Not a usable queue name.</exception>
+    public static void Validate(string queue)
+    {
+        if (string.IsNullOrWhiteSpace(queue) || Encoding.UTF8.GetByteCount(queue) > 255)
+            throw new ModelContextProtocol.McpException($"'{queue}' is not a valid queue name (1-255 bytes).");
+        if (queue.StartsWith("amq.", StringComparison.Ordinal))
+            throw new ModelContextProtocol.McpException($"'{queue}' is reserved by RabbitMQ (amq.*).");
+    }
+}
+

@@ -22,7 +22,7 @@ public sealed class ManagementClient : IDisposable
     public const int PageSize = 500;
     public const int MaxPages = 20; // 10,000 queues per call is plenty for an assistant
     private const string Columns = "name,type,state,messages_ready,messages_unacknowledged,consumers";
-    private const string ErrorQueueRegex = "_(error|skipped)$";
+    private const string ErrorQueueRegex = "_(error|skipped|dead)$";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 

@@ -20,6 +20,12 @@ public sealed class RabbitMcpOptions
     /// <summary>Registers republish_from_error. Off by default.</summary>
     public bool EnableRepublish { get; set; }
 
+    /// <summary>
+    /// Where dead_letter_from_error parks messages that cannot be processed: a queue name, "{queue}" is replaced by the
+    /// queue the error queue belongs to (order-placed_error → order-placed_dead). Created (durable) if missing.
+    /// </summary>
+    public string DeadLetterQueue { get; set; } = "{queue}_dead";
+
     /// <summary>Upper bound for the count argument of peek/republish tools.</summary>
     public int MaxMessagesPerCall { get; set; } = 50;
 

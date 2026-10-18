@@ -123,6 +123,10 @@ public static class HeaderNames
     public const string RepublishedBy = "X-Republished-By";
     public const string RepublishedFrom = "X-Republished-From";
     public const string RepublishedAt = "X-Republished-At";
+    public const string DeadLetteredBy = "X-Dead-Lettered-By";
+    public const string DeadLetteredFrom = "X-Dead-Lettered-From";
+    public const string DeadLetteredAt = "X-Dead-Lettered-At";
+    public const string DeadLetterReason = "X-Dead-Letter-Reason";
 
     // MassTransit
     public const string Reason = "MT-Reason";

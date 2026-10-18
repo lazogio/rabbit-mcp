@@ -94,6 +94,20 @@ public sealed record RepublishResult(
     int Republished,
     int Requeued);
 
+public sealed record DeadLetterOutcome(
+    string? MessageId,
+    [property: Description("moved | skipped | failed")] string Status,
+    string? Detail);
+
+public sealed record DeadLetterResult(
+    string ErrorQueue,
+    [property: Description("Queue the messages are (or would be) moved to. Nothing is ever deleted.")] string DeadLetterQueue,
+    [property: Description("False for a preview (confirm=false): nothing was changed.")] bool Executed,
+    PeekResult? Preview,
+    IReadOnlyList<DeadLetterOutcome> Outcomes,
+    int Moved,
+    int Requeued);
+
 public sealed record ExceptionSummary(string? ExceptionType, string? Message, string? StackTrace);
 
 public sealed record RequestFault(
@@ -128,7 +142,7 @@ public sealed record QueueInfo(
     long? MessagesReady,
     long? MessagesUnacknowledged,
     long? Consumers,
-    [property: Description("True for MassTransit _error / _skipped queues.")] bool IsErrorQueue,
+    [property: Description("True for MassTransit _error / _skipped queues and _dead (dead-letter) queues.")] bool IsErrorQueue,
     [property: Description("For error queues: the queue the messages faulted on (republish target).")] string? SourceQueue);
 
 public sealed record QueueListing(

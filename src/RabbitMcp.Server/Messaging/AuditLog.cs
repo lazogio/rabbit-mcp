@@ -31,6 +31,7 @@ public static class AuditActions
     public const string Publish = "publish";
     public const string Request = "request";
     public const string Republish = "republish";
+    public const string DeadLetter = "deadletter"; // moved from an error queue to the dead-letter queue
     public const string Receive = "receive";   // responder: a request arrived
     public const string Respond = "respond";   // responder: reply or rejection sent
     public const string Access = "access";     // a tool call refused by the caller's roles

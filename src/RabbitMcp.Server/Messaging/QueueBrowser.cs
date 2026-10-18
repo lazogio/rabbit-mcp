@@ -245,6 +245,151 @@ public sealed class QueueBrowser(
         return new RepublishResult(errorQueue, Executed: true, Preview: null, outcomes, republished, toRequeue.Count);
     }
 
+    /// <summary>
+    /// Moves messages that cannot be processed from an error queue to the dead-letter queue — never deletes them.
+    /// Same safety as republish: get (no ack) → publish to the dead-letter queue with confirms + mandatory → ack only
+    /// after the broker confirmed. Body and all headers are kept (the MT-Fault-* headers explain why it died) and
+    /// X-Dead-Lettered-* headers record who moved it, from where, when and why. Unselected or failed messages stay.
+    /// </summary>
+    public async Task<DeadLetterResult> DeadLetterAsync(
+        string errorQueue,
+        int count,
+        IReadOnlyCollection<string>? onlyMessageIds,
+        string? deadLetterQueue,
+        string? reason,
+        CancellationToken ct,
+        string? client = null)
+    {
+        var outcomes = new List<DeadLetterOutcome>();
+        var target = deadLetterQueue ?? DeadLetterNaming.For(errorQueue, options.Value.DeadLetterQueue);
+        void AuditOutcomes()
+        {
+            foreach (var o in outcomes)
+                audit.Write(audit.Event(AuditActions.DeadLetter, o.Status, client, queue: errorQueue,
+                    messageId: o.MessageId, detail: $"to {target}{(o.Detail is null ? "" : ": " + o.Detail)}"));
+        }
+
+        try
+        {
+            var result = await DeadLetterCoreAsync(errorQueue, count, onlyMessageIds, target, reason, outcomes, client, ct);
+            AuditOutcomes();
+            return result;
+        }
+        catch (Exception ex)
+        {
+            AuditOutcomes();
+            var error = ex is OperationCanceledException ? null : BrokerErrors.ToMcp(ex);
+            var moved = outcomes.Count(o => o.Status == "moved");
+            var detail = (error?.Message ?? "cancelled") +
+                         $" {moved} message(s) were moved to {target} before that; the others remain in {errorQueue}.";
+            audit.Write(audit.Event(AuditActions.DeadLetter, "error", client, queue: errorQueue, detail: detail));
+            if (error is null || ReferenceEquals(error, ex))
+                throw;
+            throw new McpException(detail, ex);
+        }
+    }
+
+    private async Task<DeadLetterResult> DeadLetterCoreAsync(
+        string errorQueue,
+        int count,
+        IReadOnlyCollection<string>? onlyMessageIds,
+        string target,
+        string? reason,
+        List<DeadLetterOutcome> outcomes,
+        string? client,
+        CancellationToken ct)
+    {
+        CheckCount(count);
+        var source = await EnsureQueueExistsAsync(errorQueue, ct);
+        DeadLetterNaming.Validate(target);
+        if (string.Equals(target, errorQueue, StringComparison.Ordinal))
+            throw new McpException($"'{errorQueue}' is already the dead-letter queue; there is nowhere to move its messages.");
+        if (source.ConsumerCount > 0)
+            throw new McpException(
+                $"'{errorQueue}' has {source.ConsumerCount} active consumer(s), so it is not a parked error queue. Nothing was moved.");
+
+        // Created on first use like MassTransit creates _error queues: durable, so parked messages survive restarts.
+        if (await connection.GetQueueAsync(target, ct) is null)
+        {
+            await using var declare = await connection.CreateChannelAsync(publisherConfirms: false, ct);
+            await declare.QueueDeclareAsync(target, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct);
+            logger.LogInformation("Created dead-letter queue {Queue}", target);
+        }
+
+        var filter = onlyMessageIds is { Count: > 0 }
+            ? new HashSet<string>(onlyMessageIds, StringComparer.OrdinalIgnoreCase)
+            : null;
+        var toRequeue = new List<ulong>();
+        var moved = 0;
+        var scanned = 0;
+
+        await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
+        try
+        {
+            while (scanned < count)
+            {
+                var delivery = await channel.BasicGetAsync(errorQueue, autoAck: false, ct);
+                if (delivery is null)
+                    break;
+                scanned++;
+
+                var props = delivery.BasicProperties;
+                var messageId = props.MessageId ?? MassTransitEnvelope.TryParse(delivery.Body.Span)?.MessageId;
+                if (filter is not null && (messageId is null || !filter.Contains(messageId)))
+                {
+                    toRequeue.Add(delivery.DeliveryTag);
+                    continue;
+                }
+
+                // Every original header stays, fault details included; ours are added.
+                var headers = props.Headers is null
+                    ? new Dictionary<string, object?>(StringComparer.Ordinal)
+                    : new Dictionary<string, object?>(props.Headers, StringComparer.Ordinal);
+                headers[HeaderNames.DeadLetteredBy] = client ?? options.Value.ClientName;
+                headers[HeaderNames.DeadLetteredFrom] = errorQueue;
+                headers[HeaderNames.DeadLetteredAt] = time.GetUtcNow().ToString("O");
+                if (!string.IsNullOrWhiteSpace(reason))
+                    headers[HeaderNames.DeadLetterReason] = reason.Trim();
+
+                var newProps = new BasicProperties(props) { DeliveryMode = DeliveryModes.Persistent, Headers = headers };
+                try
+                {
+                    // Default exchange, routing key = queue name: straight into the dead-letter queue. Body bytes unchanged.
+                    await channel.BasicPublishAsync("", target, mandatory: true, newProps, delivery.Body, ct);
+                }
+                catch (PublishException ex)
+                {
+                    toRequeue.Add(delivery.DeliveryTag);
+                    outcomes.Add(new DeadLetterOutcome(messageId, "failed",
+                        ex.IsReturn ? $"'{target}' did not accept the message. It stays in {errorQueue}."
+                                    : $"Broker rejected the publish. Message kept in {errorQueue}."));
+                    continue;
+                }
+
+                await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, ct);
+                moved++;
+                outcomes.Add(new DeadLetterOutcome(messageId, "moved", null));
+                logger.LogInformation("Dead-lettered {MessageId} from {ErrorQueue} to {Queue}", messageId, errorQueue, target);
+            }
+        }
+        finally
+        {
+            if (channel.IsOpen)
+            {
+                foreach (var tag in toRequeue)
+                    await channel.BasicNackAsync(tag, multiple: false, requeue: true, CancellationToken.None);
+            }
+        }
+
+        if (filter is not null)
+        {
+            foreach (var missing in filter.Except(outcomes.Select(o => o.MessageId ?? ""), StringComparer.OrdinalIgnoreCase))
+                outcomes.Add(new DeadLetterOutcome(missing, "skipped", $"Not found in the first {scanned} message(s) of {errorQueue}."));
+        }
+
+        return new DeadLetterResult(errorQueue, target, Executed: true, Preview: null, outcomes, moved, toRequeue.Count);
+    }
+
     private async Task<QueueDeclareOk> EnsureQueueExistsAsync(string queue, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(queue))

@@ -74,9 +74,11 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
     build provenance attestations for archives/nupkg/SBOM (tags), base images pinned by digest (Dependabot updates).
 
 ## Phase 9 — Operations (`phase-9/operations`) ⬜
-25. ⬜ `discard_from_error`: remove poison messages from an `_error`/`_skipped` queue — preview, `confirm=true`,
-    `messageIds`, optionally move them to a parking queue instead of deleting; audited; off by default
-    (`EnableDiscard`). **Decision needed:** its own role permission `discard` (recommended) or reuse `republish`.
+25. ✅ `dead_letter_from_error` (decision 2026-10-18: a dead-letter queue, never delete): poison messages move from
+    `_error`/`_skipped` to `{queue}_dead` (`DeadLetterQueue`, created durable) with confirms, body and all headers kept
+    plus `X-Dead-Lettered-*`/`X-Dead-Letter-Reason`; preview + `confirm`, `messageIds`, audited (`deadletter`);
+    gated like republish (`EnableRepublish`, role permission `republish` — it moves, nothing is removed);
+    `republish_from_error` brings messages back; `_dead` queues are listed as error queues.
 26. ⬜ `find_message`: find a message by `messageId` or `correlationId` across queues (named queues, or all queues
     via the Management API), bounded scan, never removes anything; shows queue, fault and republish target.
 27. ⬜ `recent_activity`: query the audit file (who sent / republished / rejected what, filters by action, contract,

@@ -17,7 +17,7 @@ public enum Permission
     Publish,
     /// <summary>request_* (request/response); may be limited to contracts.</summary>
     Request,
-    /// <summary>republish_from_error; may be limited to error queues.</summary>
+    /// <summary>republish_from_error and dead_letter_from_error; may be limited to error queues.</summary>
     Republish,
     /// <summary>pending_requests, reply_*, reject_request; may be limited to request contracts.</summary>
     Respond,

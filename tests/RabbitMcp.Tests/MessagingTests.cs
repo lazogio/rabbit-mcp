@@ -156,6 +156,32 @@ public class FaultHeaderTests
         Assert.Equal(expected, RepublishTargetResolver.Resolve(queue, headers)?.Exchange);
     }
 
+    [Theory]
+    [InlineData("order-placed_error", "{queue}_dead", "order-placed_dead")]
+    [InlineData("order-placed_skipped", "{queue}_dead", "order-placed_dead")]
+    [InlineData("legacy-dead-letters", "{queue}_dead", "legacy-dead-letters_dead")]
+    [InlineData("order-placed_error", "parking.{queue}", "parking.order-placed")]
+    [InlineData("order-placed_error", "dead-letters", "dead-letters")]
+    [InlineData("order-placed_error", "", "order-placed_dead")]
+    public void Dead_letter_queue_is_named_after_the_owner_queue(string errorQueue, string pattern, string expected) =>
+        Assert.Equal(expected, DeadLetterNaming.For(errorQueue, pattern));
+
+    [Theory]
+    [InlineData("amq.dead")]
+    [InlineData(" ")]
+    public void Dead_letter_queue_names_are_validated(string name) =>
+        Assert.Throws<ModelContextProtocol.McpException>(() => DeadLetterNaming.Validate(name));
+
+    [Fact]
+    public void Dead_letter_queue_republishes_to_its_owner()
+    {
+        var headers = new Dictionary<string, object?> { ["MT-Fault-InputAddress"] = B("rabbitmq://localhost/order-placed") };
+        var target = RepublishTargetResolver.Resolve("order-placed_dead", headers)!;
+        Assert.Equal("order-placed", target.Exchange);
+        Assert.Null(target.Conflict);
+        Assert.Equal("order-placed", RepublishTargetResolver.Resolve("order-placed_dead", null)!.Exchange);
+    }
+
     [Fact]
     public void RepublishTarget_header_that_disagrees_with_the_error_queue_is_a_conflict()
     {

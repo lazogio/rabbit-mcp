@@ -6,6 +6,7 @@ Walks through the Shop sample the way a model would, over MCP Streamable HTTP:
   1. the shop service is consuming (contract_consumers) and the responder is listening (pending_requests)
   2. request_get_order_status finds the demo order
   3. publish_order_placed with a FLAKY- item → order-placed_error → peek → republish_from_error → Approved
+     and a BROKEN- item → dead_letter_from_error → parked in order-placed_dead (nothing deleted)
   4. publish_order_placed above the limit → pending_requests → reply_order_approved → Approved
   5. another large order → reject_request → Rejected with the reason
 
@@ -91,7 +92,7 @@ def main():
         "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "sample-e2e", "version": "1"}})), 180)
     tools = {t["name"] for t in rpc("tools/list")["tools"]}
     expected = {"publish_order_placed", "request_get_order_status", "peek_messages", "republish_from_error",
-                "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request"}
+                "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request", "dead_letter_from_error"}
     assert expected <= tools, f"missing tools: {expected - tools}"
     assert "request_approve_large_order" not in tools, "PublishDeny should hide request_approve_large_order"
     step(f"{len(tools)} tools, including the shop's contracts")
@@ -125,6 +126,24 @@ def main():
     assert republished["republished"] == 1, republished
     order = eventually("republished order approved", lambda: (s := status_of(flaky)) and s["status"] == "Approved" and s)
     step(f"republish_from_error: the order was processed again → {order['status']}")
+
+    # --- 2b. a poison message goes to the dead-letter queue, nothing is deleted
+    broken = str(uuid.uuid4())
+    place(broken, "BROKEN-CHAIR", 1, 50)
+    poison = eventually("BROKEN order in order-placed_error", ready(lambda: next((
+        m for m in call("peek_messages", queue="order-placed_error", count=10)["messages"]
+        if (m.get("payload") or {}).get("orderId") == broken), None)))
+    preview = call("dead_letter_from_error", errorQueue="order-placed_error", count=10)
+    assert preview["executed"] is False and preview["deadLetterQueue"] == "order-placed_dead", preview
+    parked = call("dead_letter_from_error", errorQueue="order-placed_error", count=10, confirm=True,
+                  messageIds=[poison["messageId"]], reason="Product no longer exists")
+    assert parked["moved"] == 1, parked
+    dead = eventually("parked message in order-placed_dead", ready(lambda: next((
+        m for m in call("peek_messages", queue="order-placed_dead", count=10)["messages"]
+        if m.get("messageId") == poison["messageId"]), None)))
+    assert dead["headers"].get("X-Dead-Letter-Reason") == "Product no longer exists", dead["headers"]
+    assert "no longer exists" in (dead.get("fault") or {}).get("exceptionMessage", ""), dead
+    step("dead_letter_from_error: the poison message is parked in order-placed_dead with its fault and the reason")
 
     # --- 3. responder: the shop asks, the model answers
     large = str(uuid.uuid4())

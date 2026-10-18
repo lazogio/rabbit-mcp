@@ -159,6 +159,8 @@ public class AccessControlTests
         Assert.True(tools.IsVisible("publish_order_submitted", alice));
         Assert.False(tools.IsVisible("request_get_order_status", alice));
         Assert.True(tools.IsVisible("republish_from_error", alice));
+        Assert.True(tools.IsVisible("dead_letter_from_error", alice));
+        Assert.False(tools.IsVisible("dead_letter_from_error", bob));
         Assert.False(tools.IsVisible("pending_requests", alice));
         Assert.False(tools.IsVisible("some_unknown_tool", alice)); // no rule → denied while roles are on
     }
@@ -185,7 +187,8 @@ public class AccessControlTests
     {
         var tools = Tools(Create(null, null, ("viewer", "read")));
         foreach (var name in new[] { "list_contracts", "validate_message", "queue_stats", "peek_messages", "list_queues",
-                                     "contract_consumers", "republish_from_error", "pending_requests", "reject_request" })
+                                     "contract_consumers", "republish_from_error", "dead_letter_from_error", "pending_requests",
+                                     "reject_request" })
             Assert.NotNull(tools.RuleFor(name));
         foreach (var contract in Registry.Contracts)
             Assert.NotNull(tools.RuleFor(contract.ToolName));

@@ -18,7 +18,7 @@ public sealed record OrderPlaced
     [EmailAddress]
     public required string CustomerEmail { get; init; }
 
-    [Description("Ordered items. A SKU starting with FLAKY- fails the first time (demo of the _error queue).")]
+    [Description("Ordered items. A SKU starting with FLAKY- fails the first time (demo of the _error queue), BROKEN- always fails (demo of the dead-letter queue).")]
     [MinLength(1)]
     public required List<OrderLine> Lines { get; init; }
 }

@@ -8,7 +8,7 @@ RabbitMQ-ის MCP სერვერი, რომელიც **შეტყ�
 
 - **აგზავნის:** `publish_<contract>` აქვეყნებს event-ს, `request_<contract>` აგზავნის request-ს და აბრუნებს პასუხს. ორივე შემთხვევაში შეტყობინება გაგზავნამდე კონტრაქტზე მოწმდება.
 - **ხედავს:** აჩვენებს რიგებს, მათ სტატისტიკას და შეტყობინებებს ამოღების გარეშე, MassTransit-ის fault-ის დეტალებით. პოულობს, ვინ იღებს თითო კონტრაქტს.
-- **აღადგენს:** `_error` რიგიდან შეტყობინებებს უსაფრთხოდ აბრუნებს საწყის რიგში.
+- **აღადგენს:** `_error` რიგიდან შეტყობინებებს უსაფრთხოდ აბრუნებს საწყის რიგში. გამოუსწორებელს dead-letter რიგში გადაიტანს და არასდროს შლის.
 - **პასუხობს:** responder რეჟიმში სერვისების request-ებს მოდელი პასუხობს.
 - **იცავს:** `contracts diff` CI-ში აჩერებს wire-ის დამრღვევ ცვლილებებს, როლები კი ზღუდავს, ვის რა შეუძლია.
 
@@ -56,7 +56,8 @@ claude mcp add rabbit-mcp \
 | `contract_consumers` | რომელ რიგებამდე აღწევს კონტრაქტი, ჰყავს თუ არა consumer, რამდენია `_error`/`_skipped`-ში | `ManagementUri` |
 | `publish_<contract>` | აქვეყნებს event-ს | `EnablePublish` |
 | `request_<contract>` | აგზავნის request-ს და აბრუნებს პასუხს | `EnablePublish` |
-| `republish_from_error` | აბრუნებს შეტყობინებებს `_error`/`_skipped` რიგიდან: ჯერ preview, შემდეგ `confirm=true` | `EnableRepublish` |
+| `republish_from_error` | აბრუნებს შეტყობინებებს `_error`/`_skipped`/`_dead` რიგიდან: ჯერ preview, შემდეგ `confirm=true` | `EnableRepublish` |
+| `dead_letter_from_error` | გამოუსწორებელ შეტყობინებას გადაიტანს dead-letter რიგში (`<queue>_dead`) მიზეზთან ერთად. არაფერს შლის | `EnableRepublish` |
 | `pending_requests` | შემოსული request-ები, რომლებიც პასუხს ელოდება (`waitSeconds` = long poll) | `RespondTo` |
 | `reply_<response>` / `reject_request` | პასუხობს request-ს ან უარყოფს მას | `RespondTo` |
 
@@ -165,7 +166,7 @@ docker run -d -p 5080:5080 \
 |---|---|---|
 | `read` | ნახვა: სიები, სტატისტიკა, peek, `contract_consumers` | — |
 | `publish` / `request` | `publish_*` / `request_*` | კონტრაქტით: `publish:Billing.*,Order*` |
-| `republish` | `republish_from_error` | error რიგით: `republish:orders-*_error` |
+| `republish` | `republish_from_error`, `dead_letter_from_error` | error რიგით: `republish:orders-*_error` |
 | `respond` | `pending_requests`, `reply_*`, `reject_request` | request კონტრაქტით: `respond:AskHuman` |
 | `*` | ყველაფერი | — |
 
@@ -195,6 +196,7 @@ env ცვლადი `RabbitMcp__Name`, ან `appsettings.json`-ში `"Rab
 | `ManagementUri` | — | Management API (`http://localhost:15672`), რთავს `list_queues`-ს და `contract_consumers`-ს |
 | `EnablePublish` / `EnableRepublish` | `false` | რთავს გაგზავნას / republish-ს |
 | `PublishAllow` / `PublishDeny` | — | რომელი კონტრაქტების გაგზავნაა ნებადართული / აკრძალული (deny უპირატესია), მაგ. `Get*` |
+| `DeadLetterQueue` | `{queue}_dead` | სად გადადის გამოუსწორებელი შეტყობინება. `{queue}` არის რიგი, რომელსაც error რიგი ეკუთვნის. ფიქსირებული სახელიც შეიძლება, მაგ. `dead-letters` |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | responder-ის კონტრაქტები / მოლოდინში მყოფი request-ების ზღვარი |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | audit ფაილი (JSON Lines) / ჩაიწეროს თუ არა შიგთავსი (შეიძლება პერსონალურ მონაცემებს შეიცავდეს) |
 | `MaxMessagesPerCall` / `MaxPayloadChars` | `50` / `16000` | peek/republish-ის ზღვარი / ჩვენებისას body-ის შეკვეცის ზღვარი |
@@ -213,6 +215,7 @@ env ცვლადი `RabbitMcp__Name`, ან `appsettings.json`-ში `"Rab
 
 - **შეტყობინება არ იკარგება.** ვალიდაციის ჩავარდნისას არაფერი იგზავნება. exchange-ის არსებობა წინასწარ მოწმდება. publisher confirms და `mandatory` ვერ მიწოდებულ შეტყობინებას შეცდომად აბრუნებს.
 - **republish:** შეტყობინება error რიგიდან მხოლოდ ბროკერის დადასტურების შემდეგ იშლება. body უცვლელია, იშლება მხოლოდ fault header-ები. მიწოდება at-least-once-ია.
+- **dead-letter:** შეტყობინების წაშლის ხელსაწყო არ არსებობს. გამოუსწორებელი შეტყობინება იმავე წესით, დადასტურების შემდეგ გადადის durable `_dead` რიგში. body და ყველა header, მათ შორის fault-ის დეტალები, უცვლელი რჩება. ემატება `X-Dead-Lettered-By/-From/-At` და `X-Dead-Letter-Reason`. უკან `republish_from_error` აბრუნებს.
 - **peek:** აქტიური consumer-ის მქონე რიგზე `force=true` სჭირდება. შეტყობინება რიგში რჩება, მაგრამ `redelivered` ხდება.
 - **Audit:** ყოველი გაგზავნა, request, republish და პასუხი იწერება შედეგთან და მომხმარებელთან ერთად. ჩავარდნილი და უარყოფილი მცდელობებიც იწერება:
   ```json

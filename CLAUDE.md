@@ -35,7 +35,7 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 | `src/RabbitMcp.Contracts` | the `[MessageContract]` attribute only (the NuGet package). **No dependencies** — services reference it. Never add contracts here. |
 | `src/RabbitMcp.Samples` | built-in sample contracts (orders), bundled with the server as the fallback when `ContractAssemblies` is empty |
 | `src/RabbitMcp.Server/Contracts` | `ContractRegistry` (naming conventions), `ContractValidator` (DataAnnotations, nested paths), `ContractAssemblyLoader` (`ContractAssemblies` option) |
-| `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only), responder mode (`ResponderService`, `RequestInbox`, `ResponderEnvelopes`) |
+| `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish/dead-letter), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only), responder mode (`ResponderService`, `RequestInbox`, `ResponderEnvelopes`) |
 | `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas) |
 | `tests/RabbitMcp.Tests` | xUnit unit tests, no broker needed |
 | `tests/RabbitMcp.ExternalContracts` | a user-style contracts DLL, loaded at runtime by loader tests and smoke tests |
@@ -73,6 +73,8 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   (`reply_*`) or rejects (`Fault<T>`). Replies go to `responseAddress`, faults to `faultAddress ?? responseAddress`;
   a reply that fails validation is not sent and the request stays pending. The responder queue name is
   deterministic and exclusive (`{ClientName}-responder`): one active instance, others stand by (405 RESOURCE_LOCKED).
+- **Nothing is ever deleted**: there is no tool that removes messages. Poison messages are parked with
+  `dead_letter_from_error` (same get → confirmed publish → ack sequence as republish, all headers kept).
 - **Never trust message content for routing**: envelope addresses and AMQP headers are written by whoever published
   the message. Responder replies only to temporary reply endpoints (`CheckTemporaryExchangeAsync`); republish does not
   follow an `MT-Fault-InputAddress` that disagrees with the error queue's owner (`RepublishTarget.Conflict`).
