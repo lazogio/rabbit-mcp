@@ -223,10 +223,12 @@ public static class SchemaValidator
 
     private static int? Int(JsonObject s, string key) => Dec(s, key) is { } d ? (int)Math.Min(d, int.MaxValue) : null;
 
+    // Numbers from JSON (JsonElement) and from YAML (long/decimal values) alike: read them through their JSON text.
     private static decimal? Dec(JsonObject s, string key) =>
-        s[key] is JsonValue v && v.TryGetValue<decimal>(out var d) ? d
-        : s[key] is JsonValue w && w.TryGetValue<double>(out var x) && Math.Abs(x) < 7.9e28 ? (decimal)x
-        : null;
+        s[key] is JsonValue v && v.GetValueKind() == JsonValueKind.Number &&
+        decimal.TryParse(v.ToJsonString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
+            ? d
+            : null;
 
     private static JsonNode? ToNode(JsonElement value) => JsonNode.Parse(value.GetRawText());
 

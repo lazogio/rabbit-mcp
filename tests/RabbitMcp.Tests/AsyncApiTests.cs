@@ -103,6 +103,11 @@ public class AsyncApiTests
         Assert.Equal("true", node["g"]!.GetValue<string>());
         Assert.Equal(1, YamlJson.Parse("""{"a":1}""")!["a"]!.GetValue<int>());
         Assert.Throws<InvalidOperationException>(() => YamlJson.Parse("a: [1"));
+
+        // Bounds written in YAML are numbers the validator understands.
+        var schema = YamlJson.Parse("type: integer\nminimum: 1\nmaximum: 2.5");
+        Assert.Contains("at least 1", Assert.Single(SchemaValidator.Validate(schema, J("0"))));
+        Assert.Contains("at most 2.5", Assert.Single(SchemaValidator.Validate(schema, J("3"))));
     }
 
     // --- AsyncAPI documents
