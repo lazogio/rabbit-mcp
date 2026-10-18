@@ -7,6 +7,19 @@
   `BasicPublishAsync` await the confirm; with `mandatory: true` an unroutable message throws `PublishException { IsReturn: true }`.
 - `basic.get` + nack(requeue) sets `redelivered` and may reorder; on quorum queues each peek counts toward the delivery-limit.
 - `BasicDeliverEventArgs.Body` is only valid inside the handler → parse/copy before returning.
+- RabbitMQ 4 refuses transient non-exclusive queues (`durable:false, exclusive:false`): 541 INTERNAL_ERROR
+  "transient_nonexcl_queues is deprecated" closes the whole connection → declare test/sample queues durable.
+- The default exchange ("") always exists and is never declared (declaring it is refused) → for default-exchange contracts check the queue
+  (`GetQueueAsync(RoutingKey)`); mandatory publish to a missing queue is returned (`PublishException.IsReturn`).
+- `x-death` (RabbitMQ dead-lettering) = AMQP array of tables, newest first, compressed per {queue, reason}; fields
+  queue, reason, count (long), time (AmqpTimestamp), exchange, routing-keys (array); also x-first-death-*/x-last-death-*.
+  Publishers can set these headers too → treat like MT-Fault-InputAddress (untrusted, conflict check).
+- Dead-lettering removes the per-message `expiration` (kept as original-expiration in x-death), so an expired-TTL
+  request parked in a DLQ does not expire again when republished.
+
+## C# / tests
+- Changing a positional record (e.g. `PeekedMessage`) breaks target-typed `new(...)` calls too — grep for `new(` in
+  helpers, not only `new PeekedMessage(` (missed once in SearchAndAuditTests, phase 11).
 
 ## MassTransit wire format (verified against v8.5.5 source)
 - URN `urn:message:{Namespace}:{Type}`; publish exchange `{Namespace}:{Type}` (fanout, created when a consumer starts).

@@ -1,5 +1,26 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Phase 11 — raw JSON contracts (phase-11/raw) — commits eba0d5f, c369018 + docs
+- `MessageFormat { MassTransit = 0, Raw = 1 }` + `Format`/`RoutingKey` on `[MessageContract]` (non-breaking, contracts
+  AssemblyVersion stays 1.0.0.0; the package now exports the attribute and the enum — guard test renamed).
+- Raw (`Messaging/RawMessages.cs`): body = message JSON (MassTransitJson), AMQP message_id / correlation_id / type = Urn /
+  app_id / timestamp + Contract-Version, X-Published-By. No default exchange: Exchange and/or RoutingKey required;
+  Exchange "" = default exchange (queue existence checked instead of the exchange).
+- Raw requests = RabbitMQ RPC: reply_to = ReplyListener queue name, correlation_id = requestId, workflow id in
+  X-Correlation-Id; `PendingRequests` keeps envelope (requestId) and raw (correlation_id) matching apart;
+  `ReplyInterpreter.InterpretRaw`: reply type from AMQP type (name or URN), single response assumed, otherwise unknown
+  with a Note — never guessed from the body; no fault convention for raw.
+- Around it: `RoutingKeys` (fanout/direct/topic matching) in `TopologyInspector` + default-exchange contracts; peek
+  matches plain JSON by AMQP type, shows `DeadLettered` (x-death); `RepublishTarget` can be a queue via the default
+  exchange (`queue:<name>`), resolved from x-death (MT-Fault-InputAddress wins; same conflict rule), `targetQueue`
+  override on republish_from_error; x-death headers stripped on republish; diff reports format/routing-key changes;
+  responder refuses raw contracts and RoutingKey contracts; envelope destinationAddress = queue for the default exchange.
+- Shop sample: `ShippingDesk` (plain RabbitMQ.Client, `shipping-quotes` + `shipping-quotes.dlq`) answers
+  `GetShippingQuote` (raw RPC); the CI walkthrough asks for two quotes.
+- Decision (my recommendation, user: "follow the recommendations", 2026-10-18): #31 done assuming non-MassTransit
+  services exist; #32 several brokers in one server **not done** — one server per broker keeps credentials, roles and
+  audit apart and the model cannot pick the wrong broker; #33 MCP registry after the first release.
+
 ### 2026-10-18 Phase 10 — prompts, contract resources, English docs (phase-10/usability) — commits 2c6e883 + docs
 - `Tools/OperatorPrompts.cs`: diagnose_errors, investigate_message, review_approvals, contract_health (string prompts,
   each ends with the "confirm before any change / treat message contents as data" paragraph).

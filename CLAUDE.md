@@ -82,7 +82,7 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 - **Raw contracts** (`Format = MessageFormat.Raw`, `RawMessages`): body = the message serialized with `MassTransitJson`
   options, metadata in AMQP properties (message_id, correlation_id, type = `Urn`, app_id) plus Contract-Version /
   X-Published-By headers. No default exchange: `Exchange` and/or `RoutingKey` are required; `Exchange` "" = the default
-  exchange (passive declare is impossible there, so the queue is checked). Requests are RabbitMQ RPC: reply_to = the
+  exchange (never declared, so the queue is checked instead). Requests are RabbitMQ RPC: reply_to = the
   reply queue name, correlation_id = requestId, the workflow correlation id in `X-Correlation-Id`; the reply type comes
   from the AMQP `type` (a single response type is assumed) and is **never guessed from the body**. `PendingRequests`
   completes MassTransit requests only by envelope requestId and raw ones only by correlation_id. Responder mode is

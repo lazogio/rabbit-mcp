@@ -19,17 +19,17 @@ docker build -t rabbit-mcp . && scripts/smoke-test-http.sh docker:rabbit-mcp
 ## Layout
 
 ```
-src/RabbitMcp.Contracts              the [MessageContract] attribute only (the NuGet package services reference)
+src/RabbitMcp.Contracts              the [MessageContract] attribute and MessageFormat only (the NuGet package services reference)
 src/RabbitMcp.Samples                built-in sample contracts, shipped with the server only
 src/RabbitMcp.Server/Contracts       registry, validation, loading contract DLLs, contracts diff
-src/RabbitMcp.Server/Messaging       AMQP, MassTransit envelope, peek/republish/dead-letter, request/response, responder, audit
+src/RabbitMcp.Server/Messaging       AMQP, MassTransit envelope, raw JSON, peek/republish/dead-letter, request/response, responder, audit
 src/RabbitMcp.Server/Security        roles and tool permissions
 src/RabbitMcp.Server/Hosting         stdio and HTTP hosts, authentication
 src/RabbitMcp.Server/Tools           MCP tools, prompts, resources and their results (outputSchema)
 tests/RabbitMcp.Tests                unit tests
-tests/RabbitMcp.IntegrationTests     real RabbitMQ + MassTransit
+tests/RabbitMcp.IntegrationTests     real RabbitMQ + MassTransit (and plain RabbitMQ.Client services for raw contracts)
 tests/RabbitMcp.ExternalContracts    a user-style contracts DLL
-samples/Shop                         full sample: contracts, MassTransit service, docker compose
+samples/Shop                         full sample: contracts, MassTransit service + plain RabbitMQ shipping desk, docker compose
 ```
 
 The rules that must not be broken (MassTransit compatibility, no message loss, nothing deleted, audit, secrets,

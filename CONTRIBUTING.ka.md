@@ -19,17 +19,17 @@ docker build -t rabbit-mcp . && scripts/smoke-test-http.sh docker:rabbit-mcp
 ## სტრუქტურა
 
 ```
-src/RabbitMcp.Contracts              მხოლოდ [MessageContract] attribute (NuGet პაკეტი, სერვისები იყენებენ)
+src/RabbitMcp.Contracts              მხოლოდ [MessageContract] attribute და MessageFormat (NuGet პაკეტი, სერვისები იყენებენ)
 src/RabbitMcp.Samples                ჩაშენებული ნიმუშის კონტრაქტები, მხოლოდ სერვერთან ერთად
 src/RabbitMcp.Server/Contracts       რეესტრი, ვალიდაცია, DLL-ების ჩატვირთვა, contracts diff
-src/RabbitMcp.Server/Messaging       AMQP, MassTransit envelope, peek/republish/dead-letter, request/response, responder, audit
+src/RabbitMcp.Server/Messaging       AMQP, MassTransit envelope, raw JSON, peek/republish/dead-letter, request/response, responder, audit
 src/RabbitMcp.Server/Security        როლები და ხელსაწყოების უფლებები
 src/RabbitMcp.Server/Hosting         stdio და HTTP ჰოსტი, ავტორიზაცია
 src/RabbitMcp.Server/Tools           MCP ხელსაწყოები, prompts, resources და მათი შედეგები (outputSchema)
 tests/RabbitMcp.Tests                unit ტესტები
-tests/RabbitMcp.IntegrationTests     ნამდვილი RabbitMQ + MassTransit
+tests/RabbitMcp.IntegrationTests     ნამდვილი RabbitMQ + MassTransit (raw კონტრაქტებისთვის უბრალო RabbitMQ.Client სერვისებიც)
 tests/RabbitMcp.ExternalContracts    „გარე“ კონტრაქტების DLL-ის ნიმუში
-samples/Shop                         სრული ნიმუში: კონტრაქტები, MassTransit სერვისი, docker compose
+samples/Shop                         სრული ნიმუში: კონტრაქტები, MassTransit სერვისი + უბრალო RabbitMQ-ის მიწოდების სერვისი, docker compose
 ```
 
 წესები, რომლებიც არ უნდა დაირღვეს (MassTransit-თან თავსებადობა, შეტყობინების დაუკარგაობა, არაფრის წაშლა, audit, საიდუმლოები, უფლებები), [CLAUDE.md](CLAUDE.md)-შია.

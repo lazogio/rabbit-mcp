@@ -1,6 +1,6 @@
 # rabbit-mcp memory — index
 
-Last updated: 2026-10-13 · Bugs: 19 (0 open) · Next ID: BUG-020
+Last updated: 2026-10-18 · Bugs: 19 (0 open) · Next ID: BUG-020
 
 ## Files
 - `bugs.md` — bug log (symptom, root cause, fix, guard, lesson)
@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 19 (0 open) · Next ID: BUG-020
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-18 phase-11/raw: raw JSON contracts (Format = Raw, RoutingKey, RabbitMQ RPC, x-death republish); #32 multi-broker declined, #33 after release
 - 2026-10-18 phase-10: MCP prompts (4), contract:// resources, docs in English + Georgian (*.ka.md)
 - 2026-10-18 phase-9 done: find_message (id/correlation/text across error queues), recent_activity (audit, newest first)
 - 2026-10-18 phase-9/dead-letter: dead_letter_from_error ({queue}_dead), never delete messages
