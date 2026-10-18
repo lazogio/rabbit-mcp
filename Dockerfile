@@ -29,5 +29,7 @@ COPY LICENSE /app/LICENSE
 ENV RabbitMcp__Transport=http \
     RabbitMcp__HttpUrls=http://0.0.0.0:5080
 EXPOSE 5080
+# MCP registry: ties the image to its server.json entry (io.github.lazogio/rabbit-mcp).
+LABEL io.modelcontextprotocol.server.name="io.github.lazogio/rabbit-mcp"
 USER $APP_UID
 ENTRYPOINT ["./rabbit-mcp"]

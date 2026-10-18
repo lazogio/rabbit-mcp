@@ -6,6 +6,23 @@
     <RootNamespace>RabbitMcp.Server</RootNamespace>
   </PropertyGroup>
 
+  <!-- `dotnet tool install -g RabbitMcp.Server` / `dnx RabbitMcp.Server`: a framework-dependent tool package that NuGet
+       also lists as an MCP server (.mcp/server.json, also the MCP registry manifest). Releases build it (release.yml)
+       with -p:PackAsTool=true; it is not set here so the self-contained single-file publishes stay unaffected. -->
+  <PropertyGroup>
+    <ToolCommandName>rabbit-mcp</ToolCommandName>
+    <PackageId>RabbitMcp.Server</PackageId>
+    <PackageType>McpServer</PackageType>
+    <Description>Contract-first MCP server for RabbitMQ: one typed tool per message contract (MassTransit, plain JSON or AsyncAPI), safe error-queue recovery, audit and roles.</Description>
+    <PackageTags>mcp;rabbitmq;masstransit;asyncapi;ai</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include=".mcp/server.json" Pack="true" PackagePath="/.mcp/" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" />

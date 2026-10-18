@@ -1,5 +1,7 @@
 # rabbit-mcp
 
+<!-- mcp-name: io.github.lazogio/rabbit-mcp -->
+
 [![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **English** · [ქართული](README.ka.md)
@@ -17,6 +19,8 @@ An MCP server for RabbitMQ built on **message contracts** (.NET 10). Every C# re
 ## Install
 
 **Prebuilt binary.** [Releases](https://github.com/lazogio/rabbit-mcp/releases) has a self-contained file for Linux (x64/arm64), Windows (x64) and macOS (x64/arm64) — no .NET installation needed. On macOS, before the first start: `xattr -d com.apple.quarantine rabbit-mcp`. `gh attestation verify <file> --repo lazogio/rabbit-mcp` proves a file was built by this repository's release workflow, and every dependency is listed in the release's SBOM (`*.sbom.cdx.json`).
+
+**As a .NET tool** (needs the .NET 10 runtime; from the first release on nuget.org): `dotnet tool install -g RabbitMcp.Server` installs the `rabbit-mcp` command, or let the client start it without installing — `"command": "dnx", "args": ["RabbitMcp.Server", "--yes"]`. The package is listed on nuget.org as an MCP server, and the same manifest (`src/RabbitMcp.Server/.mcp/server.json`) is meant for the official MCP registry as `io.github.lazogio/rabbit-mcp`.
 
 **Claude Code:**
 

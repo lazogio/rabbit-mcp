@@ -1,5 +1,7 @@
 # rabbit-mcp
 
+<!-- mcp-name: io.github.lazogio/rabbit-mcp -->
+
 [![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [English](README.md) · **ქართული**
@@ -17,6 +19,8 @@ RabbitMQ-ის MCP სერვერი, რომელიც **შეტყ�
 ## დაყენება
 
 **მზა ბინარი.** [Releases](https://github.com/lazogio/rabbit-mcp/releases)-ში დევს self-contained ფაილი Linux-ის (x64/arm64), Windows-ის (x64) და macOS-ის (x64/arm64) პლატფორმებისთვის. .NET-ის დაყენება არ სჭირდება. macOS-ზე პირველ გაშვებამდე: `xattr -d com.apple.quarantine rabbit-mcp`. ფაილის ავთენტურობას `gh attestation verify <ფაილი> --repo lazogio/rabbit-mcp` ამოწმებს, ხოლო ყველა დამოკიდებულება რელიზის SBOM-შია (`*.sbom.cdx.json`).
+
+**.NET tool-ად** (სჭირდება .NET 10 runtime; nuget.org-ზე პირველი რელიზიდან): `dotnet tool install -g RabbitMcp.Server` აყენებს `rabbit-mcp` ბრძანებას, ან კლიენტმა თავად გაუშვას დაყენების გარეშე — `"command": "dnx", "args": ["RabbitMcp.Server", "--yes"]`. nuget.org-ზე პაკეტი MCP სერვერად ჩანს, ხოლო იგივე მანიფესტი (`src/RabbitMcp.Server/.mcp/server.json`) ოფიციალური MCP registry-სთვისაა, როგორც `io.github.lazogio/rabbit-mcp`.
 
 **Claude Code:**
 

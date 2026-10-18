@@ -137,6 +137,28 @@ jobs:
       - name: Pack
         run: dotnet pack src/RabbitMcp.Contracts -c Release -p:Version=${{ steps.version.outputs.version }} -o out
 
+      # The server as a .NET tool / NuGet MCP server package; its .mcp/server.json carries the release version.
+      - name: Pack the server tool (RabbitMcp.Server)
+        run: |
+          python3 - "${{ steps.version.outputs.version }}" <<'PY'
+          import json, sys
+          path = "src/RabbitMcp.Server/.mcp/server.json"
+          manifest = json.load(open(path))
+          manifest["version"] = sys.argv[1]
+          for package in manifest["packages"]:
+              package["version"] = sys.argv[1]
+          json.dump(manifest, open(path, "w"), indent=2)
+          PY
+          dotnet pack src/RabbitMcp.Server -c Release -p:PackAsTool=true -p:Version=${{ steps.version.outputs.version }} -o out
+
+      # Installed exactly as a user would, then driven over MCP stdio.
+      - name: MCP smoke test (dotnet tool)
+        run: |
+          dotnet tool install RabbitMcp.Server --tool-path tool --add-source out --version ${{ steps.version.outputs.version }}
+          unzip -l out/RabbitMcp.Server.*.nupkg | grep -q ".mcp/server.json"
+          unzip -p out/RabbitMcp.Server.*.nupkg '*.nuspec' | grep -q 'McpServer'
+          scripts/smoke-test.sh tool/rabbit-mcp
+
       # The SBOM lists every NuGet package inside the server (read from deps.json of a framework-dependent publish;
       # the single-file binaries contain the same packages).
       - name: Publish for the SBOM
@@ -264,7 +286,8 @@ jobs:
               $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)
           fi
 
-      - name: Publish RabbitMcp.Contracts to nuget.org
+      # Both packages: RabbitMcp.Contracts and the RabbitMcp.Server tool (an MCP server package on nuget.org).
+      - name: Publish the packages to nuget.org
         if: env.NUGET_API_KEY != ''
         run: >
           dotnet nuget push dist/*.nupkg

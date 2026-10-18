@@ -1,5 +1,15 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Phase 15 prepared — distribution without a release (phase-15/prepare-distribution)
+- `RabbitMcp.Server` tool package: csproj has PackageId/ToolCommandName rabbit-mcp/PackageType McpServer/readme +
+  `.mcp/server.json`; `PackAsTool` only on the release pack command (`-p:PackAsTool=true`) so the self-contained
+  single-file publishes are untouched. release.yml stamps the version into server.json, packs, installs with
+  `dotnet tool install --tool-path` and runs smoke-test.sh on the shim; nuget push sends both nupkgs.
+- MCP registry: server.json name `io.github.lazogio/rabbit-mcp` (nuget stdio + oci stdio with
+  RabbitMcp__Transport=stdio); `<!-- mcp-name: ... -->` in README (registry ownership check for nuget), Docker
+  `LABEL io.modelcontextprotocol.server.name` (check for oci). Publishing (`mcp-publisher`) is the owner's step after
+  the first tag. No tag/release made — owner's decision.
+
 ### 2026-10-18 Phase 14 — AsyncAPI contracts (phase-14/asyncapi) — commits ecfaac4, e06c536
 - `ContractFiles` → `AsyncApiLoader` (3.0 operations incl. reply → request; 2.x publish/subscribe incl. oneOf; no
   operations → every channel message is an event). Routing from channel AMQP binding (is: queue → default exchange;

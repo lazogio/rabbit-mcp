@@ -1,0 +1,91 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "name": "io.github.lazogio/rabbit-mcp",
+  "description": "Contract-first MCP server for RabbitMQ: one typed tool per message contract (MassTransit, plain JSON or AsyncAPI), safe error-queue recovery, audit and roles.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/lazogio/rabbit-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "nuget",
+      "registryBaseUrl": "https://api.nuget.org",
+      "identifier": "RabbitMcp.Server",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [],
+      "environmentVariables": [
+        {
+          "name": "RabbitMcp__Uri",
+          "description": "AMQP URI of the broker, e.g. amqp://user:pass@localhost:5672/vhost.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "RabbitMcp__EnablePublish",
+          "description": "true to enable the publish_*/request_* tools (off by default).",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "RabbitMcp__EnableRepublish",
+          "description": "true to enable republish_from_error / dead_letter_from_error (off by default).",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "RabbitMcp__ManagementUri",
+          "description": "RabbitMQ Management API, e.g. http://localhost:15672 (list_queues, contract_consumers).",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "RabbitMcp__ContractAssemblies",
+          "description": "Your [MessageContract] DLLs (\";\"-separated). Empty: built-in sample contracts.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "RabbitMcp__ContractFiles",
+          "description": "AsyncAPI files (YAML/JSON) whose messages become contracts (\";\"-separated).",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/lazogio/rabbit-mcp",
+      "version": "0.1.0",
+      "runtimeHint": "docker",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-i",
+          "description": "stdin for MCP stdio"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "RabbitMcp__Transport",
+          "description": "stdio for a local client (the image defaults to http).",
+          "default": "stdio",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "RabbitMcp__Uri",
+          "description": "AMQP URI of the broker, reachable from the container.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

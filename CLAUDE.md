@@ -26,7 +26,9 @@ git tag vX.Y.Z && git push origin vX.Y.Z                 # release: binaries for
 CI (`.github/workflows/ci.yml`) builds and tests every push (any branch) and PR, with a separate
 integration job; failing tests appear as annotations (readable via the REST API without auth).
 It is the source of truth when the local environment cannot restore NuGet packages.
-`.github/workflows/release.yml` builds on `v*` tags (and build-only when the workflow file changes).
+`.github/workflows/release.yml` builds on `v*` tags (and build-only when the workflow file changes). It also packs the
+`RabbitMcp.Server` .NET tool (`-p:PackAsTool=true`, never in the csproj) with `.mcp/server.json` — keep that manifest's
+environment variables in step with the options, and never tag or release yourself: the owner does.
 Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 
 ## Layout
