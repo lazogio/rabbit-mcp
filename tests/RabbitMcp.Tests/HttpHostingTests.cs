@@ -340,4 +340,46 @@ public class HttpHostingTests
         Assert.Contains(denials, e => e.GetProperty("client").GetString()!.StartsWith("bob") && e.GetProperty("contract").GetString() == "OrderSubmitted");
         Assert.Contains(denials, e => e.GetProperty("client").GetString()!.StartsWith("alice"));
     }
+
+    private const string CarolKey = "carol-key-0123456789abcdefghijklmnopqrstu";
+
+    [Fact]
+    public async Task Prompts_and_contract_resources_are_offered_and_resources_need_read()
+    {
+        await using var app = await StartAsync(Config(
+            ("ApiKeys", $"alice:{AliceKey};carol:{CarolKey}"),
+            ("Roles:viewer", "read"),
+            ("UserRoles", "alice=viewer"))); // carol has no role and no default → nothing
+        var client = app.GetTestClient();
+        Task<JsonElement> As(string key, string body) =>
+            client.SendAsync(Mcp(body, r => r.Headers.Add("X-Api-Key", key))).ContinueWith(t => Rpc(t.Result)).Unwrap();
+
+        var resources = await As(AliceKey, """{"jsonrpc":"2.0","id":1,"method":"resources/list"}""");
+        var uris = resources.GetProperty("result").GetProperty("resources").EnumerateArray().Select(r => r.GetProperty("uri").GetString()).ToArray();
+        Assert.Contains("contract://OrderSubmitted", uris);
+        Assert.Contains("contract://GetOrderStatus", uris);
+
+        var read = await As(AliceKey, """{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"contract://GetOrderStatus"}}""");
+        var text = read.GetProperty("result").GetProperty("contents")[0].GetProperty("text").GetString()!;
+        using (var contract = JsonDocument.Parse(text))
+        {
+            Assert.Equal("request", contract.RootElement.GetProperty("kind").GetString());
+            Assert.True(contract.RootElement.GetProperty("schema").GetProperty("properties").TryGetProperty("orderId", out _));
+            Assert.Equal("reply_order_status", contract.RootElement.GetProperty("responses")[0].GetProperty("replyTool").GetString());
+        }
+
+        var carolList = await As(CarolKey, """{"jsonrpc":"2.0","id":3,"method":"resources/list"}""");
+        Assert.Empty(carolList.GetProperty("result").GetProperty("resources").EnumerateArray());
+        var carolRead = await As(CarolKey, """{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"contract://OrderSubmitted"}}""");
+        Assert.True(carolRead.TryGetProperty("error", out _));
+
+        var prompts = await As(AliceKey, """{"jsonrpc":"2.0","id":5,"method":"prompts/list"}""");
+        var names = prompts.GetProperty("result").GetProperty("prompts").EnumerateArray().Select(p => p.GetProperty("name").GetString()).ToArray();
+        Assert.Equal(new[] { "contract_health", "diagnose_errors", "investigate_message", "review_approvals" }, names.Order().ToArray());
+
+        var prompt = await As(AliceKey, """{"jsonrpc":"2.0","id":6,"method":"prompts/get","params":{"name":"diagnose_errors","arguments":{"queue":"order-placed_error"}}}""");
+        var message = prompt.GetProperty("result").GetProperty("messages")[0].GetProperty("content").GetProperty("text").GetString()!;
+        Assert.Contains("order-placed_error", message);
+        Assert.Contains("explicit confirmation", message);
+    }
 }

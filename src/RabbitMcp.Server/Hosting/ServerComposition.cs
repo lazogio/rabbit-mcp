@@ -93,6 +93,23 @@ public static class ServerComposition
                     return result;
                 });
 
+                // Contract resources are reference material like list_contracts: they need the read permission.
+                f.AddListResourcesFilter(next => async (request, cancellationToken) =>
+                {
+                    var result = await next(request, cancellationToken);
+                    var tools = ServicesOf(request).GetRequiredService<ToolAccess>();
+                    if (!tools.Control.For(request.User).Has(Permission.Read))
+                        result.Resources = [];
+                    return result;
+                });
+                f.AddReadResourceFilter(next => async (request, cancellationToken) =>
+                {
+                    var tools = ServicesOf(request).GetRequiredService<ToolAccess>();
+                    if (!tools.Control.For(request.User).Has(Permission.Read))
+                        throw new McpException("Permission 'read' is required to read contract resources.");
+                    return await next(request, cancellationToken);
+                });
+
                 f.AddCallToolFilter(next => async (request, cancellationToken) =>
                 {
                     // ... and every call is checked again (a client may call a tool it was not shown). Denials are audited.
@@ -121,7 +138,9 @@ public static class ServerComposition
                 });
             })
             .WithTools<BrokerTools>(ToolJson.Options)
-            .WithTools<SearchTools>(ToolJson.Options);
+            .WithTools<SearchTools>(ToolJson.Options)
+            .WithPrompts<OperatorPrompts>()
+            .WithResources(ContractResources.Create(contracts));
 
         if (!string.IsNullOrWhiteSpace(settings.AuditLogPath))
             mcp.WithTools<AuditTools>(ToolJson.Options);

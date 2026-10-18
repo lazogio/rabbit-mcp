@@ -24,6 +24,8 @@ export RabbitMcp__ManagementUri=${RabbitMcp__ManagementUri:-http://localhost:156
   printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"smoke-test","version":"1.0"}}}'
   printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
   printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"prompts/list"}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":4,"method":"resources/list"}'
   sleep 5   # keep stdin open until the server has answered
 } | timeout 30 "$BIN" >"$OUT" 2>"$ERR" || true
 
@@ -70,8 +72,17 @@ for name in expected & tools.keys():
     if "outputSchema" not in tools[name]:
         problems.append(f"tool {name} has no outputSchema")
 
+prompts = {p["name"] for p in responses.get(3, {}).get("result", {}).get("prompts", [])}
+missing_prompts = {"diagnose_errors", "investigate_message", "review_approvals", "contract_health"} - prompts
+if missing_prompts:
+    problems.append(f"missing prompts: {sorted(missing_prompts)}")
+resources = [r["uri"] for r in responses.get(4, {}).get("result", {}).get("resources", [])]
+if not resources or not all(u.startswith("contract://") for u in resources):
+    problems.append(f"expected contract:// resources, got {resources}")
+
 if problems:
     print("SMOKE TEST FAILED", *problems, "--- stderr ---", open(err, encoding="utf-8").read()[-3000:], sep="\n")
     sys.exit(1)
-print(f"ok: {len(tools)} tools, all with outputSchema; stdout is clean JSON-RPC")
+print(f"ok: {len(tools)} tools, all with outputSchema; {len(prompts)} prompts; {len(resources)} contract resources; "
+      "stdout is clean JSON-RPC")
 PY
