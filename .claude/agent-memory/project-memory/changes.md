@@ -1,5 +1,14 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Dead-letter queue (phase-9/dead-letter) — commit 352035b
+- What: `dead_letter_from_error` parks poison messages in `DeadLetterQueue` (default `{queue}_dead`, durable, created
+  on first use) via default exchange + confirms + mandatory, ack after confirm; body and all headers kept, plus
+  `X-Dead-Lettered-By/-From/-At`, `X-Dead-Letter-Reason`. Refuses source queues with consumers. Audit action `deadletter`.
+- Decision (user, 2026-10-18): a dead-letter queue instead of deletion — rabbit-mcp has no tool that removes messages.
+- Decision (default): same gate and permission as republish (`EnableRepublish`, `republish`), since it only moves.
+- `_dead` counts as an error-like suffix (resolver, list_queues filter), so republish_from_error returns parked
+  messages to their owner queue. Shop sample: `BROKEN-*` items always fail; the CI walkthrough parks one.
+
 ### 2026-10-18 Phase 8 — before the first release (phase-8/pre-release) — commits 83d7bb3, 50a21db
 - `RabbitMcp.Contracts` = attribute only; built-in samples → `src/RabbitMcp.Samples` (`RabbitMcp.Samples.Orders`,
   URNs/exchanges changed accordingly — unreleased, so no compatibility cost). Guard: `The_contracts_package_holds_only_the_attribute`.

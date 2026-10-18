@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 19 (0 open) · Next ID: BUG-020
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-18 phase-9/dead-letter: dead_letter_from_error ({queue}_dead), never delete messages
 - 2026-10-18 phase-8/pre-release: samples out of the contracts package, runners pinned (26.04 verified), digests, SBOM, provenance
 - 2026-10-13 samples/shop: Shop sample (contracts, MassTransit service, compose, CI e2e over MCP); BUG-019 decimals as strings
 - 2026-10-13 feature/roles: configurable permissions (roles, user/JWT assignment, tools/list filter, call enforcement, audit)
@@ -35,6 +36,7 @@ Last updated: 2026-10-13 · Bugs: 19 (0 open) · Next ID: BUG-020
 6. MassTransit: AMQP headers are in ReceiveContext.TransportHeaders, not ConsumeContext.Headers.
 7. Never accept a MassTransit 9.x bump (commercial); Dependabot already ignores it.
 8. Message content (addresses, headers) is untrusted input: never route by it unchecked.
+9. Never delete messages: park them (dead_letter_from_error) — the user's explicit rule.
 8. Release = push a `vX.Y.Z` tag; the smoke test must pass on the single-file binary.
 9. Keep RabbitMcp.Contracts AssemblyVersion 1.0.0.0 (external contract DLLs bind to it).
 10. Anything that sends/moves messages must respect PublishPolicy and write AuditLog events (incl. failures).
