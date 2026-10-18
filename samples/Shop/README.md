@@ -43,11 +43,14 @@ Ask Claude, in this order:
 5. **"Place an order: BROKEN-CHAIR, 1 piece, 50. Why did it fail? Move it to the dead-letter queue."** — this item
    always fails, so republishing does not help. `dead_letter_from_error` moves it to `order-placed_dead` with the
    reason. Nothing is deleted: the exception details stay, and `republish_from_error` can bring it back.
-6. **"Place an order: TV-55, 2 pieces, 900."** — above 1000 the service asks for approval (`ApproveLargeOrder`).
-7. **"Is there anything to approve? Approve it, approver: Ana."** — `pending_requests` shows the request and
+6. **"Place an order: BROKEN-TABLE, 1 piece, 80. The SKU is wrong, it should be TABLE-01 — fix it and send it again."** —
+   `resend_corrected` shows the change (`lines[0].sku`), sends the corrected order (it is approved) and parks the
+   original unchanged in `order-placed_dead`.
+7. **"Place an order: TV-55, 2 pieces, 900."** — above 1000 the service asks for approval (`ApproveLargeOrder`).
+8. **"Is there anything to approve? Approve it, approver: Ana."** — `pending_requests` shows the request and
    `reply_order_approved` answers the service. The status becomes `Approved by Ana`. To refuse, say "reject it, reason:
    …": `reply_order_rejected` or `reject_request` is used.
-8. **"How much is shipping a 2 kg parcel to Georgia?"** — `request_get_shipping_quote` asks the shipping desk, which
+9. **"How much is shipping a 2 kg parcel to Georgia?"** — `request_get_shipping_quote` asks the shipping desk, which
    does not use MassTransit: the request is plain JSON in the `shipping-quotes` queue, and the desk replies to
    `reply_to` with the same `correlation_id` (RabbitMQ RPC). Antarctica (`AQ`) gets `ShippingUnavailable`.
 

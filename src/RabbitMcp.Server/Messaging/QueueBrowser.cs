@@ -425,6 +425,202 @@ public sealed class QueueBrowser(
     }
 
     /// <summary>
+    /// Fix and resend one message whose data made it fail. The correction is validated against the message's contract;
+    /// without <paramref name="execute"/> only the field-by-field changes are returned. Executing: get (no ack) → publish
+    /// the corrected copy (new messageId, X-Corrected-From) to the original queue with confirms → move the original,
+    /// unchanged, to the dead-letter queue (X-Corrected-To/-By/-At) with confirms → ack. Nothing is deleted: if parking
+    /// the original fails, it stays in the error queue and the result says so.
+    /// </summary>
+    /// <param name="authorize">Null when the caller may send this contract, otherwise why not.</param>
+    public async Task<CorrectionResult> ResendCorrectedAsync(
+        string errorQueue, string messageId, System.Text.Json.JsonElement corrected, bool execute,
+        Func<Contracts.ContractDescriptor, string?> authorize, CancellationToken ct, string? client = null)
+    {
+        try
+        {
+            var result = await ResendCorrectedCoreAsync(errorQueue, messageId, corrected, execute, authorize, client, ct);
+            if (result.Executed)
+            {
+                audit.Write(audit.Event(AuditActions.Correct, result.OriginalParked ? "sent" : "sent-original-kept", client,
+                    result.Contract, exchange: result.Target, queue: errorQueue, messageId: result.NewMessageId,
+                    detail: $"correction of {result.OriginalMessageId}; changed {string.Join(", ", result.Changes.Select(c => c.Path))}; " +
+                            (result.OriginalParked ? $"original parked in {result.DeadLetterQueue}" : "original kept in the error queue"),
+                    message: corrected, messageType: typeof(System.Text.Json.JsonElement)));
+            }
+            return result;
+        }
+        catch (Exception ex) when (execute)
+        {
+            var error = ex is OperationCanceledException ? null : BrokerErrors.ToMcp(ex);
+            audit.Write(audit.Event(AuditActions.Correct, "error", client, queue: errorQueue, messageId: messageId,
+                detail: error?.Message ?? "cancelled"));
+            if (error is null || ReferenceEquals(error, ex))
+                throw;
+            throw error;
+        }
+    }
+
+    private async Task<CorrectionResult> ResendCorrectedCoreAsync(
+        string errorQueue, string messageId, System.Text.Json.JsonElement corrected, bool execute,
+        Func<Contracts.ContractDescriptor, string?> authorize, string? client, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(messageId))
+            throw new McpException("messageId is required (see peek_messages).");
+        var source = await EnsureQueueExistsAsync(errorQueue, ct);
+        if (source.ConsumerCount > 0)
+            throw new McpException(
+                $"'{errorQueue}' has {source.ConsumerCount} active consumer(s), so it is not a parked error queue. Nothing was changed.");
+
+        var deadLetterQueue = DeadLetterNaming.For(errorQueue, options.Value.DeadLetterQueue);
+        var toRequeue = new List<ulong>();
+        await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
+        try
+        {
+            BasicGetResult? found = null;
+            for (var scanned = 0; scanned < options.Value.MaxMessagesPerCall && found is null; scanned++)
+            {
+                var delivery = await channel.BasicGetAsync(errorQueue, autoAck: false, ct);
+                if (delivery is null)
+                    break;
+                var id = delivery.BasicProperties.MessageId ?? MassTransitEnvelope.TryParse(delivery.Body.Span)?.MessageId;
+                if (string.Equals(id, messageId, StringComparison.OrdinalIgnoreCase))
+                    found = delivery;
+                else
+                    toRequeue.Add(delivery.DeliveryTag);
+            }
+            if (found is null)
+                throw new McpException(
+                    $"Message {messageId} is not among the first {options.Value.MaxMessagesPerCall} messages of {errorQueue}. Nothing was changed.");
+            toRequeue.Add(found.DeliveryTag); // until everything is confirmed
+
+            var props = found.BasicProperties;
+            var envelope = MassTransitEnvelope.TryParse(found.Body.Span);
+            var contract = inspector.ContractOf(props, envelope)
+                ?? throw new McpException("No registered contract matches this message, so the correction cannot be validated. Nothing was changed.");
+            if (contract.IsRequest)
+                throw new McpException($"{contract.Name} is a request: its requester stopped waiting long ago, so a corrected copy would get no one an answer.");
+            if (authorize(contract) is { } denied)
+                throw new McpException(denied);
+
+            var errors = MessageInspector.Validate(contract, corrected, MassTransitJson.Options);
+            if (errors.Count > 0)
+                throw new McpException($"The correction violates {contract.Name} v{contract.Version}; nothing was changed. " + string.Join("; ", errors));
+
+            System.Text.Json.JsonElement original;
+            if (envelope?.Message is { } message)
+                original = message;
+            else
+            {
+                try { original = System.Text.Json.JsonDocument.Parse(found.Body).RootElement.Clone(); }
+                catch (System.Text.Json.JsonException) { throw new McpException("The original message is not JSON; it cannot be corrected here."); }
+            }
+            var changes = JsonDiff.Compare(original, corrected);
+            if (changes.Count == 0)
+                throw new McpException("The correction is identical to the original. Use republish_from_error to retry it unchanged.");
+
+            var target = RepublishTargetResolver.Resolve(errorQueue, props.Headers)
+                ?? throw new McpException("Cannot determine the original queue (no MT-Fault-InputAddress or x-death header, no _error/_skipped/_dead suffix).");
+            if (target.Conflict is { } conflict)
+                throw new McpException(conflict + " Nothing was changed.");
+            if (string.Equals(target.IsQueue ? target.RoutingKey : target.Exchange, errorQueue, StringComparison.Ordinal))
+                throw new McpException($"The destination is {errorQueue} itself. Nothing was changed.");
+            // Correcting a message that is already parked (an _dead queue): the original goes back to the same queue,
+            // annotated, so it is not corrected twice by accident.
+            var parking = string.Equals(deadLetterQueue, errorQueue, StringComparison.Ordinal)
+                ? source
+                : await CheckDeadLetterTargetAsync(errorQueue, deadLetterQueue, ct);
+
+            if (!execute)
+                return new CorrectionResult(errorQueue, messageId, contract.Name, false, changes, target.Display, deadLetterQueue,
+                    null, false, "Preview: call again with confirm=true to send the corrected copy and park the original.");
+
+            if (!(target.IsQueue ? await connection.QueueExistsAsync(target.RoutingKey, ct) : await connection.ExchangeExistsAsync(target.Exchange, ct)))
+                throw new McpException($"{target.Display} does not exist. Nothing was changed.");
+
+            // 1. The corrected copy: a new message of the same conversation; its body is the corrected message.
+            var now = time.GetUtcNow().ToString("O");
+            var newId = Guid.NewGuid().ToString();
+            var headers = FaultHeaders.WithoutFaultHeaders(props.Headers);
+            headers[HeaderNames.CorrectedFrom] = messageId;
+            headers[HeaderNames.CorrectedBy] = client ?? options.Value.ClientName;
+            headers[HeaderNames.CorrectedAt] = now;
+            using var activity = Telemetry.StartSend("correct", target.Display, linkTo: Telemetry.Extract(props.Headers));
+            Telemetry.Inject(activity, headers);
+            var copyProps = new BasicProperties(props) { MessageId = newId, DeliveryMode = DeliveryModes.Persistent, Headers = headers };
+            var copyBody = envelope is not null
+                ? CorrectedEnvelope(found.Body.Span, newId, corrected)
+                : System.Text.Encoding.UTF8.GetBytes(corrected.GetRawText());
+            try
+            {
+                await channel.BasicPublishAsync(target.Exchange, target.RoutingKey, mandatory: true, copyProps, copyBody, ct);
+            }
+            catch (PublishException ex)
+            {
+                Telemetry.Fail(activity, ex.IsReturn ? "not routed" : "rejected");
+                throw new McpException(ex.IsReturn
+                    ? $"Not routed: nothing is bound behind {target.Display}. Nothing was changed."
+                    : "The broker rejected the corrected message. Nothing was changed.");
+            }
+
+            // 2. The original, unchanged, into the dead-letter queue — linked to its correction.
+            var parked = false;
+            string? note = null;
+            try
+            {
+                if (parking is null)
+                {
+                    await using var declare = await connection.CreateChannelAsync(publisherConfirms: false, ct);
+                    await declare.QueueDeclareAsync(deadLetterQueue, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct);
+                }
+                var originalHeaders = props.Headers is null
+                    ? new Dictionary<string, object?>(StringComparer.Ordinal)
+                    : new Dictionary<string, object?>(props.Headers, StringComparer.Ordinal);
+                originalHeaders[HeaderNames.CorrectedTo] = newId;
+                originalHeaders[HeaderNames.CorrectedBy] = client ?? options.Value.ClientName;
+                originalHeaders[HeaderNames.CorrectedAt] = now;
+                originalHeaders[HeaderNames.DeadLetteredBy] = client ?? options.Value.ClientName;
+                originalHeaders[HeaderNames.DeadLetteredFrom] = errorQueue;
+                originalHeaders[HeaderNames.DeadLetteredAt] = now;
+                originalHeaders[HeaderNames.DeadLetterReason] = $"corrected and resent as {newId}";
+                await channel.BasicPublishAsync("", deadLetterQueue, mandatory: true,
+                    new BasicProperties(props) { DeliveryMode = DeliveryModes.Persistent, Headers = originalHeaders }, found.Body, ct);
+                await channel.BasicAckAsync(found.DeliveryTag, multiple: false, ct);
+                toRequeue.Remove(found.DeliveryTag);
+                parked = true;
+            }
+            catch (Exception ex) when (ex is PublishException or OperationInterruptedException or McpException)
+            {
+                note = $"The corrected copy {newId} was sent, but the original could not be parked ({BrokerErrors.ToMcp(ex).Message}); " +
+                       $"it stays in {errorQueue}. Do not resend it.";
+            }
+
+            logger.LogInformation("Corrected {MessageId} from {ErrorQueue} as {NewId} to {Target}",
+                AuditLog.OneLine(messageId), errorQueue, newId, AuditLog.OneLine(target.Display));
+            return new CorrectionResult(errorQueue, messageId, contract.Name, true, changes, target.Display, deadLetterQueue,
+                newId, parked, note);
+        }
+        finally
+        {
+            if (channel.IsOpen)
+            {
+                foreach (var tag in toRequeue)
+                    await channel.BasicNackAsync(tag, multiple: false, requeue: true, CancellationToken.None);
+            }
+        }
+    }
+
+    /// <summary>The original envelope with a new messageId and the corrected message; every other field kept.</summary>
+    public static byte[] CorrectedEnvelope(ReadOnlySpan<byte> original, string newMessageId, System.Text.Json.JsonElement corrected)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(original) as System.Text.Json.Nodes.JsonObject
+                   ?? throw new McpException("The original envelope is not a JSON object.");
+        string Key(string name) => node.Select(p => p.Key).FirstOrDefault(k => k.Equals(name, StringComparison.OrdinalIgnoreCase)) ?? name;
+        node[Key("messageId")] = newMessageId;
+        node[Key("message")] = System.Text.Json.Nodes.JsonNode.Parse(corrected.GetRawText());
+        return System.Text.Encoding.UTF8.GetBytes(node.ToJsonString());
+    }
+
+    /// <summary>
     /// The dead-letter queue must be a parking place: a valid name, not the error queue itself, and nothing consuming
     /// it — otherwise "parking" would hand the messages to a live consumer. Returns the queue, or null if it does not
     /// exist yet (it is created on first use).

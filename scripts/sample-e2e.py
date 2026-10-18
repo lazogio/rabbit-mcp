@@ -94,7 +94,7 @@ def main():
     tools = {t["name"] for t in rpc("tools/list")["tools"]}
     expected = {"publish_order_placed", "request_get_order_status", "peek_messages", "republish_from_error",
                 "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request", "dead_letter_from_error",
-                "find_message", "recent_activity", "request_get_shipping_quote"}
+                "find_message", "recent_activity", "request_get_shipping_quote", "resend_corrected"}
     assert expected <= tools, f"missing tools: {expected - tools}"
     assert "request_approve_large_order" not in tools, "PublishDeny should hide request_approve_large_order"
     step(f"{len(tools)} tools, including the shop's contracts")
@@ -147,6 +147,20 @@ def main():
     assert dead["headers"].get("X-Dead-Letter-Reason") == "Product no longer exists", dead["headers"]
     assert "no longer exists" in (dead.get("fault") or {}).get("exceptionMessage", ""), dead
     step("dead_letter_from_error: the poison message is parked in order-placed_dead with its fault and the reason")
+
+    # --- 2c. a message with bad data is fixed and sent again; the original is parked, not deleted
+    typo = str(uuid.uuid4())
+    place(typo, "BROKEN-TABLE", 1, 80)
+    bad = eventually("BROKEN-TABLE order in order-placed_error", ready(lambda: next((
+        m for m in call("peek_messages", queue="order-placed_error", count=10)["messages"]
+        if (m.get("payload") or {}).get("orderId") == typo), None)))
+    fixed = dict(bad["payload"], lines=[dict(bad["payload"]["lines"][0], sku="TABLE-01")])
+    preview = call("resend_corrected", errorQueue="order-placed_error", messageId=bad["messageId"], corrected=fixed)
+    assert preview["executed"] is False and [c["path"] for c in preview["changes"]] == ["lines[0].sku"], preview
+    resent = call("resend_corrected", errorQueue="order-placed_error", messageId=bad["messageId"], corrected=fixed, confirm=True)
+    assert resent["executed"] and resent["originalParked"], resent
+    order = eventually("corrected order approved", lambda: (s := status_of(typo)) and s["status"] == "Approved" and s)
+    step(f"resend_corrected: BROKEN-TABLE → TABLE-01, order {order['status']}, original parked in {resent['deadLetterQueue']}")
 
     found = eventually("find_message locates the parked order", lambda: (r := call("find_message", contains=broken))
                        and any(m["queue"] == "order-placed_dead" for m in r["matches"]) and r)

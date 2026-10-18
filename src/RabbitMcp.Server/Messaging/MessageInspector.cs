@@ -73,6 +73,12 @@ public sealed class MessageInspector(ContractRegistry contracts, IOptions<Rabbit
             Headers: FaultHeaders.OtherHeadersForDisplay(headers));
     }
 
+    /// <summary>The contract a delivered message belongs to: by the envelope's messageType, or a raw message's AMQP type.</summary>
+    public ContractDescriptor? ContractOf(IReadOnlyBasicProperties props, MassTransitEnvelope? envelope) =>
+        envelope is not null
+            ? contracts.FindByUrns(envelope.MessageType)
+            : props.IsTypePresent() && !string.IsNullOrWhiteSpace(props.Type) ? contracts.FindByUrns([props.Type!]) : null;
+
     /// <summary>Validates an envelope's message against the contract its messageType names.</summary>
     public ContractCheck? CheckContract(MassTransitEnvelope? envelope)
     {

@@ -58,12 +58,14 @@ public static class ServerComposition
             Console.Error.WriteLine($"rabbit-mcp: warning: PublishAllow/PublishDeny pattern '{pattern}' matches no contract.");
 
         var access = new AccessControl(settings);
+        var confirmation = new HumanConfirmation(settings);
         if (access.Enabled && settings.Transport.Trim().Equals("stdio", StringComparison.OrdinalIgnoreCase))
             Console.Error.WriteLine("rabbit-mcp: note: RabbitMcp:Roles apply to the HTTP transport; over stdio the local " +
                                     "user has every enabled tool (limit it with EnablePublish/EnableRepublish/PublishAllow).");
 
         builder.Services
             .AddSingleton(access)
+            .AddSingleton(confirmation)
             .AddSingleton<ToolAccess>()
             .AddSingleton(contracts)
             .AddSingleton(policy)
@@ -124,6 +126,21 @@ public static class ServerComposition
                         throw new McpException(denied.Reason);
                     }
 
+                    // The person confirms changes through the client (elicitation); the model's confirm=true is the
+                    // fallback only where the person cannot be asked. Every question and answer is audited.
+                    var human = services.GetRequiredService<HumanConfirmation>();
+                    if (human.Applies(name, request.Params?.Arguments))
+                    {
+                        var audit = services.GetRequiredService<AuditLog>();
+                        var client = AuditLog.ClientOf(request.Server, request.User);
+                        var decision = await human.DecideAsync(name, request.Params?.Arguments, client,
+                            new ElicitationPrompt(request.Server), cancellationToken);
+                        audit.Write(audit.Event(AuditActions.Confirm,
+                            decision.Proceed ? $"allowed-{decision.How}" : $"refused-{decision.How}", client, detail: name));
+                        if (!decision.Proceed)
+                            throw new McpException(decision.Refusal!);
+                    }
+
                     // RabbitMQ errors (403 ACCESS_REFUSED, lost connection ...) become readable tool errors instead of
                     // the SDK's reason-less "An error occurred invoking 'tool'".
                     try
@@ -151,6 +168,10 @@ public static class ServerComposition
 
         if (settings.EnableRepublish)
             mcp.WithTools<RepublishTools>(ToolJson.Options);
+
+        // A correction moves a message (republish) and sends new content (publish): it needs both.
+        if (settings.EnableRepublish && settings.EnablePublish)
+            mcp.WithTools<CorrectionTools>(ToolJson.Options);
 
         // Responder mode: answer requests of RespondTo contracts via pending_requests + reply_* / reject_request.
         if (!string.IsNullOrWhiteSpace(settings.RespondTo))

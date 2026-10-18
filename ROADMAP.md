@@ -109,8 +109,8 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
 33. ⏸ Listing in the official MCP registry (`server.json`, `mcp-publisher`) — needs a published release; moved to
     Phase 15 (#44).
 
-## Phase 12 — Human in the loop (`phase-12/human`) ⬜ — planned 2026-10-18
-34. ⬜ **Confirmation the model cannot give itself** (MCP elicitation). Today `confirm=true` is an argument the model
+## Phase 12 — Human in the loop (`phase-12/human`) ✅ (2026-10-18)
+34. ✅ **Confirmation the model cannot give itself** (MCP elicitation). Today `confirm=true` is an argument the model
     sets. With elicitation the server asks the *person* ("Republish 37 messages from order-placed_error to
     order-placed?" accept/decline) before anything moves: republish, dead-letter, publish/request of contracts marked
     as needing approval, reply/reject.
@@ -121,8 +121,9 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
     - Works over stdio. Stateless HTTP cannot send server→client requests → **decision needed:** an optional stateful
       HTTP mode (sessions, sticky load balancing) or URL-mode elicitation with a small approval page served by
       rabbit-mcp itself (stays stateless; the page needs the caller's own authentication). Default until decided:
-      `auto` falls back to `confirm=true` on HTTP.
-35. ⬜ **Fix and resend** (`resend_corrected`, `EnableRepublish`, permission `republish`): for a message that failed
+      `auto` falls back to `confirm=true` on HTTP. Done as a generic call-tool filter with `ConfirmTools` patterns
+      (publish_*, reply_* … can be added), audit action `confirm`.
+35. ✅ **Fix and resend** (`resend_corrected`, `EnableRepublish`, permission `republish`): for a message that failed
     because of its data (bad e-mail, missing field). Input: error queue, messageId, the corrected message. The
     correction is validated against the contract the original matches; the preview shows a field-by-field diff.
     Sequence like republish: get (no ack) → publish the corrected message (new messageId, same correlation/conversation,

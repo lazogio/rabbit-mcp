@@ -129,6 +129,11 @@ public static class HeaderNames
     public const string DeadLetteredAt = "X-Dead-Lettered-At";
     public const string DeadLetterReason = "X-Dead-Letter-Reason";
 
+    public const string CorrectedFrom = "X-Corrected-From"; // on the corrected copy: the original's messageId
+    public const string CorrectedTo = "X-Corrected-To";     // on the parked original: the corrected copy's messageId
+    public const string CorrectedBy = "X-Corrected-By";
+    public const string CorrectedAt = "X-Corrected-At";
+
     /// <summary>Workflow correlation id of a raw request (its correlation_id property is the request id).</summary>
     public const string CorrelationId = "X-Correlation-Id";
 

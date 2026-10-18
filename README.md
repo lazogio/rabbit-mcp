@@ -62,6 +62,7 @@ Local RabbitMQ: `docker compose up -d` (UI: http://localhost:15672, guest/guest)
 | `request_<contract>` | Sends a request and returns the reply | `EnablePublish` |
 | `republish_from_error` | Moves messages from an `_error`/`_skipped`/`_dead` queue or a RabbitMQ dead-letter queue back: preview first, then `confirm=true` | `EnableRepublish` |
 | `dead_letter_from_error` | Parks messages that can never succeed in the dead-letter queue (`<queue>_dead`) with a reason. Deletes nothing | `EnableRepublish` |
+| `resend_corrected` | Fixes a message that failed because of its data: shows the changes field by field, sends the corrected copy and parks the original unchanged | `EnableRepublish` + `EnablePublish` |
 | `pending_requests` | Requests from services waiting for an answer (`waitSeconds` = long poll) | `RespondTo` |
 | `reply_<response>` / `reject_request` | Answers a request or rejects it | `RespondTo` |
 
@@ -241,6 +242,8 @@ Environment variable `RabbitMcp__Name`, or `"RabbitMcp": { "Name": … }` in `ap
 | `PublishAllow` / `PublishDeny` | — | Contracts that may / may never be sent (deny wins), e.g. `Get*` |
 | `DeadLetterQueue` | `{queue}_dead` | Where poison messages are parked. `{queue}` is the queue the error queue belongs to; a fixed name like `dead-letters` works too |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | Contracts the responder answers / limit of waiting requests |
+| `HumanConfirmation` | `auto` | Who confirms changes: `auto` — the person, in the client's dialog, when the client can ask (else the tool's `confirm`); `required` — refuse when the person cannot be asked; `off` — only `confirm` |
+| `ConfirmTools` | `republish_from_error;dead_letter_from_error;resend_corrected` | Tools the person confirms; add e.g. `publish_*;reply_*` |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | Audit file (JSON Lines) / record message bodies too (may contain personal data) |
 | `MaxMessagesPerCall` / `MaxPayloadChars` | `50` / `16000` | Limit for peek/republish / bodies longer than this are shortened for display |
 | `ExchangeCacheSeconds` | `30` | How long an existing exchange is remembered (`0` = off) |
@@ -259,6 +262,8 @@ Environment variable `RabbitMcp__Name`, or `"RabbitMcp": { "Name": … }` in `ap
 - **No message is lost.** Nothing is sent when validation fails. The exchange (or, for the default exchange, the queue) is checked first. Publisher confirms and `mandatory` turn an undeliverable message into an error.
 - **Republish:** a message leaves the error queue only after the broker confirmed the republish. The body is unchanged; only fault and `x-death` headers are removed. Delivery is at-least-once.
 - **Dead-letter:** there is no tool that deletes messages. A queue with consumers is never used as the dead-letter queue. Poison messages move to a durable `_dead` queue the same way, after confirmation, with body and every header (fault details included) unchanged, plus `X-Dead-Lettered-By/-From/-At` and `X-Dead-Letter-Reason`. `republish_from_error` brings them back.
+- **The person confirms, not the model.** `confirm=true` is written by the model. Clients that support MCP elicitation (Claude Code, for example) show the person a dialog with the action and its arguments before anything moves; a refusal stops it and is audited. Over stdio this works today; the stateless HTTP transport cannot ask, so there `confirm=true` counts unless `HumanConfirmation=required`.
+- **Corrections keep the original.** `resend_corrected` validates the correction against the contract, sends it as a new message (`X-Corrected-From`) and parks the original unchanged in the dead-letter queue (`X-Corrected-To`).
 - **Peek:** needs `force=true` on queues with active consumers. Messages stay in the queue but become `redelivered`.
 - **Audit:** every send, request, republish, dead-lettering and answer is recorded with its outcome and the user — failed and refused attempts too:
   ```json

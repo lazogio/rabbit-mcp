@@ -231,3 +231,20 @@ public sealed record RecentActivity(
     [property: Description("Audit events, newest first.")] IReadOnlyList<AuditEvent> Events,
     [property: Description("True when more events matched than were returned.")] bool Truncated,
     [property: Description("Audit lines read (from the end of the file).")] int Scanned);
+
+public sealed record FieldChange(
+    [property: Description("Field path, e.g. customerEmail or lines[0].quantity.")] string Path,
+    [property: Description("Value in the original message; null if the field was added.")] JsonElement? Before,
+    [property: Description("Value in the correction; null if the field was removed.")] JsonElement? After);
+
+public sealed record CorrectionResult(
+    string ErrorQueue,
+    string OriginalMessageId,
+    string Contract,
+    [property: Description("False for a preview (confirm=false): nothing was changed.")] bool Executed,
+    [property: Description("What the correction changes, field by field.")] IReadOnlyList<FieldChange> Changes,
+    [property: Description("Where the corrected message goes: an exchange, or 'queue:<name>'.")] string Target,
+    [property: Description("Where the original is parked, unchanged. Nothing is deleted.")] string DeadLetterQueue,
+    [property: Description("MessageId of the corrected message, once sent.")] string? NewMessageId,
+    [property: Description("True when the original was moved to the dead-letter queue (false: it is still in the error queue).")] bool OriginalParked,
+    string? Note);

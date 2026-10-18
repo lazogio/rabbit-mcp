@@ -62,6 +62,7 @@ claude mcp add rabbit-mcp \
 | `request_<contract>` | აგზავნის request-ს და აბრუნებს პასუხს | `EnablePublish` |
 | `republish_from_error` | აბრუნებს შეტყობინებებს `_error`/`_skipped`/`_dead` რიგიდან ან RabbitMQ-ის dead-letter რიგიდან: ჯერ preview, შემდეგ `confirm=true` | `EnableRepublish` |
 | `dead_letter_from_error` | გამოუსწორებელ შეტყობინებას გადაიტანს dead-letter რიგში (`<queue>_dead`) მიზეზთან ერთად. არაფერს შლის | `EnableRepublish` |
+| `resend_corrected` | ასწორებს შეტყობინებას, რომელიც მონაცემის გამო ჩავარდა: ველ-ველ აჩვენებს ცვლილებას, აგზავნის გასწორებულ ასლს, ორიგინალს კი უცვლელად dead-letter რიგში ინახავს | `EnableRepublish` + `EnablePublish` |
 | `pending_requests` | შემოსული request-ები, რომლებიც პასუხს ელოდება (`waitSeconds` = long poll) | `RespondTo` |
 | `reply_<response>` / `reject_request` | პასუხობს request-ს ან უარყოფს მას | `RespondTo` |
 
@@ -241,6 +242,8 @@ env ცვლადი `RabbitMcp__Name`, ან `appsettings.json`-ში `"Rab
 | `PublishAllow` / `PublishDeny` | — | რომელი კონტრაქტების გაგზავნაა ნებადართული / აკრძალული (deny უპირატესია), მაგ. `Get*` |
 | `DeadLetterQueue` | `{queue}_dead` | სად გადადის გამოუსწორებელი შეტყობინება. `{queue}` არის რიგი, რომელსაც error რიგი ეკუთვნის. ფიქსირებული სახელიც შეიძლება, მაგ. `dead-letters` |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | responder-ის კონტრაქტები / მოლოდინში მყოფი request-ების ზღვარი |
+| `HumanConfirmation` | `auto` | ვინ ადასტურებს ცვლილებას: `auto` — ადამიანი, კლიენტის ფანჯარაში, თუ კლიენტს შეუძლია კითხვა (თუ არა, ხელსაწყოს `confirm`); `required` — უარი, თუ ადამიანს ვერ ვკითხავთ; `off` — მხოლოდ `confirm` |
+| `ConfirmTools` | `republish_from_error;dead_letter_from_error;resend_corrected` | ხელსაწყოები, რომლებსაც ადამიანი ადასტურებს; დაამატეთ მაგ. `publish_*;reply_*` |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | audit ფაილი (JSON Lines) / ჩაიწეროს თუ არა შიგთავსი (შეიძლება პერსონალურ მონაცემებს შეიცავდეს) |
 | `MaxMessagesPerCall` / `MaxPayloadChars` | `50` / `16000` | peek/republish-ის ზღვარი / ჩვენებისას body-ის შეკვეცის ზღვარი |
 | `ExchangeCacheSeconds` | `30` | რამდენ წამს ახსოვს, რომ exchange არსებობს (`0` = გამორთული) |
@@ -259,6 +262,8 @@ env ცვლადი `RabbitMcp__Name`, ან `appsettings.json`-ში `"Rab
 - **შეტყობინება არ იკარგება.** ვალიდაციის ჩავარდნისას არაფერი იგზავნება. exchange-ის (default exchange-ის შემთხვევაში რიგის) არსებობა წინასწარ მოწმდება. publisher confirms და `mandatory` ვერ მიწოდებულ შეტყობინებას შეცდომად აბრუნებს.
 - **republish:** შეტყობინება error რიგიდან მხოლოდ ბროკერის დადასტურების შემდეგ იშლება. body უცვლელია, იშლება მხოლოდ fault და `x-death` header-ები. მიწოდება at-least-once-ია.
 - **dead-letter:** შეტყობინების წაშლის ხელსაწყო არ არსებობს. რიგი, რომელსაც consumer ჰყავს, dead-letter რიგად არასდროს გამოიყენება. გამოუსწორებელი შეტყობინება იმავე წესით, დადასტურების შემდეგ გადადის durable `_dead` რიგში. body და ყველა header, მათ შორის fault-ის დეტალები, უცვლელი რჩება. ემატება `X-Dead-Lettered-By/-From/-At` და `X-Dead-Letter-Reason`. უკან `republish_from_error` აბრუნებს.
+- **ადასტურებს ადამიანი და არა მოდელი.** `confirm=true`-ს მოდელი წერს. კლიენტი, რომელსაც MCP elicitation შეუძლია (მაგ. Claude Code), ცვლილებამდე ადამიანს აჩვენებს ფანჯარას მოქმედებითა და არგუმენტებით. უარი ცვლილებას აჩერებს და audit-ში იწერება. stdio-ზე ეს უკვე მუშაობს. stateless HTTP კითხვას ვერ სვამს, ამიტომ იქ `confirm=true` ითვლება, თუ `HumanConfirmation=required` არ არის.
+- **გასწორებისას ორიგინალი რჩება.** `resend_corrected` გასწორებას კონტრაქტზე ამოწმებს, ახალ შეტყობინებად აგზავნის (`X-Corrected-From`), ორიგინალს კი უცვლელად dead-letter რიგში ინახავს (`X-Corrected-To`).
 - **peek:** აქტიური consumer-ის მქონე რიგზე `force=true` სჭირდება. შეტყობინება რიგში რჩება, მაგრამ `redelivered` ხდება.
 - **Audit:** ყოველი გაგზავნა, request, republish და პასუხი იწერება შედეგთან და მომხმარებელთან ერთად. ჩავარდნილი და უარყოფილი მცდელობებიც იწერება:
   ```json

@@ -71,6 +71,19 @@ public sealed class RabbitMcpOptions
     /// <summary>Responder: maximum requests waiting for an answer; further requests are rejected with a Fault.</summary>
     public int MaxPendingRequests { get; set; } = 100;
 
+    /// <summary>
+    /// Who confirms changes: "auto" (default) — the server asks the person through the MCP client (elicitation) when
+    /// the client can, otherwise the tool's confirm argument counts; "required" — refuse the change when the person
+    /// cannot be asked; "off" — only the confirm argument.
+    /// </summary>
+    public string HumanConfirmation { get; set; } = "auto";
+
+    /// <summary>
+    /// Tools whose changes the person confirms (";"-separated "*" patterns). Tools with a preview (confirm argument)
+    /// are asked only when executing. Add e.g. "publish_*;request_*;reply_*;reject_request" to confirm every send.
+    /// </summary>
+    public string ConfirmTools { get; set; } = "republish_from_error;dead_letter_from_error;resend_corrected";
+
     /// <summary>"stdio" (default: one client, started by it) or "http" (shared server, Streamable HTTP + authorization).</summary>
     public string Transport { get; set; } = "stdio";
 

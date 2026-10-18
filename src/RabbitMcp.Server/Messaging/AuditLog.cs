@@ -35,6 +35,8 @@ public static class AuditActions
     public const string Receive = "receive";   // responder: a request arrived
     public const string Respond = "respond";   // responder: reply or rejection sent
     public const string Access = "access";     // a tool call refused by the caller's roles
+    public const string Confirm = "confirm";   // the person was asked (or could not be) before a change
+    public const string Correct = "correct";   // resend_corrected: corrected copy sent, original parked
 }
 
 /// <summary>

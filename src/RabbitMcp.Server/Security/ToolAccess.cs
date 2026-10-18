@@ -42,6 +42,8 @@ public sealed class ToolAccess(AccessControl control, ContractRegistry contracts
         // Moving to the dead-letter queue is a move out of the error queue like republish (nothing is deleted).
         ["dead_letter_from_error"] = new(Permission.Republish, [], QueueArgument: "errorQueue",
             OverrideArguments: ["deadLetterQueue"]),
+        // The contract's publish permission is checked inside the tool, once the message's contract is known.
+        ["resend_corrected"] = new(Permission.Republish, [], QueueArgument: "errorQueue"),
         ["pending_requests"] = new(Permission.Respond, []),
         ["reject_request"] = new(Permission.Respond, [], ByRequestId: true),
     };

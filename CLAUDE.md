@@ -104,6 +104,13 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   .IsApiKeyCaller`), never by a claim — tokens can carry any claim. UserRoles match an API-key caller by key name only,
   a token caller by sub / preferred_username / e-mail (only with `email_verified=true`), and token names equal to an
   API key name are ignored (`AccessControl.NamesOf`).
+- **Human confirmation** (`Security/HumanConfirmation`, call-tool filter): tools in `ConfirmTools` ask the person via
+  MCP elicitation before executing (preview tools only with confirm=true); `auto` falls back to the model's confirm when
+  the client cannot be asked (stateless HTTP), `required` refuses. Audited as action `confirm`. New changing tools with
+  a preview go into `HumanConfirmation.PreviewTools` and the `ConfirmTools` default.
+- **Corrections** (`resend_corrected`): validated against the original's contract, sent as a new message
+  (X-Corrected-From), original parked unchanged (X-Corrected-To) — needs EnableRepublish + EnablePublish and the
+  contract's publish permission; requests are refused.
 - **Logs**: values that come from messages (ids, addresses, header-derived targets) go through `AuditLog.OneLine` in
   every log call, not only in AUDIT lines — otherwise a message can forge log lines.
 - **Prompts** only instruct the model and must keep the "confirm before any change" sentence; **resources**
