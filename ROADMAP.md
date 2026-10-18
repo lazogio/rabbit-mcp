@@ -55,3 +55,44 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
 ## Phase 7 — Access control (`feature/roles`) ✅
 21. ✅ Configurable permissions for HTTP callers: roles (read/publish/request/republish/respond/*, contract and
     error-queue patterns), user and JWT-claim assignment, default roles; tools/list filtered, tools/call enforced and audited.
+
+Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over MCP in CI; found and fixed BUG-019.
+
+---
+
+**Release:** postponed by decision (2026-10-18). Recommended after Phase 8, because 8.2 changes what the
+`RabbitMcp.Contracts` package contains — cheaper to change before anyone depends on it.
+
+## Phase 8 — Before the first release (`phase-8/pre-release`) ⬜
+22. ⬜ CI runners: `ubuntu-latest` moves to Ubuntu 26 from 2026-10-19 — run CI on both, then pin `ubuntu-24.04`
+    or move on, depending on the result.
+23. ⬜ Sample contracts out of the `RabbitMcp.Contracts` package (`OrderSubmitted`, `GetOrderStatus` …) into an
+    assembly bundled with the server only, so services that reference the package get the attribute and nothing else.
+    Built-in fallback and existing tests keep working.
+24. ⬜ Supply chain: SBOM (CycloneDX) for binaries and image, GitHub build provenance attestations on release
+    artifacts, Docker base images pinned by digest (Dependabot keeps them current).
+
+## Phase 9 — Operations (`phase-9/operations`) ⬜
+25. ⬜ `discard_from_error`: remove poison messages from an `_error`/`_skipped` queue — preview, `confirm=true`,
+    `messageIds`, optionally move them to a parking queue instead of deleting; audited; off by default
+    (`EnableDiscard`). **Decision needed:** its own role permission `discard` (recommended) or reuse `republish`.
+26. ⬜ `find_message`: find a message by `messageId` or `correlationId` across queues (named queues, or all queues
+    via the Management API), bounded scan, never removes anything; shows queue, fault and republish target.
+27. ⬜ `recent_activity`: query the audit file (who sent / republished / rejected what, filters by action, contract,
+    client, time) — only when `AuditLogPath` is set; permission `read`.
+
+## Phase 10 — Usability (`phase-10/usability`) ⬜
+28. ⬜ MCP prompts (slash commands in clients): `diagnose_errors` (all error queues → causes → suggested action),
+    `review_approvals` (pending requests one by one), `contract_health` (consumers, backlogs, faults per contract).
+29. ⬜ MCP resources: each contract's JSON schema and description as `contract://<Name>`, so clients can show them
+    without a tool call.
+30. ⬜ English documentation for the public repository. **Decision needed:** `README.md` in English with the
+    Georgian one in `README.ka.md` (recommended), or Georgian first with an English `README.en.md`.
+
+## Phase 11 — Reach (`phase-11/reach`) ⬜
+31. ⬜ Raw JSON contracts (`[MessageContract(Format = Raw)]`): publish/request without the MassTransit envelope
+    for services that do not use MassTransit (routing key, headers and correlation configurable).
+32. ⬜ Several brokers/vhosts in one server (`Brokers__prod__Uri`, `Brokers__staging__Uri`): tools take `broker`,
+    roles can be limited per broker. **Decision needed:** worth it, or one server per broker (works today).
+33. ⬜ Listing in the official MCP registry (`server.json`) — needs a published release, so after the release.
+
