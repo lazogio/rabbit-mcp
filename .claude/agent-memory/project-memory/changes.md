@@ -1,5 +1,16 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Plan: phases 12–15 (ROADMAP #34–#44)
+- 12 Human in the loop: MCP elicitation confirmations (`HumanConfirmation` auto/required/off; stdio first — stateless
+  HTTP cannot send server→client requests, open decision: stateful HTTP mode vs URL-mode approval page) and
+  `resend_corrected` (fix a bad message, original parked unchanged in the DLQ).
+- 13 Incident scale: republish/dead-letter by filter (MaxBulkMessages), `read_stream` (x-stream-offset), RateLimits.
+- 14 Beyond C#: contracts from AsyncAPI / JSON Schema files, AsyncAPI export, diff for AsyncAPI.
+- 15 Distribution (release-gated, owner decides): v0.1.0, dotnet tool, MCP registry (#33 moved to #44).
+- Facts checked: C# SDK `McpServer.ElicitAsync` (form/url modes, `ClientCapabilities.Elicitation`); stateless mode
+  disables server→client requests (`UrlElicitationRequiredException` is the stateless path); Claude Code shows
+  elicitation dialogs since 2.1.76.
+
 ### 2026-10-18 Phase 11 — raw JSON contracts (phase-11/raw) — commits eba0d5f, c369018 + docs
 - `MessageFormat { MassTransit = 0, Raw = 1 }` + `Format`/`RoutingKey` on `[MessageContract]` (non-breaking, contracts
   AssemblyVersion stays 1.0.0.0; the package now exports the attribute and the enum — guard test renamed).

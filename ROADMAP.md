@@ -106,5 +106,53 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
 32. ⏸ Several brokers/vhosts in one server — **decided 2026-10-18: not doing it.** One rabbit-mcp per broker
     (`claude mcp add rabbit-prod …`, `rabbit-staging …`) already works, keeps credentials, roles and audit separate
     per environment, and a model cannot send to the wrong broker by passing the wrong `broker` argument.
-33. ⏸ Listing in the official MCP registry (`server.json`, `mcp-publisher`) — needs a published release; after the
-    first release, when the owner decides to release.
+33. ⏸ Listing in the official MCP registry (`server.json`, `mcp-publisher`) — needs a published release; moved to
+    Phase 15 (#44).
+
+## Phase 12 — Human in the loop (`phase-12/human`) ⬜ — planned 2026-10-18
+34. ⬜ **Confirmation the model cannot give itself** (MCP elicitation). Today `confirm=true` is an argument the model
+    sets. With elicitation the server asks the *person* ("Republish 37 messages from order-placed_error to
+    order-placed?" accept/decline) before anything moves: republish, dead-letter, publish/request of contracts marked
+    as needing approval, reply/reject.
+    - `RabbitMcp:HumanConfirmation` = `auto` (default: elicitation when the client supports it, else today's
+      `confirm=true`) · `required` (refuse changes when the client cannot ask the person) · `off`.
+    - The preview stays: the question shows its summary (count, target, ids). Declined/cancelled → nothing changes,
+      audited as `declined`. The audit records who confirmed and how (`elicitation` / `argument`).
+    - Works over stdio. Stateless HTTP cannot send server→client requests → **decision needed:** an optional stateful
+      HTTP mode (sessions, sticky load balancing) or URL-mode elicitation with a small approval page served by
+      rabbit-mcp itself (stays stateless; the page needs the caller's own authentication). Default until decided:
+      `auto` falls back to `confirm=true` on HTTP.
+35. ⬜ **Fix and resend** (`resend_corrected`, `EnableRepublish`, permission `republish`): for a message that failed
+    because of its data (bad e-mail, missing field). Input: error queue, messageId, the corrected message. The
+    correction is validated against the contract the original matches; the preview shows a field-by-field diff.
+    Sequence like republish: get (no ack) → publish the corrected message (new messageId, same correlation/conversation,
+    `X-Corrected-From` = original id) with confirms → move the original unchanged to the dead-letter queue with
+    `X-Corrected-By/-At` and the diff summary → ack. Nothing is deleted; both sides audited (`correct`).
+    MassTransit (envelope rebuilt, original headers kept) and raw contracts (plain JSON, original properties kept).
+
+## Phase 13 — Incident scale (`phase-13/scale`) ⬜ — planned 2026-10-18
+36. ⬜ **Recovery by filter**: `republish_from_error` / `dead_letter_from_error` select by `exceptionType`,
+    `exceptionContains`, `contract`, `since`/`until` instead of only messageIds. Preview = counts per group + samples;
+    confirm processes up to `RabbitMcp:MaxBulkMessages` (default 1000, one scan of the queue, same confirm-then-ack
+    guarantee, non-matching messages requeued with nack). The result reports what is left for a next call.
+37. ⬜ **Reading RabbitMQ streams** (`read_stream`, permission `read`): from `first`, `last`, an offset or a time
+    ("last 10 minutes"), bounded count, via basic.consume with `x-stream-offset` (streams do not support basic.get).
+    Reading a stream changes nothing, so no `force` is needed; `peek_messages` on a stream points to it.
+38. ⬜ **Limits for agents**: `RabbitMcp:RateLimits` per caller and action, e.g. `publish:100/h;republish:2000/h;request:300/h`
+    (optionally per role). A runaway agent loop stops at the limit with a readable error; refusals audited as
+    `limited`; metrics. In memory per instance (documented).
+
+## Phase 14 — Beyond C# (`phase-14/asyncapi`) ⬜ — planned 2026-10-18
+39. ⬜ **Contracts from AsyncAPI / JSON Schema files** (`RabbitMcp:ContractFiles`): teams without .NET describe their
+    messages in AsyncAPI 2.6/3.0 (channels, operations, message payload schemas, AMQP bindings → exchange, routing key)
+    or plain JSON Schema + a small mapping file. Each message becomes the same typed `publish_*`/`request_*` tool
+    (inputSchema = the file's schema), validated with a JSON Schema validator instead of DataAnnotations; format raw
+    by default, MassTransit when declared. Library choice (AsyncAPI parser, JSON Schema validator) in the design step.
+40. ⬜ **AsyncAPI export**: `rabbit-mcp contracts asyncapi Billing.Contracts.dll > asyncapi.yaml` — documentation of
+    the C# contracts (exchanges, routing keys, formats, request/reply pairs) for other teams and tooling.
+41. ⬜ `contracts diff` for AsyncAPI files (same breaking/warning rules).
+
+## Phase 15 — Distribution ⏸ (when the owner decides to release)
+42. ⏸ First release `v0.1.0` (tag pushed by the owner): binaries, Docker image on GHCR (public package), NuGet.
+43. ⏸ `dotnet tool install -g rabbit-mcp` (tool package next to the binaries).
+44. ⏸ MCP registry listing (`server.json`, `mcp-publisher`) — was #33.
