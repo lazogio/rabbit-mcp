@@ -74,7 +74,8 @@ public sealed class RawContractTests(BrokerFixture broker)
         var requests = new ConcurrentQueue<IReadOnlyBasicProperties>();
         await using var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
         await using var replies = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
-        await channel.QueueDeclareAsync(RawTopology.QuotesQueue, durable: false, exclusive: false, autoDelete: true);
+        // RabbitMQ 4 refuses transient non-exclusive queues, so the service's queue is durable like any real one.
+        await channel.QueueDeclareAsync(RawTopology.QuotesQueue, durable: true, exclusive: false, autoDelete: false);
 
         // A pricing service without MassTransit: reads the plain JSON, answers to reply_to with the correlation_id
         // and names the reply type in the AMQP type property (or forgets to).

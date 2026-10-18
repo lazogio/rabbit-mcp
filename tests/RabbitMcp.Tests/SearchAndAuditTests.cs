@@ -16,7 +16,7 @@ public class SearchAndAuditTests
     private static readonly DateTimeOffset T0 = new(2026, 10, 18, 9, 0, 0, TimeSpan.Zero);
 
     private static PeekedMessage Peeked(string? messageId, string? correlationId, string? json = null, string? raw = null) =>
-        new(0, messageId, correlationId, false, "application/json", null, null, null, null, null, null,
+        new(0, messageId, correlationId, false, "application/json", null, null, null, null, null, null, null,
             json is null ? null : JsonDocument.Parse(json).RootElement.Clone(), raw, false, 0,
             new Dictionary<string, string?>());
 
