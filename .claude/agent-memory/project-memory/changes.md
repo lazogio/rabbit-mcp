@@ -1,5 +1,15 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Phase 8 — before the first release (phase-8/pre-release) — commits 83d7bb3, 50a21db
+- `RabbitMcp.Contracts` = attribute only; built-in samples → `src/RabbitMcp.Samples` (`RabbitMcp.Samples.Orders`,
+  URNs/exchanges changed accordingly — unreleased, so no compatibility cost). Guard: `The_contracts_package_holds_only_the_attribute`.
+- Runners: verified on ubuntu-26.04 (build, unit, integration), then pinned everything to `ubuntu-24.04`.
+- Supply chain: base images pinned by index digest (sdk/aspnet/runtime 10.0), Dependabot docker for `/` and
+  `/samples/Shop`; release: CycloneDX SBOM via anchore/sbom-action on a framework-dependent publish (single-file
+  hides deps.json), checked for key packages; attest-build-provenance@v4 for archives/nupkg/SBOM on tags;
+  build-push-action `sbom`/`provenance: mode=max` on tags.
+- Decision: release still postponed by the user.
+
 ### 2026-10-13 Shop sample (samples/shop) — commits f47f1de..b2d3fc7
 - What: `samples/Shop` — Shop.Contracts (OrderPlaced, GetOrderStatus, ApproveLargeOrder answered via responder),
   Shop.Service (MassTransit 8; FLAKY-* fails once → _error demo; orders > 1000 ask for approval), Dockerfile targets

@@ -63,14 +63,15 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
 **Release:** postponed by decision (2026-10-18). Recommended after Phase 8, because 8.2 changes what the
 `RabbitMcp.Contracts` package contains — cheaper to change before anyone depends on it.
 
-## Phase 8 — Before the first release (`phase-8/pre-release`) ⬜
-22. ⬜ CI runners: `ubuntu-latest` moves to Ubuntu 26 from 2026-10-19 — run CI on both, then pin `ubuntu-24.04`
-    or move on, depending on the result.
-23. ⬜ Sample contracts out of the `RabbitMcp.Contracts` package (`OrderSubmitted`, `GetOrderStatus` …) into an
+## Phase 8 — Before the first release (`phase-8/pre-release`) ✅ (2026-10-18)
+22. ✅ CI runners: build, unit and integration verified on Ubuntu 26.04; all jobs pinned to `ubuntu-24.04` (LTS)
+    so a GitHub image switch cannot change the build unannounced.
+23. ✅ Sample contracts out of the `RabbitMcp.Contracts` package (`OrderSubmitted`, `GetOrderStatus` …) into an
     assembly bundled with the server only, so services that reference the package get the attribute and nothing else.
-    Built-in fallback and existing tests keep working.
-24. ⬜ Supply chain: SBOM (CycloneDX) for binaries and image, GitHub build provenance attestations on release
-    artifacts, Docker base images pinned by digest (Dependabot keeps them current).
+    Built-in fallback and existing tests keep working. → `src/RabbitMcp.Samples` (namespace `RabbitMcp.Samples.Orders`),
+    guard test: the package exports only the attribute.
+24. ✅ Supply chain: CycloneDX SBOM of the server (checked in CI) attached to releases, image SBOM + SLSA provenance,
+    build provenance attestations for archives/nupkg/SBOM (tags), base images pinned by digest (Dependabot updates).
 
 ## Phase 9 — Operations (`phase-9/operations`) ⬜
 25. ⬜ `discard_from_error`: remove poison messages from an `_error`/`_skipped` queue — preview, `confirm=true`,

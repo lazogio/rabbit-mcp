@@ -88,6 +88,10 @@
 - MassTransit creates `<queue>_error` only on the first fault — poll for it, "does not exist" is "not yet".
 - RabbitMQ in docker compose: set RABBITMQ_DEFAULT_USER/PASS; `guest` is meant for localhost connections.
 
+- mcr.microsoft.com is not reachable from the authoring sandbox (403): get image digests in CI with
+  `docker buildx imagetools inspect <image> --format '{{json .Manifest}}'` and print them as annotations.
+- SBOM of a single-file .NET binary: scan a framework-dependent publish (deps.json) instead — syft cannot see inside.
+
 ## Anti-patterns seen in other RabbitMQ MCP servers (do not copy)
 - Republish that consumes with `ack_requeue_false` before publishing → message lost if publish fails.
 - Management API `/get` with `truncate: 50000` used for republish → large bodies republished truncated.

@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 19 (0 open) · Next ID: BUG-020
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-18 phase-8/pre-release: samples out of the contracts package, runners pinned (26.04 verified), digests, SBOM, provenance
 - 2026-10-13 samples/shop: Shop sample (contracts, MassTransit service, compose, CI e2e over MCP); BUG-019 decimals as strings
 - 2026-10-13 feature/roles: configurable permissions (roles, user/JWT assignment, tools/list filter, call enforcement, audit)
 - 2026-10-13 review/security-bugs: BUG-011..018 (responder confused deputy, JWT scopes, spoofed republish target, anonymous on 0.0.0.0, audit gaps, opaque broker errors, log forging), vuln scan in CI

@@ -15,12 +15,9 @@ concurrency:
 
 jobs:
   build-test:
-    name: Build & test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, ubuntu-26.04] # temporary: does the next runner image work?
+    name: Build & test
+    # Pinned, so GitHub moving ubuntu-latest does not change the build unannounced (26.04 verified 2026-10-18).
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     env:
@@ -59,7 +56,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-${{ matrix.os }}
+          name: test-results
           path: TestResults
           if-no-files-found: ignore
 
@@ -120,12 +117,8 @@ jobs:
           retention-days: 14
 
   integration:
-    name: Integration (RabbitMQ + MassTransit, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, ubuntu-26.04] # temporary
+    name: Integration (RabbitMQ + MassTransit)
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     env:
@@ -151,7 +144,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: integration-test-results-${{ matrix.os }}
+          name: integration-test-results
           path: TestResults
           if-no-files-found: ignore
 
