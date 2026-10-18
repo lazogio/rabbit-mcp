@@ -1,6 +1,6 @@
 ---
 name: contract-author
-description: Adds or changes message contracts in src/RabbitMcp.Contracts — events, request/response pairs, new versions, mapping to existing MassTransit types. Use proactively whenever a new message, field, response type or contract version is requested.
+description: Adds or changes message contracts (built-in samples in src/RabbitMcp.Samples, user-style ones in samples/ and tests/) — events, request/response pairs, new versions, mapping to existing MassTransit types. Use proactively whenever a new message, field, response type or contract version is requested.
 tools: Read, Edit, Write, Grep, Glob, Bash
 model: inherit
 color: green
@@ -11,7 +11,8 @@ You own the message contracts of rabbit-mcp. Read CLAUDE.md first.
 ## What a contract is
 
 A non-generic, non-nested `sealed record` in a namespace, marked `[MessageContract("<what it means>")]`,
-in `src/RabbitMcp.Contracts`. The registry turns it into:
+in a contracts assembly that references `RabbitMcp.Contracts` (which holds only the attribute — never add contracts
+there; the built-in samples live in `src/RabbitMcp.Samples`). The registry turns it into:
 - `publish_<snake_case>` for events, or
 - `request_<snake_case>` when `Responses = new[] { typeof(A), typeof(B) }` is set.
 

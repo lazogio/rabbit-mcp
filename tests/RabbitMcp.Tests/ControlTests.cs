@@ -4,7 +4,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
@@ -27,8 +27,8 @@ public class PublishPolicyTests
     [Theory]
     [InlineData("Order*")]                                       // contract name
     [InlineData("publish_order_*")]                              // tool name
-    [InlineData("RabbitMcp.Contracts.Orders.*")]                 // full type name
-    [InlineData("urn:message:RabbitMcp.Contracts.Orders:*")]     // URN
+    [InlineData("RabbitMcp.Samples.Orders.*")]                 // full type name
+    [InlineData("urn:message:RabbitMcp.Samples.Orders:*")]     // URN
     [InlineData("orderSUBMITTED")]                               // case-insensitive, exact
     public void Allow_patterns_match_name_tool_type_or_urn(string pattern) =>
         Assert.True(new PublishPolicy(pattern, null).IsAllowed(C<OrderSubmitted>()));

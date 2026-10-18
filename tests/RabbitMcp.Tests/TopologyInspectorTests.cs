@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Net;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;

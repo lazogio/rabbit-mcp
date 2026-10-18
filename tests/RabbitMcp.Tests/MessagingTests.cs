@@ -4,7 +4,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
@@ -57,8 +57,8 @@ public class EnvelopeTests
         var root = doc.RootElement;
 
         Assert.Equal(id.ToString(), root.GetProperty("messageId").GetString());
-        Assert.Equal("urn:message:RabbitMcp.Contracts.Orders:OrderSubmitted", root.GetProperty("messageType")[0].GetString());
-        Assert.Equal("rabbitmq://localhost/RabbitMcp.Contracts.Orders:OrderSubmitted", root.GetProperty("destinationAddress").GetString());
+        Assert.Equal("urn:message:RabbitMcp.Samples.Orders:OrderSubmitted", root.GetProperty("messageType")[0].GetString());
+        Assert.Equal("rabbitmq://localhost/RabbitMcp.Samples.Orders:OrderSubmitted", root.GetProperty("destinationAddress").GetString());
         Assert.Equal("rabbitmq://localhost/rabbit-mcp", root.GetProperty("sourceAddress").GetString());
         Assert.Equal(order.OrderId, root.GetProperty("message").GetProperty("orderId").GetGuid());
         Assert.Equal(2, root.GetProperty("message").GetProperty("lines")[0].GetProperty("quantity").GetInt32());
@@ -179,10 +179,10 @@ public class MessageInspectorTests
              "lines":[{"sku":"ABC-1","quantity":2,"unitPrice":"9.99"}]}
             """).RootElement;
 
-        Assert.Empty(MessageInspector.Validate(typeof(RabbitMcp.Contracts.Orders.OrderSubmitted), json, MassTransitJson.Options));
+        Assert.Empty(MessageInspector.Validate(typeof(RabbitMcp.Samples.Orders.OrderSubmitted), json, MassTransitJson.Options));
         Assert.Equal("""{"amount":9.99}""",
             System.Text.Json.JsonSerializer.Serialize(new { amount = 9.99m }, MassTransitJson.Options));
-        Assert.NotEmpty(MessageInspector.Validate(typeof(RabbitMcp.Contracts.Orders.OrderSubmitted),
+        Assert.NotEmpty(MessageInspector.Validate(typeof(RabbitMcp.Samples.Orders.OrderSubmitted),
             System.Text.Json.JsonDocument.Parse("""{"orderId":"8d9e2b8e-1f3a-4f7e-9a51-0b1d7f2a6c11","customerEmail":"ana@example.ge","lines":[{"sku":"ABC-1","quantity":2,"unitPrice":"lots"}]}""").RootElement,
             MassTransitJson.Options));
     }
@@ -224,7 +224,7 @@ public class MessageInspectorTests
     public void Envelope_missing_required_member_is_reported_not_thrown()
     {
         var body = Encoding.UTF8.GetBytes(
-            """{"messageType":["urn:message:RabbitMcp.Contracts.Orders:OrderCancelled"],"message":{"orderId":"8d9e2b8e-1f3a-4f7e-9a51-0b1d7f2a6c11"}}""");
+            """{"messageType":["urn:message:RabbitMcp.Samples.Orders:OrderCancelled"],"message":{"orderId":"8d9e2b8e-1f3a-4f7e-9a51-0b1d7f2a6c11"}}""");
 
         var peeked = Inspector().Inspect(0, "q", new BasicProperties(), body, redelivered: true);
 

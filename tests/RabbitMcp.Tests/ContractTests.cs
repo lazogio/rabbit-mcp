@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using RabbitMcp.Contracts;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 
 namespace RabbitMcp.Tests;
@@ -26,8 +26,8 @@ public class ContractRegistryTests
 
         Assert.Equal("OrderSubmitted", d.Name);
         Assert.Equal("publish_order_submitted", d.ToolName);
-        Assert.Equal("urn:message:RabbitMcp.Contracts.Orders:OrderSubmitted", d.MessageTypeUrn);
-        Assert.Equal("RabbitMcp.Contracts.Orders:OrderSubmitted", d.Exchange);
+        Assert.Equal("urn:message:RabbitMcp.Samples.Orders:OrderSubmitted", d.MessageTypeUrn);
+        Assert.Equal("RabbitMcp.Samples.Orders:OrderSubmitted", d.Exchange);
         Assert.Equal(1, d.Version);
     }
 
@@ -67,7 +67,7 @@ public class ContractRegistryTests
         Assert.Same(registry.Get(typeof(OrderCancelled)), registry.FindByName("publish_order_cancelled"));
         Assert.Same(registry.Get(typeof(OrderCancelled)), registry.FindByName("ordercancelled"));
         Assert.Equal("OrderSubmitted",
-            registry.FindByUrns(["urn:message:Other:Thing", "urn:message:RabbitMcp.Contracts.Orders:OrderSubmitted"])?.Name);
+            registry.FindByUrns(["urn:message:Other:Thing", "urn:message:RabbitMcp.Samples.Orders:OrderSubmitted"])?.Name);
         Assert.Null(registry.FindByUrns(null));
     }
 

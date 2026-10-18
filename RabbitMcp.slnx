@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/RabbitMcp.Contracts/RabbitMcp.Contracts.csproj" />
+    <Project Path="src/RabbitMcp.Samples/RabbitMcp.Samples.csproj" />
     <Project Path="src/RabbitMcp.Server/RabbitMcp.Server.csproj" />
   </Folder>
   <Folder Name="/samples/Shop/">

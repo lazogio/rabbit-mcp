@@ -32,7 +32,8 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 
 | Path | Responsibility |
 |---|---|
-| `src/RabbitMcp.Contracts` | `[MessageContract]` records. **No package dependencies** — services reference it too. |
+| `src/RabbitMcp.Contracts` | the `[MessageContract]` attribute only (the NuGet package). **No dependencies** — services reference it. Never add contracts here. |
+| `src/RabbitMcp.Samples` | built-in sample contracts (orders), bundled with the server as the fallback when `ContractAssemblies` is empty |
 | `src/RabbitMcp.Server/Contracts` | `ContractRegistry` (naming conventions), `ContractValidator` (DataAnnotations, nested paths), `ContractAssemblyLoader` (`ContractAssemblies` option) |
 | `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only), responder mode (`ResponderService`, `RequestInbox`, `ResponderEnvelopes`) |
 | `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas) |

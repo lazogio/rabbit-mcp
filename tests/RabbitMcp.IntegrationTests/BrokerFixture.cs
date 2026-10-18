@@ -4,7 +4,7 @@
 using System.Collections.Concurrent;
 using MassTransit;
 using Microsoft.Extensions.Logging.Abstractions;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.IntegrationTests.Contracts;
 using RabbitMcp.Server;
 using RabbitMcp.Server.Contracts;

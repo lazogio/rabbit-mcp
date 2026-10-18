@@ -4,7 +4,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Hosting;

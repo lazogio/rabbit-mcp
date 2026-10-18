@@ -3,7 +3,7 @@
 
 using MassTransit;
 using ModelContextProtocol;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.IntegrationTests.Contracts;
 using RabbitMcp.Server.Messaging;
 

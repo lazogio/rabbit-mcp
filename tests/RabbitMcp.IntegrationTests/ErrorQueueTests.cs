@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using ModelContextProtocol;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 
 namespace RabbitMcp.IntegrationTests;
 

@@ -14,7 +14,7 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 using ModelContextProtocol.Server;
 using RabbitMcp.Server.Messaging;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
 using RabbitMcp.Server.Tools;
@@ -68,7 +68,7 @@ public class ToolSchemaTests
         Assert.True(tool.OutputSchema.Value.GetProperty("properties").TryGetProperty("messageId", out _));
         Assert.False(tool.Annotations?.ReadOnlyHint ?? true);
         Assert.False(tool.Annotations?.DestructiveHint ?? true);
-        Assert.Contains("urn:message:RabbitMcp.Contracts.Orders:OrderCancelled", tool.Description);
+        Assert.Contains("urn:message:RabbitMcp.Samples.Orders:OrderCancelled", tool.Description);
     }
 
     [Fact]

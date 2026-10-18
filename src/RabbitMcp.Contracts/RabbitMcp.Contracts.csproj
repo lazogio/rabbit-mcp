@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Shared message contracts. This project has no dependencies, so the same
-    assembly can be referenced by the MCP server and by your services
-    (MassTransit consumers, plain RabbitMQ.Client consumers, etc.).
+    The [MessageContract] attribute and nothing else. No dependencies, so your contract assemblies and services
+    (MassTransit consumers, plain RabbitMQ.Client consumers, ...) can reference it freely.
   -->
   <PropertyGroup>
     <IsPackable>true</IsPackable>

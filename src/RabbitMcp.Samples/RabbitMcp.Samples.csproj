@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Built-in sample contracts (orders). The server falls back to them when RabbitMcp:ContractAssemblies is empty,
+    so it works out of the box. Bundled with the server only — never part of the RabbitMcp.Contracts package.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RabbitMcp.Contracts\RabbitMcp.Contracts.csproj" />
+  </ItemGroup>
+</Project>

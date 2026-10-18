@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Hosting;
 using RabbitMcp.Server.Messaging;
@@ -120,7 +120,7 @@ public class ResponderTests
         Assert.Equal(request.Envelope.ConversationId, envelope.ConversationId);
         Assert.Equal(request.Envelope.MessageId, envelope.InitiatorId);
         Assert.Equal(request.ResponseAddress, envelope.DestinationAddress);
-        Assert.Equal(new[] { "urn:message:RabbitMcp.Contracts.Orders:OrderStatus" }, envelope.MessageType);
+        Assert.Equal(new[] { "urn:message:RabbitMcp.Samples.Orders:OrderStatus" }, envelope.MessageType);
         Assert.Equal("Paid", envelope.Message!.Value.GetProperty("status").GetString());
         Assert.Null(envelope.ResponseAddress);
     }
@@ -135,7 +135,7 @@ public class ResponderTests
         Assert.Equal("rabbitmq://localhost/faults", envelope.DestinationAddress);
         Assert.Equal(new[]
         {
-            "urn:message:MassTransit:Fault[[RabbitMcp.Contracts.Orders:GetOrderStatus]]",
+            "urn:message:MassTransit:Fault[[RabbitMcp.Samples.Orders:GetOrderStatus]]",
             "urn:message:MassTransit:Fault",
         }, envelope.MessageType);
 

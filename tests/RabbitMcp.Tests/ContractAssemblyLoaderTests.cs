@@ -1,7 +1,7 @@
 // Copyright (c) 2026 lazogio
 // SPDX-License-Identifier: MIT
 
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 
 namespace RabbitMcp.Tests;
@@ -71,11 +71,22 @@ public class ContractAssemblyLoaderTests
     [Fact]
     public void A_copy_of_the_shared_contracts_assembly_resolves_to_the_bundled_one()
     {
-        var copy = CopyToTemp(typeof(OrderSubmitted).Assembly.Location);
+        // RabbitMcp.Contracts.dll sits next to every user contracts DLL; listing it must not load a second copy.
+        var shared = typeof(RabbitMcp.Contracts.MessageContractAttribute).Assembly;
+        var copy = CopyToTemp(shared.Location);
 
         var assemblies = ContractAssemblyLoader.Load(copy, AppContext.BaseDirectory, typeof(OrderSubmitted).Assembly);
 
-        Assert.Same(typeof(OrderSubmitted).Assembly, Assert.Single(assemblies));
+        Assert.Same(shared, Assert.Single(assemblies));
+    }
+
+    [Fact]
+    public void The_contracts_package_holds_only_the_attribute()
+    {
+        // Services reference RabbitMcp.Contracts; the built-in samples live in RabbitMcp.Samples, bundled with the server.
+        Assert.Equal(new[] { typeof(RabbitMcp.Contracts.MessageContractAttribute) },
+            typeof(RabbitMcp.Contracts.MessageContractAttribute).Assembly.GetExportedTypes());
+        Assert.Equal("RabbitMcp.Samples", typeof(OrderSubmitted).Assembly.GetName().Name);
     }
 
     [Fact]

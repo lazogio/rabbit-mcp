@@ -14,7 +14,7 @@ code, identifiers and commands stay in English. CLAUDE.md is in English and is r
 
 - Tools, their gating and annotations: `src/RabbitMcp.Server/Tools/*.cs`, `Program.cs`
 - Options and defaults: `src/RabbitMcp.Server/RabbitMcpOptions.cs`, `appsettings.json`
-- Contracts and naming: `src/RabbitMcp.Contracts`, `ContractRegistry.cs`
+- Contracts and naming: `src/RabbitMcp.Contracts` (attribute), `src/RabbitMcp.Samples` (built-in samples), `ContractRegistry.cs`
 - Guarantees: `Messaging/QueueBrowser.cs`, `Tools/ContractPublisher.cs`, `Messaging/ReplyListener.cs`
 - CI: `.github/workflows/ci.yml`
 

@@ -3,8 +3,9 @@
 
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using RabbitMcp.Contracts;
 
-namespace RabbitMcp.Contracts.Orders;
+namespace RabbitMcp.Samples.Orders;
 
 // Sample contracts. Replace them with your own; everything else is driven by
 // [MessageContract] + the property attributes:

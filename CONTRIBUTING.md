@@ -17,7 +17,8 @@ docker build -t rabbit-mcp . && scripts/smoke-test-http.sh docker:rabbit-mcp
 ## სტრუქტურა
 
 ```
-src/RabbitMcp.Contracts              [MessageContract] (დამოკიდებულებების გარეშე, სერვისებიც იყენებენ)
+src/RabbitMcp.Contracts              მხოლოდ [MessageContract] attribute (NuGet პაკეტი, სერვისები იყენებენ)
+src/RabbitMcp.Samples                ჩაშენებული ნიმუშის კონტრაქტები, მხოლოდ სერვერთან ერთად
 src/RabbitMcp.Server/Contracts       რეესტრი, ვალიდაცია, DLL-ების ჩატვირთვა, contracts diff
 src/RabbitMcp.Server/Messaging       AMQP, MassTransit envelope, peek/republish, request/response, responder, audit
 src/RabbitMcp.Server/Security        როლები და ხელსაწყოების უფლებები

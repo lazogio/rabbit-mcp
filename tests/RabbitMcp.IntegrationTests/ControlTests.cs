@@ -3,7 +3,7 @@
 
 using System.Text.Json;
 using ModelContextProtocol;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 
 namespace RabbitMcp.IntegrationTests;
@@ -34,7 +34,7 @@ public sealed class ControlTests(BrokerFixture broker)
         Assert.Equal("publish", S(e, "action"));
         Assert.Equal("sent", S(e, "outcome"));
         Assert.Equal("OrderSubmitted", S(e, "contract"));
-        Assert.Equal("RabbitMcp.Contracts.Orders:OrderSubmitted", S(e, "exchange"));
+        Assert.Equal("RabbitMcp.Samples.Orders:OrderSubmitted", S(e, "exchange"));
         Assert.Equal(id, e.GetProperty("message").GetProperty("orderId").GetGuid()); // AuditIncludePayload = true
     }
 

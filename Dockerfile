@@ -10,6 +10,7 @@ WORKDIR /src
 
 COPY Directory.Build.props Directory.Packages.props ./
 COPY src/RabbitMcp.Contracts/RabbitMcp.Contracts.csproj src/RabbitMcp.Contracts/
+COPY src/RabbitMcp.Samples/RabbitMcp.Samples.csproj src/RabbitMcp.Samples/
 COPY src/RabbitMcp.Server/RabbitMcp.Server.csproj src/RabbitMcp.Server/
 RUN case "$TARGETARCH" in amd64) echo linux-x64 ;; arm64) echo linux-arm64 ;; *) echo "unsupported $TARGETARCH" >&2; exit 1 ;; esac > /rid \
  && dotnet restore src/RabbitMcp.Server -r "$(cat /rid)"

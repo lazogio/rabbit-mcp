@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RabbitMcp.Contracts\RabbitMcp.Contracts.csproj" />
+    <ProjectReference Include="..\RabbitMcp.Samples\RabbitMcp.Samples.csproj" />
   </ItemGroup>
 
   <ItemGroup>

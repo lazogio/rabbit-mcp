@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
-using RabbitMcp.Contracts.Orders;
+using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
 
@@ -28,7 +28,7 @@ public class RequestResponseTests
         Assert.True(GetStatus.IsRequest);
         Assert.Equal("request_get_order_status", GetStatus.ToolName);
         Assert.Equal(
-            new[] { "urn:message:RabbitMcp.Contracts.Orders:OrderStatus", "urn:message:RabbitMcp.Contracts.Orders:OrderNotFound" },
+            new[] { "urn:message:RabbitMcp.Samples.Orders:OrderStatus", "urn:message:RabbitMcp.Samples.Orders:OrderNotFound" },
             GetStatus.Responses.Select(r => r.MessageTypeUrn));
         Assert.False(ContractRegistry.Describe(typeof(OrderSubmitted)).IsRequest);
     }
@@ -96,7 +96,7 @@ public class RequestResponseTests
     [Fact]
     public void Declared_response_is_validated_against_its_contract()
     {
-        var reply = Reply(Guid.NewGuid(), "urn:message:RabbitMcp.Contracts.Orders:OrderStatus",
+        var reply = Reply(Guid.NewGuid(), "urn:message:RabbitMcp.Samples.Orders:OrderStatus",
             $$"""{"orderId":"{{OrderId}}","status":"Shipped"}""");
 
         var r = ReplyInterpreter.Interpret(GetStatus, reply);
@@ -112,7 +112,7 @@ public class RequestResponseTests
     [Fact]
     public void Response_that_violates_its_contract_is_flagged()
     {
-        var reply = Reply(Guid.NewGuid(), "urn:message:RabbitMcp.Contracts.Orders:OrderStatus",
+        var reply = Reply(Guid.NewGuid(), "urn:message:RabbitMcp.Samples.Orders:OrderStatus",
             $$"""{"orderId":"{{OrderId}}","status":"Lost"}""");
 
         var r = ReplyInterpreter.Interpret(GetStatus, reply);
@@ -124,7 +124,7 @@ public class RequestResponseTests
     [Fact]
     public void Alternative_response_type_is_recognised()
     {
-        var reply = Reply(Guid.NewGuid(), "urn:message:RabbitMcp.Contracts.Orders:OrderNotFound", $$"""{"orderId":"{{OrderId}}"}""");
+        var reply = Reply(Guid.NewGuid(), "urn:message:RabbitMcp.Samples.Orders:OrderNotFound", $$"""{"orderId":"{{OrderId}}"}""");
 
         var r = ReplyInterpreter.Interpret(GetStatus, reply);
 
@@ -145,7 +145,7 @@ public class RequestResponseTests
     [Fact]
     public void MassTransit_fault_is_reported_with_exceptions()
     {
-        var reply = Reply(Guid.NewGuid(), "urn:message:MassTransit:Fault[[RabbitMcp.Contracts.Orders:GetOrderStatus]]",
+        var reply = Reply(Guid.NewGuid(), "urn:message:MassTransit:Fault[[RabbitMcp.Samples.Orders:GetOrderStatus]]",
             """
             {
               "faultId": "f1", "faultedMessageId": "m1", "timestamp": "2026-10-12T09:30:00Z",
