@@ -1,75 +1,89 @@
-# პროექტზე მუშაობა
+# Working on rabbit-mcp
 
-მომხმარებლის დოკუმენტაცია [README.md](README.md)-შია. აქ არის ის, რაც კოდზე მომუშავეს სჭირდება.
+**English** · [ქართული](CONTRIBUTING.ka.md)
 
-## აწყობა და ტესტები
+User documentation is in [README.md](README.md). This page is for people working on the code.
+
+## Build and test
 
 ```bash
 dotnet build RabbitMcp.slnx
-dotnet test tests/RabbitMcp.Tests                  # unit, RabbitMQ არ სჭირდება
-dotnet test tests/RabbitMcp.IntegrationTests       # ნამდვილი RabbitMQ 4 + MassTransit 8 (Testcontainers, Docker სჭირდება)
+dotnet test tests/RabbitMcp.Tests                  # unit, no RabbitMQ needed
+dotnet test tests/RabbitMcp.IntegrationTests       # real RabbitMQ 4 + MassTransit 8 (Testcontainers, needs Docker)
 dotnet publish src/RabbitMcp.Server -c Release -o out
-scripts/smoke-test.sh out/rabbit-mcp               # MCP stdio სესია გამოქვეყნებულ ბინართან
+scripts/smoke-test.sh out/rabbit-mcp               # MCP stdio session with the published binary
 scripts/smoke-test-http.sh out/rabbit-mcp          # HTTP + API key
 docker build -t rabbit-mcp . && scripts/smoke-test-http.sh docker:rabbit-mcp
 ```
 
-## სტრუქტურა
+## Layout
 
 ```
-src/RabbitMcp.Contracts              მხოლოდ [MessageContract] attribute (NuGet პაკეტი, სერვისები იყენებენ)
-src/RabbitMcp.Samples                ჩაშენებული ნიმუშის კონტრაქტები, მხოლოდ სერვერთან ერთად
-src/RabbitMcp.Server/Contracts       რეესტრი, ვალიდაცია, DLL-ების ჩატვირთვა, contracts diff
-src/RabbitMcp.Server/Messaging       AMQP, MassTransit envelope, peek/republish, request/response, responder, audit
-src/RabbitMcp.Server/Security        როლები და ხელსაწყოების უფლებები
-src/RabbitMcp.Server/Hosting         stdio და HTTP ჰოსტი, ავტორიზაცია
-src/RabbitMcp.Server/Tools           MCP ხელსაწყოები და მათი შედეგები (outputSchema)
-tests/RabbitMcp.Tests                unit ტესტები
-tests/RabbitMcp.IntegrationTests     ნამდვილი RabbitMQ + MassTransit
-tests/RabbitMcp.ExternalContracts    „გარე“ კონტრაქტების DLL-ის ნიმუში
-samples/Shop                         სრული ნიმუში: კონტრაქტები, MassTransit სერვისი, docker compose
+src/RabbitMcp.Contracts              the [MessageContract] attribute only (the NuGet package services reference)
+src/RabbitMcp.Samples                built-in sample contracts, shipped with the server only
+src/RabbitMcp.Server/Contracts       registry, validation, loading contract DLLs, contracts diff
+src/RabbitMcp.Server/Messaging       AMQP, MassTransit envelope, peek/republish/dead-letter, request/response, responder, audit
+src/RabbitMcp.Server/Security        roles and tool permissions
+src/RabbitMcp.Server/Hosting         stdio and HTTP hosts, authentication
+src/RabbitMcp.Server/Tools           MCP tools, prompts, resources and their results (outputSchema)
+tests/RabbitMcp.Tests                unit tests
+tests/RabbitMcp.IntegrationTests     real RabbitMQ + MassTransit
+tests/RabbitMcp.ExternalContracts    a user-style contracts DLL
+samples/Shop                         full sample: contracts, MassTransit service, docker compose
 ```
 
-წესები, რომლებიც არ უნდა დაირღვეს (MassTransit-თან თავსებადობა, შეტყობინების დაუკარგაობა, audit, საიდუმლოები, უფლებები), [CLAUDE.md](CLAUDE.md)-შია.
+The rules that must not be broken (MassTransit compatibility, no message loss, nothing deleted, audit, secrets,
+permissions) are in [CLAUDE.md](CLAUDE.md).
+
+## Documentation
+
+Every user-facing document exists in English (`README.md`, `CONTRIBUTING.md`, `samples/Shop/README.md`) and in
+Georgian (`*.ka.md`). Change both in the same pull request.
 
 ## CI
 
-ყოველ push-სა და PR-ზე CI:
-- აგებს პროექტს და ამოწმებს მოწყვლად NuGet პაკეტებს;
-- უშვებს unit და ინტეგრაციულ ტესტებს;
-- უშვებს smoke test-ებს: stdio, HTTP, Docker image, responder, გარე კონტრაქტები, `contracts diff`;
-- უშვებს Shop ნიმუშს docker compose-ით და MCP-ით ბოლომდე გადის (`scripts/sample-e2e.py`).
+On every push and pull request CI:
+- builds the solution and checks for vulnerable NuGet packages;
+- runs the unit and integration tests;
+- runs smoke tests: stdio (tools, prompts, resources), HTTP, the Docker image, responder mode, external contracts, `contracts diff`;
+- starts the Shop sample with docker compose and walks through it over MCP (`scripts/sample-e2e.py`).
 
-ჩავარდნილი ტესტი PR-ში annotation-ად ჩანს.
+A failing test shows up as an annotation on the pull request.
 
-## რელიზი
+## Releases
 
 ```bash
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-tag-ის ატვირთვა აგებს ბინარებს 5 პლატფორმისთვის, multi-arch Docker image-ს (`ghcr.io/lazogio/rabbit-mcp`), `RabbitMcp.Contracts` nupkg-ს და GitHub Release-ს.
-- **ვერსია** tag-იდან მოდის და `serverInfo.version`-ში ჩანს.
-- **`-` შემცველი tag** (`v0.2.0-rc.1`) prerelease-ად ქვეყნდება.
-- **nuget.org:** `NUGET_API_KEY` secret-ის არსებობისას პაკეტი nuget.org-ზეც იტვირთება.
-- **მიწოდების ჯაჭვი:** არქივებს და nupkg-ს აქვს GitHub build provenance attestation (`gh attestation verify`). რელიზს თან ერთვის CycloneDX SBOM. Docker image-ს registry-ში SBOM და SLSA provenance მიჰყვება.
-- **base image-ები** digest-ით არის ფიქსირებული. Dependabot ახალ digest-ს ყოველ ორშაბათს გვთავაზობს.
+A tag builds binaries for 5 platforms, the multi-arch Docker image (`ghcr.io/lazogio/rabbit-mcp`), the
+`RabbitMcp.Contracts` nupkg and a GitHub Release.
+- **Version** comes from the tag and is shown in `serverInfo.version`.
+- **Tags with `-`** (`v0.2.0-rc.1`) are published as prereleases.
+- **nuget.org:** the package is pushed there too when the `NUGET_API_KEY` secret exists.
+- **Supply chain:** archives and the nupkg get GitHub build provenance attestations (`gh attestation verify`), the release
+  includes a CycloneDX SBOM, and the Docker image carries an SBOM and SLSA provenance in the registry.
+- **Base images** are pinned by digest; Dependabot proposes new digests every Monday.
 
-CI runner-ები `ubuntu-24.04`-ზეა ფიქსირებული, რომ GitHub-ის `ubuntu-latest`-ის ცვლილებამ build მოულოდნელად არ შეცვალოს. Ubuntu 26.04 გადამოწმებულია (2026-10-18).
+CI runners are pinned to `ubuntu-24.04`, so a change of GitHub's `ubuntu-latest` cannot alter the build unannounced
+(Ubuntu 26.04 verified on 2026-10-18).
 
-Dependabot NuGet-ის, Actions-ისა და Docker-ის განახლებებს ყოველ ორშაბათს გვთავაზობს. MassTransit 9+ გამორიცხულია, რადგან ის კომერციულია და მხოლოდ ტესტებში გამოიყენება.
+Dependabot proposes NuGet, Actions and Docker updates every Monday. MassTransit 9+ is excluded: it is commercial and
+only used in tests.
 
 ## Claude Code
 
-`.claude/agents/`-ში პროექტის აგენტებია: `contract-author`, `mcp-tool-designer`, `masstransit-compat-reviewer`, `code-reviewer`, `test-engineer`, `ci-doctor`, `docs-writer`, `project-memory`. ცვლილებების, ბაგების და გადაწყვეტილებების ისტორია `.claude/agent-memory/project-memory/`-შია.
+`.claude/agents/` holds the project's agents: `contract-author`, `mcp-tool-designer`, `masstransit-compat-reviewer`,
+`code-reviewer`, `test-engineer`, `ci-doctor`, `docs-writer`, `project-memory`. The history of changes, bugs and
+decisions is in `.claude/agent-memory/project-memory/`.
 
-## ლიცენზია
+## License
 
-MIT. ყოველი წყაროს ფაილი იწყება header-ით:
+MIT. Every source file starts with the header:
 
 ```csharp
 // Copyright (c) 2026 lazogio
 // SPDX-License-Identifier: MIT
 ```
 
-IDE მას ახალ ფაილს ავტომატურად უმატებს (`.editorconfig`), build კი header-ის გარეშე ფაილზე გაფრთხილებას აჩვენებს (IDE0073).
+IDEs add it to new files automatically (`.editorconfig`), and the build warns about files without it (IDE0073).

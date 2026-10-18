@@ -85,13 +85,13 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
 27. ✅ `recent_activity`: the audit file read backwards (newest first, stops at `since`), filters by action, outcome,
     contract, client, queue, id; payload only on request; only when `AuditLogPath` is set; permission `read`.
 
-## Phase 10 — Usability (`phase-10/usability`) ⬜
-28. ⬜ MCP prompts (slash commands in clients): `diagnose_errors` (all error queues → causes → suggested action),
+## Phase 10 — Usability (`phase-10/usability`) ✅ (2026-10-18)
+28. ✅ MCP prompts (slash commands in clients): `diagnose_errors` (all error queues → causes → suggested action),
     `review_approvals` (pending requests one by one), `contract_health` (consumers, backlogs, faults per contract).
-29. ⬜ MCP resources: each contract's JSON schema and description as `contract://<Name>`, so clients can show them
+29. ✅ MCP resources: each contract's JSON schema and description as `contract://<Name>`, so clients can show them
     without a tool call.
-30. ⬜ English documentation for the public repository. **Decision needed:** `README.md` in English with the
-    Georgian one in `README.ka.md` (recommended), or Georgian first with an English `README.en.md`.
+30. ✅ English documentation (default chosen, 2026-10-18): `README.md`, `CONTRIBUTING.md`, `samples/Shop/README.md`
+    in English, Georgian twins in `*.ka.md` with a language switch at the top; both kept in sync.
 
 ## Phase 11 — Reach (`phase-11/reach`) ⬜
 31. ⬜ Raw JSON contracts (`[MessageContract(Format = Raw)]`): publish/request without the MassTransit envelope

@@ -84,7 +84,7 @@ jobs:
         shell: bash
         run: |
           name="rabbit-mcp-${{ steps.version.outputs.version }}-${{ matrix.rid }}"
-          cp README.md LICENSE out/rabbit-mcp/
+          cp README.md README.ka.md LICENSE out/rabbit-mcp/
           cd out
           if [[ "${{ matrix.rid }}" == win-* ]]; then
             zip -qr "$name.zip" rabbit-mcp

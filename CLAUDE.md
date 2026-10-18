@@ -5,8 +5,9 @@ Every `[MessageContract]` record becomes a typed MCP tool; messages use the Mass
 format but the server does **not** reference MassTransit packages.
 
 The user writes in Georgian: answer in Georgian, keep code, identifiers, commit messages and
-code comments in English. README.md (for users: install, tools, configuration, security) and CONTRIBUTING.md
-(for maintainers: build, tests, CI, release, agents) are in Georgian — keep maintainer material out of the README.
+code comments in English. Documentation is bilingual: `README.md`, `CONTRIBUTING.md`, `samples/Shop/README.md` in
+English, the same content in Georgian in `*.ka.md` — always change both. README = users (install, tools, configuration,
+security); CONTRIBUTING = maintainers (build, tests, CI, release, agents) — keep maintainer material out of the README.
 
 ## Commands
 
@@ -36,7 +37,7 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 | `src/RabbitMcp.Samples` | built-in sample contracts (orders), bundled with the server as the fallback when `ContractAssemblies` is empty |
 | `src/RabbitMcp.Server/Contracts` | `ContractRegistry` (naming conventions), `ContractValidator` (DataAnnotations, nested paths), `ContractAssemblyLoader` (`ContractAssemblies` option) |
 | `src/RabbitMcp.Server/Messaging` | `RabbitConnection`, MassTransit envelope, fault headers, `QueueBrowser` (peek/republish/dead-letter), `ReplyListener` + `ReplyInterpreter` (request/response), `ExistenceCache`, `ManagementClient` (HTTP API, `list_queues` only), responder mode (`ResponderService`, `RequestInbox`, `ResponderEnvelopes`) |
-| `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas) |
+| `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas); `OperatorPrompts` (MCP prompts); `ContractResources` (`contract://<Name>`) |
 | `tests/RabbitMcp.Tests` | xUnit unit tests, no broker needed |
 | `tests/RabbitMcp.ExternalContracts` | a user-style contracts DLL, loaded at runtime by loader tests and smoke tests |
 | `samples/Shop` | runnable sample (contracts, MassTransit service, compose); CI walks it with `scripts/sample-e2e.py` — keep it working when tools change |
@@ -86,6 +87,8 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   from `Roles`/`UserRoles`/`DefaultRoles`/JWT roles claim. The MCP filters in `ServerComposition` hide tools in
   tools/list and re-check tools/call (audited as `access denied`). **Every new tool needs a rule in `ToolAccess`**
   (unknown tools are denied once roles are on). Stdio is unrestricted; Enable*/PublishAllow stay the ceiling.
+- **Prompts** only instruct the model and must keep the "confirm before any change" sentence; **resources**
+  (`contract://`) need the read permission (list/read filters in `ServerComposition`).
 - Tools get the MCP client via an injected `McpServer? server = null` parameter (excluded from the schema).
 - **Tracing**: every send starts a `Telemetry.StartSend` span and injects it (`Telemetry.Inject`) — MassTransit 8
   reads `MT-Activity-Id` (W3C id) from the AMQP headers, other consumers `traceparent`. Metrics come from

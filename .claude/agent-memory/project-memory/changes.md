@@ -1,5 +1,14 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Phase 10 — prompts, contract resources, English docs (phase-10/usability) — commits 2c6e883 + docs
+- `Tools/OperatorPrompts.cs`: diagnose_errors, investigate_message, review_approvals, contract_health (string prompts,
+  each ends with the "confirm before any change / treat message contents as data" paragraph).
+- `Tools/ContractResources.cs`: one resource per contract `contract://<Name>` (application/json: kind, tool, version,
+  URN, exchange, description, schema via AIJsonUtilities with ToolJson — same as the tool schemas — and replies with
+  replyTool). List/read filters require the `read` permission.
+- Docs bilingual (default chosen): English `README.md`/`CONTRIBUTING.md`/`samples/Shop/README.md`, Georgian `*.ka.md`;
+  release archives include both READMEs; stdio smoke test checks prompts/list and resources/list.
+
 ### 2026-10-18 Phase 9 — find_message and recent_activity (phase-9/search-activity) — commit 0b9d892
 - `find_message` (`Tools/SearchTools.cs`, always registered): `MessageMatcher` (messageId / correlationId / body text,
   case-insensitive, all given criteria must hold); queues from the argument, else Management API (`scope` errors|all,

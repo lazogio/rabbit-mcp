@@ -9,4 +9,4 @@
 - [ ] Envelope / URN / header / reply-endpoint changes checked by `masstransit-compat-reviewer`
 - [ ] Contract changes: breaking or not? (renamed/removed/required fields are breaking)
 - [ ] New or changed MCP tools: honest annotations, structured output, gated if they send or remove messages
-- [ ] README (Georgian) / CLAUDE.md updated; bug or decision recorded by `project-memory`
+- [ ] README / CONTRIBUTING updated in both languages (`*.md` English, `*.ka.md` Georgian) and CLAUDE.md; bug or decision recorded by `project-memory`

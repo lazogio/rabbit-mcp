@@ -2,19 +2,21 @@
 
 [![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-RabbitMQ-ის MCP სერვერი, რომელიც **შეტყობინებების კონტრაქტებზეა** აგებული (.NET 10). თითო C# record კონტრაქტი ცალკე ტიპიზებულ ხელსაწყოდ იქცევა, რომლის `inputSchema` თავად კონტრაქტია. შეტყობინებები MassTransit-ის ფორმატშია, ამიტომ MassTransit-ის სერვისები მათ კონფიგურაციის გარეშე იღებენ. თავად სერვერი MassTransit-ზე დამოკიდებული არ არის.
+**English** · [ქართული](README.ka.md)
 
-## რას აკეთებს
+An MCP server for RabbitMQ built on **message contracts** (.NET 10). Every C# record contract becomes its own typed tool whose `inputSchema` is the contract itself. Messages use the MassTransit wire format, so MassTransit services receive them without any configuration — while the server itself does not depend on MassTransit.
 
-- **აგზავნის:** `publish_<contract>` აქვეყნებს event-ს, `request_<contract>` აგზავნის request-ს და აბრუნებს პასუხს. ორივე შემთხვევაში შეტყობინება გაგზავნამდე კონტრაქტზე მოწმდება.
-- **ხედავს:** აჩვენებს რიგებს, მათ სტატისტიკას და შეტყობინებებს ამოღების გარეშე, MassTransit-ის fault-ის დეტალებით. პოულობს, ვინ იღებს თითო კონტრაქტს.
-- **აღადგენს:** `_error` რიგიდან შეტყობინებებს უსაფრთხოდ აბრუნებს საწყის რიგში. გამოუსწორებელს dead-letter რიგში გადაიტანს და არასდროს შლის.
-- **პასუხობს:** responder რეჟიმში სერვისების request-ებს მოდელი პასუხობს.
-- **იცავს:** `contracts diff` CI-ში აჩერებს wire-ის დამრღვევ ცვლილებებს, როლები კი ზღუდავს, ვის რა შეუძლია.
+## What it does
 
-## დაყენება
+- **Sends:** `publish_<contract>` publishes an event, `request_<contract>` sends a request and returns the reply. Either way the message is validated against its contract first.
+- **Sees:** lists queues and their statistics, shows messages without removing them (with MassTransit fault details), and finds out who consumes each contract.
+- **Recovers:** moves messages from an `_error` queue back to their original queue safely. Messages that can never succeed are parked in a dead-letter queue — never deleted.
+- **Answers:** in responder mode the model answers requests sent by your services.
+- **Protects:** `contracts diff` stops wire-breaking contract changes in CI, and roles limit who may do what.
 
-**მზა ბინარი.** [Releases](https://github.com/lazogio/rabbit-mcp/releases)-ში დევს self-contained ფაილი Linux-ის (x64/arm64), Windows-ის (x64) და macOS-ის (x64/arm64) პლატფორმებისთვის. .NET-ის დაყენება არ სჭირდება. macOS-ზე პირველ გაშვებამდე: `xattr -d com.apple.quarantine rabbit-mcp`. ფაილის ავთენტურობას `gh attestation verify <ფაილი> --repo lazogio/rabbit-mcp` ამოწმებს, ხოლო ყველა დამოკიდებულება რელიზის SBOM-შია (`*.sbom.cdx.json`).
+## Install
+
+**Prebuilt binary.** [Releases](https://github.com/lazogio/rabbit-mcp/releases) has a self-contained file for Linux (x64/arm64), Windows (x64) and macOS (x64/arm64) — no .NET installation needed. On macOS, before the first start: `xattr -d com.apple.quarantine rabbit-mcp`. `gh attestation verify <file> --repo lazogio/rabbit-mcp` proves a file was built by this repository's release workflow, and every dependency is listed in the release's SBOM (`*.sbom.cdx.json`).
 
 **Claude Code:**
 
@@ -38,34 +40,49 @@ claude mcp add rabbit-mcp \
 }
 ```
 
-**წყაროდან:** `dotnet publish src/RabbitMcp.Server -c Release -o out` და დაარეგისტრირეთ `out/rabbit-mcp`. `dotnet run` არ გამოიყენოთ: ის stdout-ზე წერს და MCP-ს აზიანებს.
+**From source:** `dotnet publish src/RabbitMcp.Server -c Release -o out` and register `out/rabbit-mcp`. Do not use `dotnet run`: it writes to stdout and breaks MCP.
 
-ლოკალური RabbitMQ: `docker compose up -d` (UI: http://localhost:15672, guest/guest).
+Local RabbitMQ: `docker compose up -d` (UI: http://localhost:15672, guest/guest).
 
-**სცადეთ ნიმუშზე.** [samples/Shop](samples/Shop) ერთი ბრძანებით უშვებს RabbitMQ-ს, MassTransit-ის მაღაზიის სერვისს და rabbit-mcp-ს. მასში ნაჩვენებია შეკვეთა, სტატუსის მოთხოვნა, error რიგის აღდგენა და დიდი შეკვეთის დამტკიცება მოდელის მიერ.
+**Try the sample.** [samples/Shop](samples/Shop) starts RabbitMQ, a MassTransit shop service and rabbit-mcp with one command, and walks through placing orders, asking for their status, recovering an error queue, parking a poison message and approving a large order — with the model doing the work.
 
-## ხელსაწყოები
+## Tools
 
-| ხელსაწყო | რას აკეთებს | ჩაირთვება |
+| Tool | What it does | Enabled by |
 |---|---|---|
-| `list_contracts` | კონტრაქტების სია: event/request, ვერსია, exchange, პასუხის ტიპები | ყოველთვის |
-| `validate_message` | JSON-ს კონტრაქტზე ამოწმებს გაგზავნის გარეშე | ყოველთვის |
-| `queue_stats` | რიგში მზა შეტყობინებების და consumer-ების რაოდენობა | ყოველთვის |
-| `peek_messages` | შეტყობინებები ამოღების გარეშე: payload, კონტრაქტის შემოწმება, fault | ყოველთვის |
-| `find_message` | ეძებს შეტყობინებას messageId-ით, correlationId-ით ან ტექსტით (მაგ. შეკვეთის ID) და აჩვენებს, რომელ რიგშია. ნაგულისხმევად ყველა `_error`/`_skipped`/`_dead` რიგში ეძებს (`ManagementUri`), ან მითითებულ რიგებში | ყოველთვის |
-| `list_queues` | რიგების სია ფილტრებით. error რიგთან ჩანს, რომელ რიგს ეკუთვნის | `ManagementUri` |
-| `contract_consumers` | რომელ რიგებამდე აღწევს კონტრაქტი, ჰყავს თუ არა consumer, რამდენია `_error`/`_skipped`-ში | `ManagementUri` |
-| `recent_activity` | audit-ის ბოლო მოვლენები ფილტრებით (მოქმედება, შედეგი, კონტრაქტი, მომხმარებელი, რიგი, ID, `since: 2h`): „ვინ დააბრუნა გუშინ?“ | `AuditLogPath` |
-| `publish_<contract>` | აქვეყნებს event-ს | `EnablePublish` |
-| `request_<contract>` | აგზავნის request-ს და აბრუნებს პასუხს | `EnablePublish` |
-| `republish_from_error` | აბრუნებს შეტყობინებებს `_error`/`_skipped`/`_dead` რიგიდან: ჯერ preview, შემდეგ `confirm=true` | `EnableRepublish` |
-| `dead_letter_from_error` | გამოუსწორებელ შეტყობინებას გადაიტანს dead-letter რიგში (`<queue>_dead`) მიზეზთან ერთად. არაფერს შლის | `EnableRepublish` |
-| `pending_requests` | შემოსული request-ები, რომლებიც პასუხს ელოდება (`waitSeconds` = long poll) | `RespondTo` |
-| `reply_<response>` / `reject_request` | პასუხობს request-ს ან უარყოფს მას | `RespondTo` |
+| `list_contracts` | Contracts: event/request, version, exchange, reply types | always |
+| `validate_message` | Checks JSON against a contract without sending anything | always |
+| `queue_stats` | Ready messages and consumers of queues | always |
+| `peek_messages` | Shows messages without removing them: payload, contract check, fault | always |
+| `find_message` | Finds a message by messageId, correlationId or text (e.g. an order id) and shows which queue it is in. Searches every `_error`/`_skipped`/`_dead` queue by default (`ManagementUri`), or the queues you name | always |
+| `list_queues` | Queues with filters; error queues show the queue they belong to | `ManagementUri` |
+| `contract_consumers` | Which queues a contract reaches, whether anything consumes it, its `_error`/`_skipped` backlog | `ManagementUri` |
+| `recent_activity` | Latest audit events with filters (action, outcome, contract, user, queue, id, `since: 2h`): "who republished yesterday?" | `AuditLogPath` |
+| `publish_<contract>` | Publishes an event | `EnablePublish` |
+| `request_<contract>` | Sends a request and returns the reply | `EnablePublish` |
+| `republish_from_error` | Moves messages from an `_error`/`_skipped`/`_dead` queue back: preview first, then `confirm=true` | `EnableRepublish` |
+| `dead_letter_from_error` | Parks messages that can never succeed in the dead-letter queue (`<queue>_dead`) with a reason. Deletes nothing | `EnableRepublish` |
+| `pending_requests` | Requests from services waiting for an answer (`waitSeconds` = long poll) | `RespondTo` |
+| `reply_<response>` / `reject_request` | Answers a request or rejects it | `RespondTo` |
 
-ყველა ხელსაწყო აბრუნებს `structuredContent`-ს `outputSchema`-ით. შეცდომა `isError: true`-ით და გასაგები მიზეზით ბრუნდება. მაგალითად, 403-ის შემთხვევაში ჩანს, რომელი უფლება აკლია RabbitMQ-ის მომხმარებელს.
+Every tool returns `structuredContent` with an `outputSchema`. Errors come back with `isError: true` and a reason you can act on — on a 403, for example, which permission the RabbitMQ user lacks.
 
-## კონტრაქტები
+### Prompts and resources
+
+Clients that support MCP prompts offer these as slash commands:
+
+| Prompt | What it does |
+|---|---|
+| `diagnose_errors` (`queue`) | Goes through the error queues, groups the faults by cause and proposes republish, dead-letter or a code fix per group |
+| `investigate_message` (`reference`) | Finds a message by id or text and reconstructs its history from the queues and the audit |
+| `review_approvals` (`contract`) | Walks through pending requests and answers each one as you decide |
+| `contract_health` (`contract`) | Checks consumers, backlogs and faults per contract |
+
+Prompts only tell the model what to do: every change still needs your confirmation and goes through the tools, with their permissions and audit.
+
+Every contract is also a resource, `contract://<Name>`: its description, MassTransit names and the JSON schema of the message and of its replies. Reading it needs the `read` permission.
+
+## Contracts
 
 ```csharp
 // Event → publish_payment_captured
@@ -88,16 +105,16 @@ public sealed record GetOrderStatus
 }
 ```
 
-- **ველები:** `required` და nullability განსაზღვრავს სავალდებულო ველებს. `[Description]` არის ახსნა, რომელსაც მოდელი კითხულობს. DataAnnotations (`[Range]`, `[StringLength]`, `[RegularExpression]`, `[EmailAddress]` …) სქემაში ჩანს და სერვერიც ამოწმებს, ჩადგმულ ობიექტებსა და სიებშიც.
-- **სახელები:** URN არის `urn:message:Namespace:Type`, exchange კი `Namespace:Type`, როგორც MassTransit-ში. სხვა სახელზე მისაბმელად გამოიყენეთ `Urn`/`Exchange`.
-- **თქვენი კონტრაქტები:** შექმენით classlib, რომელიც `RabbitMcp.Contracts` პაკეტს იყენებს (nupkg Release-შია), ააგეთ და მიუთითეთ: `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`. დამოკიდებულებები DLL-ის გვერდით უნდა იდოს. სერვერის თავიდან აწყობა საჭირო არ არის.
+- **Fields:** `required` and nullability decide what is mandatory. `[Description]` is the explanation the model reads. DataAnnotations (`[Range]`, `[StringLength]`, `[RegularExpression]`, `[EmailAddress]` …) appear in the schema and the server enforces them, in nested objects and lists too.
+- **Names:** the URN is `urn:message:Namespace:Type` and the exchange `Namespace:Type`, as in MassTransit. Use `Urn`/`Exchange` to bind to a different name.
+- **Your own contracts:** create a class library that references the `RabbitMcp.Contracts` package (the nupkg is attached to each release), build it and point the server at it: `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`. Its dependencies must sit next to the DLL. No need to rebuild the server.
 
-### თავსებადობის შემოწმება
+### Compatibility check
 
-ცვლილება, რომელიც build-ს არ არღვევს, უკვე გაშვებულ სერვისებს wire-ზე მაინც შეიძლება დაარღვევდეს. ორ build-ს ასე შეადარებთ:
+A change that still compiles can break running services on the wire. Compare two builds:
 
 ```bash
-rabbit-mcp contracts diff old/Billing.Contracts.dll new/Billing.Contracts.dll   # ან --json
+rabbit-mcp contracts diff old/Billing.Contracts.dll new/Billing.Contracts.dll   # or --json
 ```
 
 ```
@@ -107,11 +124,11 @@ WARNING  OrderPlaced: Breaking change without a version bump (still v1).
 INFO     OrderPlaced coupon: New optional property.
 ```
 
-- **breaking:** კონტრაქტის, პასუხის ტიპის, სავალდებულო ველის ან enum-ის მნიშვნელობის წაშლა; URN-ის, exchange-ის ან ტიპის შეცვლა; ახალი ან სავალდებულოდ ქცეული ველი.
-- **warning:** არასავალდებულო ველის წაშლა, `null`-ად ქცეული ველი, ახალი პასუხის ტიპი ან enum-ის მნიშვნელობა, დამრღვევი ცვლილება ვერსიის გაზრდის გარეშე.
-- **exit code:** `0` თავსებადია, `1` breaking ცვლილებაა, `2` შეცდომაა. მოწმდება JSON-ის სტრუქტურა; DataAnnotations-ის წესები არ დარდება. შეადარეთ მხოლოდ საკუთარი build-ები, რადგან DLL-ის attribute-ების კოდი სრულდება.
+- **breaking:** a removed contract, reply type, required field or enum value; a changed URN, exchange or type; a new or newly required field.
+- **warning:** a removed optional field, a field that may now be `null`, a new reply type or enum value, a breaking change without a version bump.
+- **exit code:** `0` compatible, `1` breaking changes, `2` error. The JSON structure is compared; DataAnnotations rules are not. Only compare builds you trust: loading a DLL runs its attribute code.
 
-სერვისის CI-ში (`actions/checkout` `fetch-depth: 0`-ით):
+In a service's CI (with `actions/checkout` `fetch-depth: 0`):
 
 ```yaml
 - run: |
@@ -123,34 +140,34 @@ INFO     OrderPlaced coupon: New optional property.
 
 ## Request/response
 
-მოდელი `request_<contract>`-ით ეკითხება სერვისს, MassTransit consumer კი ჩვეულებრივ პასუხობს: `await context.RespondAsync(new OrderStatus { … })`. request-ს თან ახლავს `requestId`, დროებითი `responseAddress` და TTL, რომელიც timeout-ის ტოლია (1–120 წამი, ნაგულისხმევად 30). შედეგში ჩანს:
+The model asks a service with `request_<contract>`, and a MassTransit consumer answers as usual: `await context.RespondAsync(new OrderStatus { … })`. The request carries a `requestId`, a temporary `responseAddress` and a TTL equal to the timeout (1–120 seconds, default 30). The result shows:
 
-- `status`: `responded`, `faulted` ან `timeout`;
-- `response` და `responseCheck`: აკმაყოფილებს თუ არა პასუხი თავის კონტრაქტს;
-- consumer-ის exception, თუ MassTransit-მა `Fault<T>` დააბრუნა.
+- `status`: `responded`, `faulted` or `timeout`;
+- `response` and `responseCheck`: whether the reply satisfies its contract;
+- the consumer's exception, if MassTransit returned a `Fault<T>`.
 
-### Responder: სერვისი ეკითხება, მოდელი პასუხობს
+### Responder: a service asks, the model answers
 
-`RabbitMcp__RespondTo=AskHuman` (ან `Get*`) სერვერს consumer-ად აქცევს. სერვისი ჩვეულებრივ ეკითხება, მაგ. `GetResponse<HumanAnswer, HumanDeclined>(new AskHuman { … })`, პასუხს კი მოდელი იძლევა:
+`RabbitMcp__RespondTo=AskHuman` (or `Get*`) turns the server into a consumer. A service asks as usual, e.g. `GetResponse<HumanAnswer, HumanDeclined>(new AskHuman { … })`, and the model answers:
 
-1. შემოსული request ჩანს `pending_requests`-ში: შეტყობინება, კონტრაქტის შემოწმება, პასუხის ხელსაწყოები და `expiresAt`. `waitSeconds: 50` ახალ request-ს ელოდება, ამიტომ ხშირი შემოწმება საჭირო არ არის.
-2. მოდელი პასუხობს `reply_<response>`-ით (პასუხი ჯერ კონტრაქტზე მოწმდება) ან `reject_request`-ით. უარყოფისას მომთხოვნი მაშინვე `RequestFaultException`-ს იღებს.
-3. ვადაგასული request ქრება. `MaxPendingRequests`-ზე მეტი request მაშინვე Fault-ით უარიყოფა.
+1. The request shows up in `pending_requests`: the message, its contract check, the reply tools and `expiresAt`. `waitSeconds: 50` waits for the next request, so there is no need to poll.
+2. The model answers with `reply_<response>` (the reply is validated against its contract first) or `reject_request`. A rejection makes the requester's call fail at once with `RequestFaultException`.
+3. Expired requests disappear. Requests beyond `MaxPendingRequests` are rejected with a Fault right away.
 
-request-ები მეხსიერებაში ინახება და გადატვირთვისას იკარგება. ავტომატური პასუხი არ არსებობს: ყოველ პასუხს მოდელი ან ადამიანი იძლევა. ერთი `ClientName`-ით პასუხობს მხოლოდ ერთი ასლი, დანარჩენები `standby`-ში არიან და აქტიურის გათიშვისას ~5 წამში ჩაენაცვლებიან. კავშირის გაწყვეტის შემდეგ responder თავიდან უერთდება.
+Requests are kept in memory and lost on restart. There are no automatic answers: every answer comes from the model or a person. Only one instance per `ClientName` answers; the others stand by and take over within ~5 seconds when it goes away. After a lost connection the responder reconnects by itself.
 
-## გუნდისთვის: HTTP სერვერი
+## For teams: the HTTP server
 
-`RabbitMcp__Transport=http` ერთ სერვერს მთელი გუნდისთვის ხელმისაწვდომს ხდის: MCP endpoint არის `/mcp`, health check `/healthz`. **ავტორიზაციის გარეშე სერვერი არ ეშვება:**
+`RabbitMcp__Transport=http` makes one server available to a whole team: the MCP endpoint is `/mcp`, the health check `/healthz`. **The server refuses to start without authentication:**
 
-- **API key:** `RabbitMcp__ApiKeys="alice:KEY1;ci:KEY2"`. გასაღები მინიმუმ 32 სიმბოლოა (`openssl rand -base64 32`). კლიენტი აგზავნის `X-Api-Key: KEY`-ს ან `Authorization: Bearer KEY`-ს.
-- **JWT / OIDC** (Entra ID, Keycloak, Auth0 …): `RabbitMcp__JwtAuthority` და `RabbitMcp__JwtAudience`. 401-ის შემთხვევაში სერვერი მიუთითებს `/.well-known/oauth-protected-resource`-ზე, ამიტომ კლიენტები ავტორიზაციის სერვერს თავად პოულობენ.
+- **API keys:** `RabbitMcp__ApiKeys="alice:KEY1;ci:KEY2"`. Keys are at least 32 characters (`openssl rand -base64 32`). Clients send `X-Api-Key: KEY` or `Authorization: Bearer KEY`.
+- **JWT / OIDC** (Entra ID, Keycloak, Auth0 …): `RabbitMcp__JwtAuthority` and `RabbitMcp__JwtAudience`. On a 401 the server points to `/.well-known/oauth-protected-resource`, so clients find the authorization server by themselves.
 
 ```bash
 claude mcp add --transport http rabbit-mcp https://mcp.example.com/mcp --header "X-Api-Key: KEY1"
 ```
 
-**Docker:** `ghcr.io/lazogio/rabbit-mcp` (amd64/arm64) HTTP რეჟიმში ეშვება `0.0.0.0:5080`-ზე, non-root მომხმარებლით. TLS-ისთვის reverse proxy-ის (nginx, Traefik, ingress) უკან დააყენეთ.
+**Docker:** `ghcr.io/lazogio/rabbit-mcp` (amd64/arm64) runs in HTTP mode on `0.0.0.0:5080` as a non-root user. Put it behind a reverse proxy (nginx, Traefik, an ingress) for TLS.
 
 ```bash
 docker run -d -p 5080:5080 \
@@ -160,17 +177,17 @@ docker run -d -p 5080:5080 \
   ghcr.io/lazogio/rabbit-mcp:0.1
 ```
 
-### უფლებები (როლები)
+### Permissions (roles)
 
-სანამ როლი არ არის განსაზღვრული, ყველა ავტორიზებულს ყველა ჩართული ხელსაწყო აქვს. როლის განსაზღვრის შემდეგ თითოეულს მხოლოდ თავისი როლის უფლებები რჩება:
+Until a role is defined, every authenticated caller may use every enabled tool. Once roles exist, each caller keeps only the permissions of their roles:
 
-| უფლება | ხელსაწყოები | შეზღუდვა |
+| Permission | Tools | Can be limited by |
 |---|---|---|
-| `read` | ნახვა: სიები, სტატისტიკა, peek, `contract_consumers`, `find_message`, `recent_activity` | — |
-| `publish` / `request` | `publish_*` / `request_*` | კონტრაქტით: `publish:Billing.*,Order*` |
-| `republish` | `republish_from_error`, `dead_letter_from_error` | error რიგით: `republish:orders-*_error` |
-| `respond` | `pending_requests`, `reply_*`, `reject_request` | request კონტრაქტით: `respond:AskHuman` |
-| `*` | ყველაფერი | — |
+| `read` | Looking: lists, statistics, peek, `contract_consumers`, `find_message`, `recent_activity` | — |
+| `publish` / `request` | `publish_*` / `request_*` | contract: `publish:Billing.*,Order*` |
+| `republish` | `republish_from_error`, `dead_letter_from_error` | error queue: `republish:orders-*_error` |
+| `respond` | `pending_requests`, `reply_*`, `reject_request` | request contract: `respond:AskHuman` |
+| `*` | everything | — |
 
 ```bash
 RabbitMcp__Roles__viewer="read"
@@ -180,54 +197,54 @@ RabbitMcp__UserRoles="alice=operator;ci=viewer;bob@example.com=admin"
 RabbitMcp__DefaultRoles="viewer"
 ```
 
-- **როლის მინიჭება:** როლი ენიჭება API key-ის სახელს (`alice:KEY` → `alice`), token-ის მომხმარებელს (`preferred_username`, `email`, `sub`) ან JWT-ის `roles` claim-ის მნიშვნელობას. claim-ის სახელს `JwtRolesClaim` ცვლის.
-- **როლის გარეშე მომხმარებელი** იღებს `DefaultRoles`-ს. თუ ის ცარიელია, არაფერი შეუძლია.
-- **შემოწმება ორ ეტაპად ხდება.** მომხმარებელი მხოლოდ ნებადართულ ხელსაწყოებს ხედავს. ყოველი გამოძახება კი არგუმენტებით (რიგი, კონტრაქტი) ხელახლა მოწმდება, უარი კი audit-ში იწერება.
-- **ზღვარი:** როლი `Enable*`-ით და `PublishAllow`-ით ჩართული ხელსაწყოებიდან არჩევს და გამორთულს ვერ ჩართავს.
-- **stdio-ში** ერთი ლოკალური მომხმარებელია, ამიტომ როლები მხოლოდ HTTP-ზე მოქმედებს.
+- **Who gets a role:** the API key's name (`alice:KEY` → `alice`), the token's user (`preferred_username`, `email`, `sub`) or a value of the JWT `roles` claim. `JwtRolesClaim` changes the claim name.
+- **Callers without a role** get `DefaultRoles`. If that is empty, they can do nothing.
+- **Checked twice.** Callers only see the tools they may use, and every call is checked again with its arguments (queue, contract); refusals are audited.
+- **Ceiling:** roles choose among the tools enabled by `Enable*` and `PublishAllow`; they cannot enable a disabled one.
+- **Over stdio** there is a single local user, so roles apply to HTTP only.
 
-## კონფიგურაცია
+## Configuration
 
-env ცვლადი `RabbitMcp__Name`, ან `appsettings.json`-ში `"RabbitMcp": { "Name": … }`. სიები `;`-ით გამოიყოფა, ნიმუშებში `*` ნებისმიერ სიმბოლოს ნიშნავს.
+Environment variable `RabbitMcp__Name`, or `"RabbitMcp": { "Name": … }` in `appsettings.json`. Lists are separated by `;`, and `*` in patterns matches anything.
 
-| ცვლადი | ნაგულისხმევი | აღწერა |
+| Option | Default | Description |
 |---|---|---|
-| `Uri` | `amqp://guest:guest@localhost:5672/` | AMQP URI, vhost ბოლოშია (`…/prod`) |
-| `ClientName` | `rabbit-mcp` | კავშირის სახელი, envelope-ის `sourceAddress` |
-| `ContractAssemblies` | — | თქვენი კონტრაქტების DLL-ები. ცარიელისას ნიმუშის კონტრაქტები გამოიყენება |
-| `ManagementUri` | — | Management API (`http://localhost:15672`), რთავს `list_queues`-ს და `contract_consumers`-ს |
-| `EnablePublish` / `EnableRepublish` | `false` | რთავს გაგზავნას / republish-ს |
-| `PublishAllow` / `PublishDeny` | — | რომელი კონტრაქტების გაგზავნაა ნებადართული / აკრძალული (deny უპირატესია), მაგ. `Get*` |
-| `DeadLetterQueue` | `{queue}_dead` | სად გადადის გამოუსწორებელი შეტყობინება. `{queue}` არის რიგი, რომელსაც error რიგი ეკუთვნის. ფიქსირებული სახელიც შეიძლება, მაგ. `dead-letters` |
-| `RespondTo` / `MaxPendingRequests` | — / `100` | responder-ის კონტრაქტები / მოლოდინში მყოფი request-ების ზღვარი |
-| `AuditLogPath` / `AuditIncludePayload` | — / `false` | audit ფაილი (JSON Lines) / ჩაიწეროს თუ არა შიგთავსი (შეიძლება პერსონალურ მონაცემებს შეიცავდეს) |
-| `MaxMessagesPerCall` / `MaxPayloadChars` | `50` / `16000` | peek/republish-ის ზღვარი / ჩვენებისას body-ის შეკვეცის ზღვარი |
-| `ExchangeCacheSeconds` | `30` | რამდენ წამს ახსოვს, რომ exchange არსებობს (`0` = გამორთული) |
-| `Transport` | `stdio` | `stdio` ან `http` |
-| `HttpUrls` / `HttpPath` / `HttpPublicUrl` | `http://localhost:5080` / `/mcp` / — | მისამართი / endpoint / საჯარო URL proxy-ს უკან |
+| `Uri` | `amqp://guest:guest@localhost:5672/` | AMQP URI, vhost at the end (`…/prod`) |
+| `ClientName` | `rabbit-mcp` | Connection name and the envelope's `sourceAddress` |
+| `ContractAssemblies` | — | Your contract DLLs. Empty: the built-in sample contracts |
+| `ManagementUri` | — | Management API (`http://localhost:15672`), enables `list_queues` and `contract_consumers` |
+| `EnablePublish` / `EnableRepublish` | `false` | Enables sending / republishing and dead-lettering |
+| `PublishAllow` / `PublishDeny` | — | Contracts that may / may never be sent (deny wins), e.g. `Get*` |
+| `DeadLetterQueue` | `{queue}_dead` | Where poison messages are parked. `{queue}` is the queue the error queue belongs to; a fixed name like `dead-letters` works too |
+| `RespondTo` / `MaxPendingRequests` | — / `100` | Contracts the responder answers / limit of waiting requests |
+| `AuditLogPath` / `AuditIncludePayload` | — / `false` | Audit file (JSON Lines) / record message bodies too (may contain personal data) |
+| `MaxMessagesPerCall` / `MaxPayloadChars` | `50` / `16000` | Limit for peek/republish / bodies longer than this are shortened for display |
+| `ExchangeCacheSeconds` | `30` | How long an existing exchange is remembered (`0` = off) |
+| `Transport` | `stdio` | `stdio` or `http` |
+| `HttpUrls` / `HttpPath` / `HttpPublicUrl` | `http://localhost:5080` / `/mcp` / — | Listen address / endpoint / public URL behind a proxy |
 | `ApiKeys` | — | `name:KEY;…` |
-| `JwtAuthority` / `JwtAudience` / `JwtScopes` | — | OIDC. `JwtScopes`-ის ყველა scope token-ში სავალდებულოა |
-| `Roles__<role>` / `UserRoles` / `DefaultRoles` / `JwtRolesClaim` | — / — / — / `roles` | უფლებები, იხ. ზემოთ |
-| `HttpAllowedOrigins` | — | ბრაუზერის origin-ები, რომლებსაც წვდომა აქვთ |
-| `HttpAllowAnonymous` | `false` | ავტორიზაციის გარეშე, მხოლოდ `localhost`-ზე |
+| `JwtAuthority` / `JwtAudience` / `JwtScopes` | — | OIDC. Tokens must carry every scope in `JwtScopes` |
+| `Roles__<role>` / `UserRoles` / `DefaultRoles` / `JwtRolesClaim` | — / — / — / `roles` | Permissions, see above |
+| `HttpAllowedOrigins` | — | Browser origins allowed to call the server |
+| `HttpAllowAnonymous` | `false` | No authentication, `localhost` only |
 
-**OpenTelemetry** ჩაირთვება `OTEL_EXPORTER_OTLP_ENDPOINT`-ით. ჩანს `publish`/`request`/`republish` span-ები და მეტრიკები `rabbitmcp.operations`, `rabbitmcp.request.duration`. გაგზავნილ შეტყობინებას `traceparent` და `MT-Activity-Id` ახლავს, ამიტომ MassTransit consumer-ის span იმავე trace-ში ჩნდება.
+**OpenTelemetry** is enabled by `OTEL_EXPORTER_OTLP_ENDPOINT`: `publish`/`request`/`republish` spans and the metrics `rabbitmcp.operations` and `rabbitmcp.request.duration`. Sent messages carry `traceparent` and `MT-Activity-Id`, so the MassTransit consumer's span joins the same trace.
 
-## საიმედოობა და უსაფრთხოება
+## Reliability and security
 
-- **შეტყობინება არ იკარგება.** ვალიდაციის ჩავარდნისას არაფერი იგზავნება. exchange-ის არსებობა წინასწარ მოწმდება. publisher confirms და `mandatory` ვერ მიწოდებულ შეტყობინებას შეცდომად აბრუნებს.
-- **republish:** შეტყობინება error რიგიდან მხოლოდ ბროკერის დადასტურების შემდეგ იშლება. body უცვლელია, იშლება მხოლოდ fault header-ები. მიწოდება at-least-once-ია.
-- **dead-letter:** შეტყობინების წაშლის ხელსაწყო არ არსებობს. გამოუსწორებელი შეტყობინება იმავე წესით, დადასტურების შემდეგ გადადის durable `_dead` რიგში. body და ყველა header, მათ შორის fault-ის დეტალები, უცვლელი რჩება. ემატება `X-Dead-Lettered-By/-From/-At` და `X-Dead-Letter-Reason`. უკან `republish_from_error` აბრუნებს.
-- **peek:** აქტიური consumer-ის მქონე რიგზე `force=true` სჭირდება. შეტყობინება რიგში რჩება, მაგრამ `redelivered` ხდება.
-- **Audit:** ყოველი გაგზავნა, request, republish და პასუხი იწერება შედეგთან და მომხმარებელთან ერთად. ჩავარდნილი და უარყოფილი მცდელობებიც იწერება:
+- **No message is lost.** Nothing is sent when validation fails. The exchange is checked first. Publisher confirms and `mandatory` turn an undeliverable message into an error.
+- **Republish:** a message leaves the error queue only after the broker confirmed the republish. The body is unchanged; only fault headers are removed. Delivery is at-least-once.
+- **Dead-letter:** there is no tool that deletes messages. Poison messages move to a durable `_dead` queue the same way, after confirmation, with body and every header (fault details included) unchanged, plus `X-Dead-Lettered-By/-From/-At` and `X-Dead-Letter-Reason`. `republish_from_error` brings them back.
+- **Peek:** needs `force=true` on queues with active consumers. Messages stay in the queue but become `redelivered`.
+- **Audit:** every send, request, republish, dead-lettering and answer is recorded with its outcome and the user — failed and refused attempts too:
   ```json
   {"timestamp":"2026-10-13T12:00:00+00:00","action":"publish","outcome":"sent","client":"alice (claude-code 2.1.0)","contract":"OrderSubmitted","messageId":"…"}
   ```
-- **საიდუმლოები:** პაროლი არც ლოგში, არც შეცდომაში, არც audit-ში ჩანს. API key-ები SHA-256-ით ინახება.
-- **HTTP:** ავტორიზაცია სავალდებულოა, JWT scope-ები მოწმდება, უცხო `Origin` უარიყოფა.
-- **შეტყობინების შიგთავსს არ ენდობა.** responder პასუხობს მხოლოდ MassTransit-ის დროებით reply endpoint-ს. republish არ მიჰყვება ყალბ `MT-Fault-InputAddress`-ს. peek-ით ნანახი ტექსტი მონაცემია და არა ინსტრუქცია.
-- **მინიმალური უფლებები:** RabbitMQ-ის მომხმარებელს მიეცით მხოლოდ საჭირო permission-ები. Management API-სთვის საკმარისია `monitoring` tag. 403-ის შემთხვევაში ხელსაწყო წერს, რა აკლია.
+- **Secrets:** passwords never appear in logs, errors or the audit. API keys are kept as SHA-256 hashes.
+- **HTTP:** authentication is mandatory, JWT scopes are enforced, foreign `Origin`s are refused.
+- **Message contents are not trusted.** The responder only answers MassTransit's temporary reply endpoints; republish does not follow a forged `MT-Fault-InputAddress`; text seen through peek is data, not instructions.
+- **Least privilege:** give the RabbitMQ user only the permissions it needs; the `monitoring` tag is enough for the Management API. On a 403 the tool says what is missing.
 
-## ლიცენზია
+## License
 
-[MIT](LICENSE). პროექტზე მუშაობა, ტესტები და რელიზი: [CONTRIBUTING.md](CONTRIBUTING.md).
+[MIT](LICENSE). Working on the project, tests and releases: [CONTRIBUTING.md](CONTRIBUTING.md).
