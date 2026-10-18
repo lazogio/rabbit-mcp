@@ -1,5 +1,13 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Phase 9 — find_message and recent_activity (phase-9/search-activity) — commit 0b9d892
+- `find_message` (`Tools/SearchTools.cs`, always registered): `MessageMatcher` (messageId / correlationId / body text,
+  case-insensitive, all given criteria must hold); queues from the argument, else Management API (`scope` errors|all,
+  max 50 queues); peek-based (depth ≤ MaxMessagesPerCall), per-queue status missing/empty/skipped/partial.
+- `recent_activity` (`Tools/AuditTools.cs`, only with AuditLogPath): `AuditReader` reads JSONL backwards in chunks,
+  newest first, stops at `since` (file is chronological), skips damaged/half-written lines, payload only on request.
+- Both under role permission `read`. Shop sample now writes an audit file; the e2e uses both tools.
+
 ### 2026-10-18 Dead-letter queue (phase-9/dead-letter) — commit 352035b
 - What: `dead_letter_from_error` parks poison messages in `DeadLetterQueue` (default `{queue}_dead`, durable, created
   on first use) via default exchange + confirms + mandatory, ack after confirm; body and all headers kept, plus

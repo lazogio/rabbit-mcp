@@ -8,6 +8,7 @@ Last updated: 2026-10-13 · Bugs: 19 (0 open) · Next ID: BUG-020
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-18 phase-9 done: find_message (id/correlation/text across error queues), recent_activity (audit, newest first)
 - 2026-10-18 phase-9/dead-letter: dead_letter_from_error ({queue}_dead), never delete messages
 - 2026-10-18 phase-8/pre-release: samples out of the contracts package, runners pinned (26.04 verified), digests, SBOM, provenance
 - 2026-10-13 samples/shop: Shop sample (contracts, MassTransit service, compose, CI e2e over MCP); BUG-019 decimals as strings
