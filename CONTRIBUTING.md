@@ -52,6 +52,10 @@ tag-ის ატვირთვა აგებს ბინარებს 5 �
 - **ვერსია** tag-იდან მოდის და `serverInfo.version`-ში ჩანს.
 - **`-` შემცველი tag** (`v0.2.0-rc.1`) prerelease-ად ქვეყნდება.
 - **nuget.org:** `NUGET_API_KEY` secret-ის არსებობისას პაკეტი nuget.org-ზეც იტვირთება.
+- **მიწოდების ჯაჭვი:** არქივებს და nupkg-ს აქვს GitHub build provenance attestation (`gh attestation verify`). რელიზს თან ერთვის CycloneDX SBOM. Docker image-ს registry-ში SBOM და SLSA provenance მიჰყვება.
+- **base image-ები** digest-ით არის ფიქსირებული. Dependabot ახალ digest-ს ყოველ ორშაბათს გვთავაზობს.
+
+CI runner-ები `ubuntu-24.04`-ზეა ფიქსირებული, რომ GitHub-ის `ubuntu-latest`-ის ცვლილებამ build მოულოდნელად არ შეცვალოს. Ubuntu 26.04 გადამოწმებულია (2026-10-18).
 
 Dependabot NuGet-ის, Actions-ისა და Docker-ის განახლებებს ყოველ ორშაბათს გვთავაზობს. MassTransit 9+ გამორიცხულია, რადგან ის კომერციულია და მხოლოდ ტესტებში გამოიყენება.
 

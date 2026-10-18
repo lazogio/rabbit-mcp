@@ -36,7 +36,7 @@ updates:
 
   # Base images of the Dockerfile (SDK and ASP.NET runtime) — security patches arrive as new image digests/tags.
   - package-ecosystem: docker
-    directory: /
+    directories: ["/", "/samples/Shop"]
     schedule:
       interval: weekly
       day: monday

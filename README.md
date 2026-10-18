@@ -14,7 +14,7 @@ RabbitMQ-ის MCP სერვერი, რომელიც **შეტყ�
 
 ## დაყენება
 
-**მზა ბინარი.** [Releases](https://github.com/lazogio/rabbit-mcp/releases)-ში დევს self-contained ფაილი Linux-ის (x64/arm64), Windows-ის (x64) და macOS-ის (x64/arm64) პლატფორმებისთვის. .NET-ის დაყენება არ სჭირდება. macOS-ზე პირველ გაშვებამდე: `xattr -d com.apple.quarantine rabbit-mcp`.
+**მზა ბინარი.** [Releases](https://github.com/lazogio/rabbit-mcp/releases)-ში დევს self-contained ფაილი Linux-ის (x64/arm64), Windows-ის (x64) და macOS-ის (x64/arm64) პლატფორმებისთვის. .NET-ის დაყენება არ სჭირდება. macOS-ზე პირველ გაშვებამდე: `xattr -d com.apple.quarantine rabbit-mcp`. ფაილის ავთენტურობას `gh attestation verify <ფაილი> --repo lazogio/rabbit-mcp` ამოწმებს, ხოლო ყველა დამოკიდებულება რელიზის SBOM-შია (`*.sbom.cdx.json`).
 
 **Claude Code:**
 

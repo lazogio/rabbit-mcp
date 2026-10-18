@@ -162,14 +162,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Base image digests (temporary)
-        run: |
-          for image in sdk:10.0 aspnet:10.0 runtime:10.0; do
-            digest=$(docker buildx imagetools inspect "mcr.microsoft.com/dotnet/$image" --format '{{json .Manifest}}' |
-              python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")
-            echo "::warning title=digest $image::$digest"
-          done
-
       - name: Build image
         run: docker build -t rabbit-mcp:ci .
 

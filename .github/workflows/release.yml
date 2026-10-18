@@ -18,6 +18,10 @@ jobs:
     name: Build ${{ matrix.rid }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write      # build provenance attestations (tags only)
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -89,6 +93,16 @@ jobs:
           fi
           ls -la
 
+      # Signed SLSA provenance: `gh attestation verify <file> --repo lazogio/rabbit-mcp` proves which workflow and
+      # commit built the archive.
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            out/*.zip
+            out/*.tar.gz
+
       - uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.rid }}
@@ -99,9 +113,13 @@ jobs:
           retention-days: 7
 
   pack:
-    name: Pack RabbitMcp.Contracts
+    name: Pack RabbitMcp.Contracts + SBOM
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
 
@@ -109,16 +127,55 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Pack
+      - name: Version
+        id: version
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-ci.${GITHUB_RUN_NUMBER}"; fi
-          dotnet pack src/RabbitMcp.Contracts -c Release -p:Version="$v" -o out
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Pack
+        run: dotnet pack src/RabbitMcp.Contracts -c Release -p:Version=${{ steps.version.outputs.version }} -o out
+
+      # The SBOM lists every NuGet package inside the server (read from deps.json of a framework-dependent publish;
+      # the single-file binaries contain the same packages).
+      - name: Publish for the SBOM
+        run: dotnet publish src/RabbitMcp.Server -c Release -p:Version=${{ steps.version.outputs.version }} -o sbom-input
+
+      - name: SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: sbom-input
+          format: cyclonedx-json
+          output-file: out/rabbit-mcp-${{ steps.version.outputs.version }}.sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Check the SBOM
+        run: |
+          python3 - out/*.sbom.cdx.json <<'PY'
+          import json, sys
+          components = {c["name"] for c in json.load(open(sys.argv[1]))["components"]}
+          expected = {"ModelContextProtocol", "RabbitMQ.Client", "OpenTelemetry"}
+          missing = expected - components
+          assert not missing, f"SBOM misses {missing} ({len(components)} components)"
+          print(f"SBOM: {len(components)} components")
+          PY
+
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            out/*.nupkg
+            out/*.sbom.cdx.json
 
       - uses: actions/upload-artifact@v7
         with:
           name: package-contracts-nupkg
-          path: out/*.nupkg
+          path: |
+            out/*.nupkg
+            out/*.sbom.cdx.json
           if-no-files-found: error
           retention-days: 7
 
@@ -166,6 +223,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: VERSION=${{ steps.version.outputs.version }}
+          # Image SBOM and SLSA provenance, attached to the image in the registry (tags only: nothing is pushed otherwise).
+          sbom: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          provenance: ${{ startsWith(github.ref, 'refs/tags/v') && 'mode=max' || 'false' }}
 
   release:
     name: GitHub Release

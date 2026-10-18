@@ -129,7 +129,7 @@ public class AccessControlTests
     public void Contract_patterns_match_name_tool_type_or_urn()
     {
         var access = Create("a=byName;b=byTool;c=byUrn", null,
-            ("byName", "publish:OrderSub*"), ("byTool", "publish:publish_order_*"), ("byUrn", "publish:urn:message:RabbitMcp.Contracts.*"));
+            ("byName", "publish:OrderSub*"), ("byTool", "publish:publish_order_*"), ("byUrn", "publish:urn:message:RabbitMcp.Samples.*"));
 
         foreach (var user in new[] { "a", "b", "c" })
             Assert.True(access.For(User(user)).Allows(Permission.Publish, Submitted), user);
