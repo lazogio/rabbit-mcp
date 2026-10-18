@@ -53,7 +53,8 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
         "the dead-letter queue (default <queue>_dead, created if missing), so the error queue only holds new faults. " +
         "Nothing is deleted: body and all headers stay, fault details included, and X-Dead-Lettered-By/-From/-At/" +
         "X-Dead-Letter-Reason record who moved it, from where, when and why. republish_from_error on the dead-letter queue " +
-        "brings messages back. Two steps: call without confirm to preview, then confirm=true with the messageIds from the preview.")]
+        "brings messages back. A queue that has consumers is never used as the dead-letter queue. " +
+        "Two steps: call without confirm to preview, then confirm=true with the messageIds from the preview.")]
     public async Task<DeadLetterResult> DeadLetterFromErrorAsync(
         [Description("Error queue name, e.g. submit-order_error.")] string errorQueue,
         [Description("How many messages from the head of the queue to process (default 1).")] int count = 1,
@@ -68,7 +69,7 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
         if (!confirm)
         {
             var target = deadLetterQueue ?? DeadLetterNaming.For(errorQueue, options.Value.DeadLetterQueue);
-            DeadLetterNaming.Validate(target);
+            await browser.CheckDeadLetterTargetAsync(errorQueue, target, cancellationToken);
             var preview = await browser.PeekAsync(errorQueue, count, force: false, cancellationToken);
             return new DeadLetterResult(errorQueue, target, Executed: false, preview, Outcomes: [], Moved: 0, Requeued: 0);
         }

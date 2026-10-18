@@ -187,9 +187,19 @@ public sealed class QueueBrowser(
                 }
 
                 var target = destination.Display;
+                // Back into the error queue itself (its own queue or, for MassTransit, the exchange of the same name):
+                // the message would only lose its fault headers.
+                if (string.Equals(destination.IsQueue ? destination.RoutingKey : destination.Exchange, errorQueue, StringComparison.Ordinal))
+                {
+                    toRequeue.Add(delivery.DeliveryTag);
+                    outcomes.Add(new RepublishOutcome(messageId, "skipped", target,
+                        $"The destination is {errorQueue} itself: the message would only lose its fault details. Pass targetQueue or targetExchange."));
+                    continue;
+                }
+
                 if (!exchangeExists.TryGetValue(target, out var exists))
                     exchangeExists[target] = exists = destination.IsQueue
-                        ? await connection.GetQueueAsync(destination.RoutingKey, ct) is not null
+                        ? await connection.QueueExistsAsync(destination.RoutingKey, ct)
                         : await connection.ExchangeExistsAsync(destination.Exchange, ct);
                 if (!exists)
                 {
@@ -326,15 +336,12 @@ public sealed class QueueBrowser(
     {
         CheckCount(count);
         var source = await EnsureQueueExistsAsync(errorQueue, ct);
-        DeadLetterNaming.Validate(target);
-        if (string.Equals(target, errorQueue, StringComparison.Ordinal))
-            throw new McpException($"'{errorQueue}' is already the dead-letter queue; there is nowhere to move its messages.");
         if (source.ConsumerCount > 0)
             throw new McpException(
                 $"'{errorQueue}' has {source.ConsumerCount} active consumer(s), so it is not a parked error queue. Nothing was moved.");
 
         // Created on first use like MassTransit creates _error queues: durable, so parked messages survive restarts.
-        if (await connection.GetQueueAsync(target, ct) is null)
+        if (await CheckDeadLetterTargetAsync(errorQueue, target, ct) is null)
         {
             await using var declare = await connection.CreateChannelAsync(publisherConfirms: false, ct);
             await declare.QueueDeclareAsync(target, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct);
@@ -413,6 +420,25 @@ public sealed class QueueBrowser(
         }
 
         return new DeadLetterResult(errorQueue, target, Executed: true, Preview: null, outcomes, moved, toRequeue.Count);
+    }
+
+    /// <summary>
+    /// The dead-letter queue must be a parking place: a valid name, not the error queue itself, and nothing consuming
+    /// it — otherwise "parking" would hand the messages to a live consumer. Returns the queue, or null if it does not
+    /// exist yet (it is created on first use).
+    /// </summary>
+    public async Task<QueueDeclareOk?> CheckDeadLetterTargetAsync(string errorQueue, string target, CancellationToken ct)
+    {
+        DeadLetterNaming.Validate(target);
+        if (string.Equals(target, errorQueue, StringComparison.Ordinal))
+            throw new McpException($"'{errorQueue}' is already the dead-letter queue; there is nowhere to move its messages.");
+
+        var existing = await connection.GetQueueAsync(target, ct);
+        if (existing is { ConsumerCount: > 0 })
+            throw new McpException(
+                $"'{target}' has {existing.ConsumerCount} active consumer(s): it is a live queue, not a dead-letter queue. " +
+                "Nothing was moved.");
+        return existing;
     }
 
     private async Task<QueueDeclareOk> EnsureQueueExistsAsync(string queue, CancellationToken ct)

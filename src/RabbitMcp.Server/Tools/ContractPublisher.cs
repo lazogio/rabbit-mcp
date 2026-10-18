@@ -276,7 +276,7 @@ public sealed class ContractPublisher(
         // The default exchange always exists and is never declared: check the queue it routes to instead.
         if (contract.UsesDefaultExchange)
         {
-            if (await connection.GetQueueAsync(contract.RoutingKey, ct) is null)
+            if (!await connection.QueueExistsAsync(contract.RoutingKey, ct))
                 throw new McpException(
                     $"Queue '{contract.RoutingKey}' does not exist, so no service consumes {contract.Name} yet. Nothing was sent.");
             return;

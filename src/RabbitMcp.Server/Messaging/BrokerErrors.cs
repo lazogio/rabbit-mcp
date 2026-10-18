@@ -26,6 +26,7 @@ public static class BrokerErrors
                 403 => $"RabbitMQ refused the operation (403 ACCESS_REFUSED): {reason.ReplyText}. " +
                        "The user in RabbitMcp:Uri lacks the permission (configure/write/read) for this entity.",
                 404 => $"RabbitMQ: {reason.ReplyText} (404 NOT_FOUND).",
+                405 => $"RabbitMQ: the queue is exclusive to another connection (405 RESOURCE_LOCKED): {reason.ReplyText}.",
                 406 => $"RabbitMQ refused the operation (406 PRECONDITION_FAILED): {reason.ReplyText}.",
                 _ => $"RabbitMQ closed the channel ({reason.ReplyCode}): {reason.ReplyText}.",
             },

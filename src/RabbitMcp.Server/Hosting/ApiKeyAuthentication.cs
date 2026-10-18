@@ -66,6 +66,13 @@ public sealed class ApiKeyAuthenticationHandler(
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// True when one of the caller's identities was authenticated by an API key. Decided by the identity's
+    /// authentication type, which only this handler sets — never by a claim, because a token could carry any claim.
+    /// </summary>
+    public static bool IsApiKeyCaller(ClaimsPrincipal? user) =>
+        user?.Identities.Any(i => i.IsAuthenticated && i.AuthenticationType == SchemeName) ?? false;
+
     /// <summary>Constant-time comparison of hashes, so timing does not reveal how much of a key matched.</summary>
     public static ApiKey? Find(IReadOnlyList<ApiKey> keys, string candidate)
     {
@@ -90,13 +97,8 @@ public sealed class ApiKeyAuthenticationHandler(
             return [];
 
         var keys = new List<ApiKey>();
-        var entries = configured.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        for (var i = 0; i < entries.Length; i++)
+        foreach (var (name, key) in Entries(configured))
         {
-            var eq = entries[i].IndexOf(':');
-            var name = eq > 0 ? entries[i][..eq].Trim() : $"api-key-{i + 1}";
-            var key = eq > 0 ? entries[i][(eq + 1)..].Trim() : entries[i];
-
             if (key.Length < MinimumKeyLength)
                 throw new StartupException(
                     $"RabbitMcp:ApiKeys: the key for '{name}' is shorter than {MinimumKeyLength} characters. " +
@@ -107,5 +109,20 @@ public sealed class ApiKeyAuthenticationHandler(
             keys.Add(new ApiKey(name, SHA256.HashData(Encoding.UTF8.GetBytes(key))));
         }
         return keys;
+    }
+
+    /// <summary>The caller names of the configured keys, without validating the keys (for role assignment).</summary>
+    public static IReadOnlyList<string> Names(string? configured) => [.. Entries(configured).Select(e => e.Name)];
+
+    private static IEnumerable<(string Name, string Key)> Entries(string? configured)
+    {
+        var entries = (configured ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = 0; i < entries.Length; i++)
+        {
+            var eq = entries[i].IndexOf(':');
+            yield return eq > 0
+                ? (entries[i][..eq].Trim(), entries[i][(eq + 1)..].Trim())
+                : ($"api-key-{i + 1}", entries[i]);
+        }
     }
 }

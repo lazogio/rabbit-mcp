@@ -6,6 +6,8 @@ using Microsoft.Extensions.Options;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using RabbitMcp.Server.Messaging;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
 
 namespace RabbitMcp.Server.Tools;
 
@@ -42,7 +44,18 @@ public sealed class SearchTools(
         var matches = new List<FoundMessage>();
         foreach (var queue in targets)
         {
-            var info = await connection.GetQueueAsync(queue, cancellationToken);
+            // One queue that cannot be read must not end the whole search.
+            QueueDeclareOk? info;
+            try
+            {
+                info = await connection.GetQueueAsync(queue, cancellationToken);
+            }
+            catch (OperationInterruptedException ex) when (RabbitConnection.IsResourceLocked(ex))
+            {
+                searched.Add(new QueueSearch(queue, "skipped: exclusive to another connection", 0, null));
+                continue;
+            }
+
             if (info is null)
             {
                 searched.Add(new QueueSearch(queue, "missing", 0, null));
@@ -59,7 +72,17 @@ public sealed class SearchTools(
                 continue;
             }
 
-            var peek = await browser.PeekAsync(queue, depth, force: true, cancellationToken);
+            PeekResult peek;
+            try
+            {
+                peek = await browser.PeekAsync(queue, depth, force: true, cancellationToken);
+            }
+            catch (Exception ex) when (ex is McpException or OperationInterruptedException)
+            {
+                // E.g. the queue was deleted after it was listed, or access to it is refused.
+                searched.Add(new QueueSearch(queue, "error: " + BrokerErrors.ToMcp(ex).Message, 0, info.MessageCount));
+                continue;
+            }
             matches.AddRange(peek.Messages.Where(matcher.Matches).Select(m => new FoundMessage(queue, m)));
             searched.Add(new QueueSearch(queue,
                 peek.RemainingAfterLast > 0 ? $"searched the first {peek.Returned} of {peek.Returned + peek.RemainingAfterLast}" : "searched",

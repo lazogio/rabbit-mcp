@@ -21,6 +21,13 @@ public class SearchAndAuditTests
             new Dictionary<string, string?>());
 
     [Fact]
+    public void Since_far_in_the_past_means_everything_instead_of_an_error()
+    {
+        Assert.Equal(DateTimeOffset.MinValue, AuditReader.ParseSince("999999d", T0));
+        Assert.Equal(T0.AddDays(-7), AuditReader.ParseSince("7d", T0));
+    }
+
+    [Fact]
     public void Matcher_needs_a_criterion_and_combines_them()
     {
         Assert.Throws<McpException>(() => new MessageMatcher(null, " ", null));

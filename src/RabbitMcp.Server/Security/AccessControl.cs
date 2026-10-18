@@ -26,10 +26,17 @@ public enum Permission
 /// <summary>One permission of a role, optionally limited to subjects matching <c>*</c> patterns (empty: everything).</summary>
 public sealed record Grant(Permission Permission, IReadOnlyList<string> Patterns)
 {
-    private Regex[] Regexes { get; } = [.. Patterns.Select(Glob.ToRegex)];
+    private Regex[] Regexes { get; } = [.. Patterns.Select(p => Glob.ToRegex(p))];
 
+    // RabbitMQ queue names are case-sensitive: "orders_error" must not also cover "Orders_Error".
+    private Regex[] QueueRegexes { get; } = [.. Patterns.Select(p => Glob.ToRegex(p, ignoreCase: false))];
+
+    /// <summary>Contract subjects (names, tool names, types, URNs), case-insensitive.</summary>
     public bool Covers(params string[] subjects) =>
         Regexes.Length == 0 || subjects.Any(s => Regexes.Any(r => r.IsMatch(s)));
+
+    /// <summary>A queue name, case-sensitive like RabbitMQ.</summary>
+    public bool CoversQueue(string queue) => QueueRegexes.Length == 0 || QueueRegexes.Any(r => r.IsMatch(queue));
 }
 
 /// <summary>A configured role: every permission ("*"), or a list of grants.</summary>
@@ -57,6 +64,10 @@ public sealed class UserPermissions
     /// <summary>Has the permission for at least one subject.</summary>
     public bool Has(Permission permission) => _grants is null || _grants.Any(g => g.Permission == permission);
 
+    /// <summary>Has the permission without a pattern limit (e.g. "republish", not "republish:orders-*").</summary>
+    public bool HasUnrestricted(Permission permission) =>
+        _grants is null || _grants.Any(g => g.Permission == permission && g.Patterns.Count == 0);
+
     /// <summary>May use <paramref name="permission"/> on this contract (patterns match name, tool name, type or URN).</summary>
     public bool Allows(Permission permission, ContractDescriptor contract) =>
         _grants is null || _grants.Any(g => g.Permission == permission &&
@@ -64,7 +75,7 @@ public sealed class UserPermissions
 
     /// <summary>May use <paramref name="permission"/> on this queue (republish patterns match the error queue name).</summary>
     public bool AllowsQueue(Permission permission, string queue) =>
-        _grants is null || _grants.Any(g => g.Permission == permission && g.Covers(queue));
+        _grants is null || _grants.Any(g => g.Permission == permission && g.CoversQueue(queue));
 }
 
 /// <summary>
@@ -82,6 +93,7 @@ public sealed class AccessControl
     private readonly Dictionary<string, string[]> _userRoles = new(StringComparer.OrdinalIgnoreCase);
     private readonly string[] _defaultRoles;
     private readonly string _rolesClaim;
+    private readonly HashSet<string> _apiKeyNames;
 
     /// <exception cref="StartupException">Unknown permission, undefined role, or a pattern where none is allowed.</exception>
     public AccessControl(RabbitMcpOptions options)
@@ -98,6 +110,7 @@ public sealed class AccessControl
 
         _defaultRoles = CheckDefined(SplitList(options.DefaultRoles, ','), "RabbitMcp:DefaultRoles");
         _rolesClaim = string.IsNullOrWhiteSpace(options.JwtRolesClaim) ? "roles" : options.JwtRolesClaim.Trim();
+        _apiKeyNames = new HashSet<string>(ApiKeyAuthenticationHandler.Names(options.ApiKeys), StringComparer.OrdinalIgnoreCase);
 
         if (!Enabled && (_userRoles.Count > 0 || _defaultRoles.Length > 0))
             throw new StartupException("RabbitMcp:UserRoles/DefaultRoles need at least one role in RabbitMcp:Roles.");
@@ -109,8 +122,8 @@ public sealed class AccessControl
     public IReadOnlyCollection<string> RoleNames => _roles.Keys;
 
     /// <summary>
-    /// The caller's permissions: roles assigned to any of its names (API key name, preferred_username, email, sub)
-    /// plus roles named in its token's roles claim; DefaultRoles when it has none. No user (stdio): everything.
+    /// The caller's permissions: roles assigned to any of its names (see <see cref="NamesOf"/>) plus roles named in its
+    /// token's roles claim; DefaultRoles when it has none. No user (stdio): everything.
     /// </summary>
     public UserPermissions For(ClaimsPrincipal? user)
     {
@@ -118,14 +131,17 @@ public sealed class AccessControl
             return UserPermissions.Everything;
 
         var roles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (user.Identity is { IsAuthenticated: true })
+        if (user.Identities.Any(i => i.IsAuthenticated))
         {
             foreach (var name in NamesOf(user))
             {
                 if (_userRoles.TryGetValue(name, out var assigned))
                     roles.UnionWith(assigned);
             }
-            foreach (var claim in user.FindAll(_rolesClaim))
+            // Only from token identities: an API-key identity has no roles claim of its own.
+            foreach (var claim in user.Identities
+                         .Where(i => i.IsAuthenticated && i.AuthenticationType != ApiKeyAuthenticationHandler.SchemeName)
+                         .SelectMany(i => i.FindAll(_rolesClaim)))
             {
                 if (_roles.ContainsKey(claim.Value))
                     roles.Add(claim.Value);
@@ -140,11 +156,36 @@ public sealed class AccessControl
             : UserPermissions.From(ordered.SelectMany(r => _roles[r].Grants), ordered);
     }
 
-    private static IEnumerable<string> NamesOf(ClaimsPrincipal user) =>
-        new[] { user.Identity?.Name, user.FindFirst("preferred_username")?.Value, user.FindFirst("email")?.Value,
-                user.FindFirst("sub")?.Value, user.FindFirst(ClaimTypes.Name)?.Value }
-            .Where(n => !string.IsNullOrEmpty(n))
-            .Distinct(StringComparer.OrdinalIgnoreCase)!;
+    /// <summary>
+    /// The names RabbitMcp:UserRoles is matched against. An API-key caller has exactly one: the key's name. A token
+    /// caller has its sub, its name (preferred_username) and its e-mail — the e-mail only when the token says
+    /// email_verified=true, since many identity providers let users change it. A token name that equals an API key name
+    /// is ignored: an identity-provider account called "ci" must not inherit the roles of the API key "ci".
+    /// </summary>
+    public IEnumerable<string> NamesOf(ClaimsPrincipal user)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var identity in user.Identities.Where(i => i.IsAuthenticated))
+        {
+            if (identity.AuthenticationType == ApiKeyAuthenticationHandler.SchemeName)
+            {
+                if (!string.IsNullOrEmpty(identity.Name))
+                    names.Add(identity.Name);
+                continue;
+            }
+
+            var email = identity.FindFirst("email_verified")?.Value is { } verified &&
+                        verified.Equals("true", StringComparison.OrdinalIgnoreCase)
+                ? identity.FindFirst("email")?.Value
+                : null;
+            foreach (var name in new[] { identity.FindFirst("sub")?.Value, identity.Name, identity.FindFirst("preferred_username")?.Value, email })
+            {
+                if (!string.IsNullOrEmpty(name) && !_apiKeyNames.Contains(name))
+                    names.Add(name);
+            }
+        }
+        return names;
+    }
 
     /// <summary>"read;publish:Billing.*,Order*;request:Get*;republish:orders-*_error;respond" or "*".</summary>
     public static RoleDefinition ParseRole(string role, string? definition)
@@ -206,10 +247,10 @@ public sealed class AccessControl
         (value ?? "").Split(separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
-/// <summary><c>*</c> wildcard patterns, case-insensitive (same syntax as PublishAllow/PublishDeny).</summary>
+/// <summary><c>*</c> wildcard patterns, case-insensitive by default (same syntax as PublishAllow/PublishDeny).</summary>
 public static class Glob
 {
-    public static Regex ToRegex(string pattern) =>
+    public static Regex ToRegex(string pattern, bool ignoreCase = true) =>
         new("^" + Regex.Escape(pattern).Replace("\\*", ".*") + "$",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None) | RegexOptions.CultureInvariant);
 }

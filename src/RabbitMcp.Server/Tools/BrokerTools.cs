@@ -10,6 +10,8 @@ using ModelContextProtocol.Server;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
 using RabbitMcp.Server.Security;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
 
 namespace RabbitMcp.Server.Tools;
 
@@ -67,7 +69,17 @@ public sealed class BrokerTools(
         var stats = new List<QueueStat>(queues.Length);
         foreach (var queue in queues.Distinct(StringComparer.Ordinal))
         {
-            var ok = await connection.GetQueueAsync(queue, cancellationToken);
+            QueueDeclareOk? ok;
+            try
+            {
+                ok = await connection.GetQueueAsync(queue, cancellationToken);
+            }
+            catch (OperationInterruptedException ex) when (RabbitConnection.IsResourceLocked(ex))
+            {
+                // Exclusive to another connection: it exists, but AMQP does not tell us its counts.
+                stats.Add(new QueueStat(queue, Exists: true, null, null));
+                continue;
+            }
             stats.Add(ok is null
                 ? new QueueStat(queue, Exists: false, null, null)
                 : new QueueStat(queue, Exists: true, ok.MessageCount, ok.ConsumerCount));

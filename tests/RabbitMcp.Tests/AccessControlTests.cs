@@ -64,8 +64,8 @@ public class AccessControlTests
         Assert.False(alice.Allows(Permission.Request, GetStatus));
         Assert.Equal(new[] { "operator" }, alice.Roles);
 
-        // Email claim of a JWT user maps too; names are case-insensitive.
-        var bob = access.For(User("bob", ("email", "Bob@Example.com")));
+        // A verified email claim of a JWT user maps too; names are case-insensitive.
+        var bob = access.For(User("bob", ("email", "Bob@Example.com"), ("email_verified", "true")));
         Assert.True(bob.Has(Permission.Read));
         Assert.False(bob.Has(Permission.Publish));
 
@@ -75,6 +75,41 @@ public class AccessControlTests
 
         // Nobody assigned → DefaultRoles.
         Assert.Equal(new[] { "viewer" }, access.For(User("dave")).Roles);
+    }
+
+    private static ClaimsPrincipal Token(params (string Type, string Value)[] claims) =>
+        new(new ClaimsIdentity(claims.Select(c => new Claim(c.Type, c.Value)), "AuthenticationTypes.Federation",
+            "preferred_username", "roles"));
+
+    private static ClaimsPrincipal ApiKeyCaller(string name) =>
+        new(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, name) }, ApiKeyAuthenticationHandler.SchemeName));
+
+    [Fact]
+    public void Unverified_email_assigns_no_role()
+    {
+        // Many identity providers let users change their e-mail: only a verified one may pick up someone's roles.
+        var access = Create("boss@example.com=admin", null, StandardRoles);
+
+        Assert.False(access.For(Token(("sub", "u-1"), ("email", "boss@example.com"))).Has(Permission.Read));
+        Assert.False(access.For(Token(("sub", "u-1"), ("email", "boss@example.com"), ("email_verified", "false"))).Has(Permission.Read));
+        Assert.True(access.For(Token(("sub", "u-2"), ("email", "boss@example.com"), ("email_verified", "true"))).IsUnrestricted);
+    }
+
+    [Fact]
+    public void Token_user_named_like_an_api_key_does_not_get_its_roles()
+    {
+        var options = new RabbitMcpOptions { ApiKeys = "ci:" + new string('k', 40), UserRoles = "ci=admin;sub-7=viewer" };
+        foreach (var (role, definition) in StandardRoles)
+            options.Roles[role] = definition;
+        var access = new AccessControl(options);
+
+        Assert.True(access.For(ApiKeyCaller("ci")).IsUnrestricted);
+        // An identity-provider account called "ci" (username, sub or e-mail) is not the API key "ci".
+        Assert.False(access.For(Token(("preferred_username", "ci"))).Has(Permission.Read));
+        Assert.False(access.For(Token(("sub", "ci"))).Has(Permission.Read));
+        Assert.Equal(new[] { "viewer" }, access.For(Token(("sub", "sub-7"), ("preferred_username", "ci"))).Roles);
+        // ... and an API-key caller is only its key name, whatever other claims its principal has.
+        Assert.False(access.For(ApiKeyCaller("sub-7")).IsUnrestricted);
     }
 
     [Fact]
@@ -180,6 +215,42 @@ public class AccessControlTests
         Assert.Contains("Permission 'publish'", bobDenied!.Reason);
         Assert.Contains("viewer", bobDenied.Reason);
         Assert.Equal("OrderSubmitted", bobDenied.Contract!.Name);
+    }
+
+    [Fact]
+    public void Choosing_another_destination_needs_republish_without_patterns()
+    {
+        var access = Create("alice=operator;root=admin;rita=mover", null,
+            [.. StandardRoles, ("mover", "read;republish")]);
+        var tools = Tools(access);
+        var alice = access.For(User("alice"));
+
+        Dictionary<string, JsonElement> With(params (string Name, string Value)[] args) =>
+            args.ToDictionary(a => a.Name, a => JsonSerializer.SerializeToElement(a.Value));
+
+        // operator may republish *_error queues to where their messages came from ...
+        Assert.Null(tools.Check("republish_from_error", With(("errorQueue", "orders_error")), alice));
+        // ... but not send them anywhere else.
+        var redirect = tools.Check("republish_from_error", With(("errorQueue", "orders_error"), ("targetQueue", "payments")), alice);
+        Assert.Contains("without patterns (to choose targetQueue)", redirect!.Reason);
+        Assert.NotNull(tools.Check("republish_from_error", With(("errorQueue", "orders_error"), ("targetExchange", "payments")), alice));
+        Assert.NotNull(tools.Check("dead_letter_from_error", With(("errorQueue", "orders_error"), ("deadLetterQueue", "payments")), alice));
+        Assert.Null(tools.Check("dead_letter_from_error", With(("errorQueue", "orders_error"), ("deadLetterQueue", " ")), alice));
+
+        foreach (var name in new[] { "root", "rita" })
+            Assert.Null(tools.Check("republish_from_error",
+                With(("errorQueue", "orders_error"), ("targetQueue", "payments")), access.For(User(name))));
+    }
+
+    [Fact]
+    public void Queue_patterns_are_case_sensitive_like_rabbitmq()
+    {
+        var access = Create("alice=operator", null, ("operator", "republish:orders_error;publish:order*"));
+        var alice = access.For(User("alice"));
+
+        Assert.True(alice.AllowsQueue(Permission.Republish, "orders_error"));
+        Assert.False(alice.AllowsQueue(Permission.Republish, "Orders_Error")); // a different queue
+        Assert.True(alice.Allows(Permission.Publish, Submitted)); // contract names stay case-insensitive
     }
 
     [Fact]

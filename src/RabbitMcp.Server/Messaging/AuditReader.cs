@@ -90,12 +90,19 @@ public static partial class AuditReader
         if (RelativeRegex().Match(text) is { Success: true } m)
         {
             var amount = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
-            return m.Groups[2].Value.ToLowerInvariant() switch
+            try
             {
-                "m" => now.AddMinutes(-amount),
-                "h" => now.AddHours(-amount),
-                _ => now.AddDays(-amount),
-            };
+                return m.Groups[2].Value.ToLowerInvariant() switch
+                {
+                    "m" => now.AddMinutes(-amount),
+                    "h" => now.AddHours(-amount),
+                    _ => now.AddDays(-amount),
+                };
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return DateTimeOffset.MinValue; // "999999d" reaches before year 1: everything
+            }
         }
         if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at))
             return at;

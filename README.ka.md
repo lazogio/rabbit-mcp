@@ -209,7 +209,7 @@ docker run -d -p 5080:5080 \
 |---|---|---|
 | `read` | ნახვა: სიები, სტატისტიკა, peek, `contract_consumers`, `find_message`, `recent_activity` | — |
 | `publish` / `request` | `publish_*` / `request_*` | კონტრაქტით: `publish:Billing.*,Order*` |
-| `republish` | `republish_from_error`, `dead_letter_from_error` | error რიგით: `republish:orders-*_error` |
+| `republish` | `republish_from_error`, `dead_letter_from_error` | error რიგით: `republish:orders-*_error` (დიდი და პატარა ასო განსხვავდება, როგორც რიგის სახელებში). სხვა მიმართულების არჩევას (`targetExchange`, `targetQueue`, `deadLetterQueue`) შეზღუდვის გარეშე `republish` სჭირდება |
 | `respond` | `pending_requests`, `reply_*`, `reject_request` | request კონტრაქტით: `respond:AskHuman` |
 | `*` | ყველაფერი | — |
 
@@ -221,7 +221,7 @@ RabbitMcp__UserRoles="alice=operator;ci=viewer;bob@example.com=admin"
 RabbitMcp__DefaultRoles="viewer"
 ```
 
-- **როლის მინიჭება:** როლი ენიჭება API key-ის სახელს (`alice:KEY` → `alice`), token-ის მომხმარებელს (`preferred_username`, `email`, `sub`) ან JWT-ის `roles` claim-ის მნიშვნელობას. claim-ის სახელს `JwtRolesClaim` ცვლის.
+- **როლის მინიჭება:** როლი ენიჭება API key-ის სახელს (`alice:KEY` → `alice`), token-ის მომხმარებელს (`sub`, `preferred_username`, ან `email`, თუ token-ში `email_verified` წერია) ან JWT-ის `roles` claim-ის მნიშვნელობას. claim-ის სახელს `JwtRolesClaim` ცვლის. token-ის მომხმარებელი, რომლის სახელი API key-ის სახელს ემთხვევა, ამ key-ის როლებს ვერ მიიღებს.
 - **როლის გარეშე მომხმარებელი** იღებს `DefaultRoles`-ს. თუ ის ცარიელია, არაფერი შეუძლია.
 - **შემოწმება ორ ეტაპად ხდება.** მომხმარებელი მხოლოდ ნებადართულ ხელსაწყოებს ხედავს. ყოველი გამოძახება კი არგუმენტებით (რიგი, კონტრაქტი) ხელახლა მოწმდება, უარი კი audit-ში იწერება.
 - **ზღვარი:** როლი `Enable*`-ით და `PublishAllow`-ით ჩართული ხელსაწყოებიდან არჩევს და გამორთულს ვერ ჩართავს.
@@ -258,7 +258,7 @@ env ცვლადი `RabbitMcp__Name`, ან `appsettings.json`-ში `"Rab
 
 - **შეტყობინება არ იკარგება.** ვალიდაციის ჩავარდნისას არაფერი იგზავნება. exchange-ის (default exchange-ის შემთხვევაში რიგის) არსებობა წინასწარ მოწმდება. publisher confirms და `mandatory` ვერ მიწოდებულ შეტყობინებას შეცდომად აბრუნებს.
 - **republish:** შეტყობინება error რიგიდან მხოლოდ ბროკერის დადასტურების შემდეგ იშლება. body უცვლელია, იშლება მხოლოდ fault და `x-death` header-ები. მიწოდება at-least-once-ია.
-- **dead-letter:** შეტყობინების წაშლის ხელსაწყო არ არსებობს. გამოუსწორებელი შეტყობინება იმავე წესით, დადასტურების შემდეგ გადადის durable `_dead` რიგში. body და ყველა header, მათ შორის fault-ის დეტალები, უცვლელი რჩება. ემატება `X-Dead-Lettered-By/-From/-At` და `X-Dead-Letter-Reason`. უკან `republish_from_error` აბრუნებს.
+- **dead-letter:** შეტყობინების წაშლის ხელსაწყო არ არსებობს. რიგი, რომელსაც consumer ჰყავს, dead-letter რიგად არასდროს გამოიყენება. გამოუსწორებელი შეტყობინება იმავე წესით, დადასტურების შემდეგ გადადის durable `_dead` რიგში. body და ყველა header, მათ შორის fault-ის დეტალები, უცვლელი რჩება. ემატება `X-Dead-Lettered-By/-From/-At` და `X-Dead-Letter-Reason`. უკან `republish_from_error` აბრუნებს.
 - **peek:** აქტიური consumer-ის მქონე რიგზე `force=true` სჭირდება. შეტყობინება რიგში რჩება, მაგრამ `redelivered` ხდება.
 - **Audit:** ყოველი გაგზავნა, request, republish და პასუხი იწერება შედეგთან და მომხმარებელთან ერთად. ჩავარდნილი და უარყოფილი მცდელობებიც იწერება:
   ```json

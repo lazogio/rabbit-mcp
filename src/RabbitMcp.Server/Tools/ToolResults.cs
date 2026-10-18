@@ -218,7 +218,7 @@ public sealed record FoundMessage(
 
 public sealed record QueueSearch(
     string Queue,
-    [property: Description("searched | searched the first N of M | empty | missing | skipped: has consumers")] string Status,
+    [property: Description("searched | searched the first N of M | empty | missing | skipped: has consumers | skipped: exclusive to another connection | error: <reason>")] string Status,
     int Scanned,
     [property: Description("Ready messages in the queue.")] long? Ready);
 

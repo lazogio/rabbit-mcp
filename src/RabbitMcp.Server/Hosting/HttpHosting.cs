@@ -153,11 +153,12 @@ public static class HttpHosting
 
     /// <summary>
     /// API-key callers are not scoped. A JWT must carry every configured scope, in "scope" (space-separated, RFC 8693)
-    /// or "scp" (Entra ID, one claim or space-separated).
+    /// or "scp" (Entra ID, one claim or space-separated). Whether the caller used an API key is decided by how it was
+    /// authenticated, not by a claim: a token with an "auth_method" claim must not skip the scope check.
     /// </summary>
     public static bool HasRequiredScopes(ClaimsPrincipal user, IReadOnlyCollection<string> required)
     {
-        if (required.Count == 0 || user.HasClaim("auth_method", "api_key"))
+        if (required.Count == 0 || ApiKeyAuthenticationHandler.IsApiKeyCaller(user))
             return true;
 
         var granted = user.FindAll("scope").Concat(user.FindAll("scp"))

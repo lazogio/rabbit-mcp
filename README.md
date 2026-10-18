@@ -209,7 +209,7 @@ Until a role is defined, every authenticated caller may use every enabled tool. 
 |---|---|---|
 | `read` | Looking: lists, statistics, peek, `contract_consumers`, `find_message`, `recent_activity` | — |
 | `publish` / `request` | `publish_*` / `request_*` | contract: `publish:Billing.*,Order*` |
-| `republish` | `republish_from_error`, `dead_letter_from_error` | error queue: `republish:orders-*_error` |
+| `republish` | `republish_from_error`, `dead_letter_from_error` | error queue: `republish:orders-*_error` (case-sensitive, like queue names). Choosing another destination (`targetExchange`, `targetQueue`, `deadLetterQueue`) needs `republish` without patterns |
 | `respond` | `pending_requests`, `reply_*`, `reject_request` | request contract: `respond:AskHuman` |
 | `*` | everything | — |
 
@@ -221,7 +221,7 @@ RabbitMcp__UserRoles="alice=operator;ci=viewer;bob@example.com=admin"
 RabbitMcp__DefaultRoles="viewer"
 ```
 
-- **Who gets a role:** the API key's name (`alice:KEY` → `alice`), the token's user (`preferred_username`, `email`, `sub`) or a value of the JWT `roles` claim. `JwtRolesClaim` changes the claim name.
+- **Who gets a role:** the API key's name (`alice:KEY` → `alice`), the token's user (`sub`, `preferred_username`, or `email` when the token says `email_verified`) or a value of the JWT `roles` claim. `JwtRolesClaim` changes the claim name. A token user whose name equals an API key's name does not get that key's roles.
 - **Callers without a role** get `DefaultRoles`. If that is empty, they can do nothing.
 - **Checked twice.** Callers only see the tools they may use, and every call is checked again with its arguments (queue, contract); refusals are audited.
 - **Ceiling:** roles choose among the tools enabled by `Enable*` and `PublishAllow`; they cannot enable a disabled one.
@@ -258,7 +258,7 @@ Environment variable `RabbitMcp__Name`, or `"RabbitMcp": { "Name": … }` in `ap
 
 - **No message is lost.** Nothing is sent when validation fails. The exchange (or, for the default exchange, the queue) is checked first. Publisher confirms and `mandatory` turn an undeliverable message into an error.
 - **Republish:** a message leaves the error queue only after the broker confirmed the republish. The body is unchanged; only fault and `x-death` headers are removed. Delivery is at-least-once.
-- **Dead-letter:** there is no tool that deletes messages. Poison messages move to a durable `_dead` queue the same way, after confirmation, with body and every header (fault details included) unchanged, plus `X-Dead-Lettered-By/-From/-At` and `X-Dead-Letter-Reason`. `republish_from_error` brings them back.
+- **Dead-letter:** there is no tool that deletes messages. A queue with consumers is never used as the dead-letter queue. Poison messages move to a durable `_dead` queue the same way, after confirmation, with body and every header (fault details included) unchanged, plus `X-Dead-Lettered-By/-From/-At` and `X-Dead-Letter-Reason`. `republish_from_error` brings them back.
 - **Peek:** needs `force=true` on queues with active consumers. Messages stay in the queue but become `redelivered`.
 - **Audit:** every send, request, republish, dead-lettering and answer is recorded with its outcome and the user — failed and refused attempts too:
   ```json

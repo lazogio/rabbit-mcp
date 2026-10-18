@@ -233,6 +233,35 @@ public class HttpHostingTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public void An_auth_method_claim_in_a_token_does_not_skip_the_scope_check()
+    {
+        // Only the API key handler makes an API-key identity; a token may carry any claim it likes.
+        var forged = new ClaimsPrincipal(new ClaimsIdentity(
+            new[] { new Claim("auth_method", "api_key"), new Claim("scope", "openid") }, "AuthenticationTypes.Federation"));
+        var apiKey = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, "ci") }, "ApiKey"));
+
+        Assert.False(HttpHosting.HasRequiredScopes(forged, ["rabbit-mcp.tools"]));
+        Assert.True(HttpHosting.HasRequiredScopes(apiKey, ["rabbit-mcp.tools"]));
+    }
+
+    [Fact]
+    public async Task Jwt_claiming_to_be_an_api_key_is_still_refused_without_scopes()
+    {
+        await using var app = await StartJwtAsync("rabbit-mcp.tools");
+        var token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = Authority,
+            Audience = "rabbit-mcp",
+            Expires = DateTime.UtcNow.AddMinutes(5),
+            Claims = new Dictionary<string, object> { ["preferred_username"] = "eve", ["scope"] = "openid", ["auth_method"] = "api_key" },
+            SigningCredentials = new SigningCredentials(SigningKey, SecurityAlgorithms.HmacSha256),
+        });
+
+        var response = await app.GetTestClient().SendAsync(Mcp(Initialize, r => r.Headers.Authorization = new("Bearer", token)));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("scope", "a b", true)]
     [InlineData("scp", "b a", true)]

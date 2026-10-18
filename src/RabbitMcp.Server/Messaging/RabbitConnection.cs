@@ -19,6 +19,7 @@ public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, TimePro
     : IAsyncDisposable
 {
     private const ushort NotFound = 404;
+    private const ushort ResourceLocked = 405;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly ExistenceCache _exchanges = new(time, TimeSpan.FromSeconds(Math.Max(0, options.Value.ExchangeCacheSeconds)));
@@ -26,6 +27,9 @@ public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, TimePro
 
     /// <summary>True when the broker closed a channel because an entity does not exist.</summary>
     public static bool IsNotFound(OperationInterruptedException ex) => ex.ShutdownReason?.ReplyCode == NotFound;
+
+    /// <summary>True for 405 RESOURCE_LOCKED: the queue is exclusive to another connection.</summary>
+    public static bool IsResourceLocked(OperationInterruptedException ex) => ex.ShutdownReason?.ReplyCode == ResourceLocked;
 
     /// <summary>Forget a cached "exists" result, e.g. after a publish failed with 404.</summary>
     public void InvalidateExchange(string exchange) => _exchanges.Invalidate(exchange);
@@ -97,7 +101,26 @@ public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, TimePro
         }
     }
 
-    /// <summary>Ready-message and consumer counts, or null if the queue does not exist.</summary>
+    /// <summary>
+    /// Whether the queue exists. A queue exclusive to another connection exists too: its passive declare fails with
+    /// 405 RESOURCE_LOCKED, but messages can still be published to it.
+    /// </summary>
+    public async Task<bool> QueueExistsAsync(string queue, CancellationToken ct)
+    {
+        try
+        {
+            return await GetQueueAsync(queue, ct) is not null;
+        }
+        catch (OperationInterruptedException ex) when (IsResourceLocked(ex))
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Ready-message and consumer counts, or null if the queue does not exist. Throws 405 RESOURCE_LOCKED for a queue
+    /// exclusive to another connection.
+    /// </summary>
     public async Task<QueueDeclareOk?> GetQueueAsync(string queue, CancellationToken ct)
     {
         await using var channel = await CreateChannelAsync(publisherConfirms: false, ct);

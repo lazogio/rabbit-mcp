@@ -11,12 +11,15 @@ namespace RabbitMcp.Server.Security;
 /// <summary>
 /// What a tool needs: a permission, optionally for specific contracts (publish_*/request_*/reply_*), for the error
 /// queue named in an argument (republish_from_error) or for the contract of the pending request it answers.
+/// <see cref="OverrideArguments"/> redirect messages elsewhere (another exchange or queue): they need the permission
+/// without patterns, otherwise a role limited to some error queues could move their messages into any queue.
 /// </summary>
 public sealed record ToolRule(
     Permission Permission,
     IReadOnlyList<ContractDescriptor> Contracts,
     string? QueueArgument = null,
-    bool ByRequestId = false);
+    bool ByRequestId = false,
+    IReadOnlyList<string>? OverrideArguments = null);
 
 /// <summary>
 /// Maps every tool to the permission it needs and decides, per caller, which tools are listed (tools/list) and
@@ -34,9 +37,11 @@ public sealed class ToolAccess(AccessControl control, ContractRegistry contracts
         ["contract_consumers"] = new(Permission.Read, []),
         ["find_message"] = new(Permission.Read, []),
         ["recent_activity"] = new(Permission.Read, []),
-        ["republish_from_error"] = new(Permission.Republish, [], QueueArgument: "errorQueue"),
+        ["republish_from_error"] = new(Permission.Republish, [], QueueArgument: "errorQueue",
+            OverrideArguments: ["targetExchange", "targetQueue"]),
         // Moving to the dead-letter queue is a move out of the error queue like republish (nothing is deleted).
-        ["dead_letter_from_error"] = new(Permission.Republish, [], QueueArgument: "errorQueue"),
+        ["dead_letter_from_error"] = new(Permission.Republish, [], QueueArgument: "errorQueue",
+            OverrideArguments: ["deadLetterQueue"]),
         ["pending_requests"] = new(Permission.Respond, []),
         ["reject_request"] = new(Permission.Respond, [], ByRequestId: true),
     };
@@ -90,6 +95,10 @@ public sealed class ToolAccess(AccessControl control, ContractRegistry contracts
         if (rule.QueueArgument is { } argument && Text(arguments, argument) is { } queue &&
             !user.AllowsQueue(rule.Permission, queue))
             return Need($" on queue '{queue}'", null);
+
+        if (rule.OverrideArguments?.FirstOrDefault(a => !string.IsNullOrWhiteSpace(Text(arguments, a))) is { } redirect &&
+            !user.HasUnrestricted(rule.Permission))
+            return Need($" without patterns (to choose {redirect})", null);
 
         if (rule.ByRequestId && Text(arguments, "requestId") is { } id && Guid.TryParse(id, out var requestId) &&
             services.GetService<ResponderService>()?.Pending().FirstOrDefault(r => r.RequestId == requestId) is { } pending &&
