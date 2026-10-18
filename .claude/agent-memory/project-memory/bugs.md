@@ -1,6 +1,13 @@
 # Bugs (newest first)
 
-Next ID: BUG-027
+Next ID: BUG-028
+
+### BUG-027 Schema bounds written in YAML were ignored — fixed before merge (2026-10-18, commit e06c536)
+- Symptom (CI unit test): `quantity: 0` passed `minimum: 1` for the warehouse.yaml contract.
+- Root cause: `YamlJson` creates `JsonValue.Create(long)`; `JsonValue.TryGetValue<decimal>` does not convert a long, so
+  every numeric keyword (minimum, maxLength, minItems …) from YAML read as missing. JSON-parsed schemas worked.
+- Fix: read numeric keywords via `GetValueKind() == Number` + the JSON text. Guard: `Yaml_scalars_follow_the_core_schema`.
+- Lesson: JsonValue.TryGetValue<T> only succeeds for the stored CLR type — test YAML and JSON inputs both.
 
 ### BUG-020..026 Security & bug review after phase 11 (2026-10-18) — fixed in commits 797cd9b, 3462d5b
 - BUG-020 (security, medium) JWT scope enforcement was skipped for any principal with the claim `auth_method=api_key`;

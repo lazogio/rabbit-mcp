@@ -1,6 +1,6 @@
 # rabbit-mcp memory — index
 
-Last updated: 2026-10-18 · Bugs: 26 (0 open) · Next ID: BUG-027
+Last updated: 2026-10-18 · Bugs: 27 (0 open) · Next ID: BUG-028
 
 ## Files
 - `bugs.md` — bug log (symptom, root cause, fix, guard, lesson)
@@ -8,6 +8,7 @@ Last updated: 2026-10-18 · Bugs: 26 (0 open) · Next ID: BUG-027
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-18 phase-14/asyncapi: ContractFiles (AsyncAPI 3/2, YAML/JSON), own schema validator, export + diff; BUG-027
 - 2026-10-18 phase-13/scale: recovery by filter (MaxBulkMessages), read_stream, RateLimits
 - 2026-10-18 phase-12/human: elicitation confirmations (HumanConfirmation, ConfirmTools), resend_corrected
 - 2026-10-18 plan: phases 12 (elicitation, resend_corrected), 13 (bulk by filter, streams, rate limits), 14 (AsyncAPI), 15 (release-gated)

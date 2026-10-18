@@ -22,6 +22,9 @@
   request parked in a DLQ does not expire again when republished.
 
 ## C# / tests
+- `JsonValue.TryGetValue<T>` succeeds only for the stored CLR type (a `JsonValue.Create(long)` is not a decimal);
+  for numbers from mixed sources use `GetValueKind()` + the JSON text.
+- MCP C# SDK: `Tool.InputSchema` (ProtocolTool) is settable — a generated tool's schema can be replaced after `Create`.
 - An in-process MCP session for tests: two AnonymousPipeServerStream/ClientStream pairs, server
   `.WithStreamServerTransport(in, out)`, client `McpClient.CreateAsync(new StreamClientTransport(toServer, fromServer), options)`
   — elicitation works there (stdio-like), unlike the stateless HTTP TestServer.

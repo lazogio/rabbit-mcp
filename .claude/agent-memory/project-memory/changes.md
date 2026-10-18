@@ -1,5 +1,18 @@
 # Changes and decisions (newest first)
 
+### 2026-10-18 Phase 14 — AsyncAPI contracts (phase-14/asyncapi) — commits ecfaac4, e06c536
+- `ContractFiles` → `AsyncApiLoader` (3.0 operations incl. reply → request; 2.x publish/subscribe incl. oneOf; no
+  operations → every channel message is an event). Routing from channel AMQP binding (is: queue → default exchange;
+  else exchange + address as routing key; MassTransit messages default to the URN's exchange). `x-rabbit-mcp`:
+  format, urn, version, toolName.
+- Descriptors: `Schema` (refs inlined by `SchemaInliner`), `Type = JsonElement`, `TypeName = <title>.<message>`;
+  registry keeps them out of `_byType`. Tools: `JsonContractTool` + replace `properties.message` of the generated
+  inputSchema (`Tool.InputSchema` is settable). Validation: own `SchemaValidator` subset (numeric strings allowed for
+  MassTransit format). Responder refuses schema contracts. YAML via YamlDotNet 18.1.0 RepresentationModel (`YamlJson`).
+- `AsyncApiExporter` + CLI `contracts asyncapi`, `contracts diff` accepts .yaml/.json. Round-trip test against the
+  sample contracts (no breaking changes).
+- Decision: no separate "plain JSON Schema + mapping" format — a minimal AsyncAPI document covers it.
+
 ### 2026-10-18 Phase 13 — incident scale (phase-13/scale) — commit c5e56da + docs
 - `MessageFilter` (exceptionType / exceptionContains incl. x-death reason / contract / since / until on
   MT-Fault-Timestamp → x-death time → sent time) on republish_from_error and dead_letter_from_error; with a filter
