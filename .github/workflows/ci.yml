@@ -70,7 +70,7 @@ jobs:
         env:
           RabbitMcp__PublishDeny: request_*
           RabbitMcp__AuditLogPath: ${{ runner.temp }}/audit/audit.jsonl
-          SMOKE_EXPECT_TOOLS: list_contracts,publish_order_submitted,publish_order_cancelled
+          SMOKE_EXPECT_TOOLS: list_contracts,publish_order_submitted,publish_order_cancelled,recent_activity
           SMOKE_FORBID_TOOLS: request_get_order_status
         run: |
           scripts/smoke-test.sh out/rabbit-mcp

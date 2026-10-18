@@ -52,8 +52,10 @@ claude mcp add rabbit-mcp \
 | `validate_message` | JSON-ს კონტრაქტზე ამოწმებს გაგზავნის გარეშე | ყოველთვის |
 | `queue_stats` | რიგში მზა შეტყობინებების და consumer-ების რაოდენობა | ყოველთვის |
 | `peek_messages` | შეტყობინებები ამოღების გარეშე: payload, კონტრაქტის შემოწმება, fault | ყოველთვის |
+| `find_message` | ეძებს შეტყობინებას messageId-ით, correlationId-ით ან ტექსტით (მაგ. შეკვეთის ID) და აჩვენებს, რომელ რიგშია. ნაგულისხმევად ყველა `_error`/`_skipped`/`_dead` რიგში ეძებს (`ManagementUri`), ან მითითებულ რიგებში | ყოველთვის |
 | `list_queues` | რიგების სია ფილტრებით. error რიგთან ჩანს, რომელ რიგს ეკუთვნის | `ManagementUri` |
 | `contract_consumers` | რომელ რიგებამდე აღწევს კონტრაქტი, ჰყავს თუ არა consumer, რამდენია `_error`/`_skipped`-ში | `ManagementUri` |
+| `recent_activity` | audit-ის ბოლო მოვლენები ფილტრებით (მოქმედება, შედეგი, კონტრაქტი, მომხმარებელი, რიგი, ID, `since: 2h`): „ვინ დააბრუნა გუშინ?“ | `AuditLogPath` |
 | `publish_<contract>` | აქვეყნებს event-ს | `EnablePublish` |
 | `request_<contract>` | აგზავნის request-ს და აბრუნებს პასუხს | `EnablePublish` |
 | `republish_from_error` | აბრუნებს შეტყობინებებს `_error`/`_skipped`/`_dead` რიგიდან: ჯერ preview, შემდეგ `confirm=true` | `EnableRepublish` |
@@ -164,7 +166,7 @@ docker run -d -p 5080:5080 \
 
 | უფლება | ხელსაწყოები | შეზღუდვა |
 |---|---|---|
-| `read` | ნახვა: სიები, სტატისტიკა, peek, `contract_consumers` | — |
+| `read` | ნახვა: სიები, სტატისტიკა, peek, `contract_consumers`, `find_message`, `recent_activity` | — |
 | `publish` / `request` | `publish_*` / `request_*` | კონტრაქტით: `publish:Billing.*,Order*` |
 | `republish` | `republish_from_error`, `dead_letter_from_error` | error რიგით: `republish:orders-*_error` |
 | `respond` | `pending_requests`, `reply_*`, `reject_request` | request კონტრაქტით: `respond:AskHuman` |

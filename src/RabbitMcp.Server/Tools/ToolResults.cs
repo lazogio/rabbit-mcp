@@ -206,3 +206,23 @@ public sealed record ContractConsumersReport(
     int Ok,
     [property: Description("Contracts whose status is not ok.")] int WithProblems,
     string Note);
+
+public sealed record FoundMessage(
+    [property: Description("Queue the message is in.")] string Queue,
+    PeekedMessage Message);
+
+public sealed record QueueSearch(
+    string Queue,
+    [property: Description("searched | searched the first N of M | empty | missing | skipped: has consumers")] string Status,
+    int Scanned,
+    [property: Description("Ready messages in the queue.")] long? Ready);
+
+public sealed record FindMessageResult(
+    IReadOnlyList<FoundMessage> Matches,
+    IReadOnlyList<QueueSearch> Queues,
+    string? Note);
+
+public sealed record RecentActivity(
+    [property: Description("Audit events, newest first.")] IReadOnlyList<AuditEvent> Events,
+    [property: Description("True when more events matched than were returned.")] bool Truncated,
+    [property: Description("Audit lines read (from the end of the file).")] int Scanned);

@@ -11,7 +11,7 @@ namespace RabbitMcp.Server.Security;
 /// <summary>What a caller may do. Each tool needs exactly one of these (see <see cref="ToolAccess"/>).</summary>
 public enum Permission
 {
-    /// <summary>list_contracts, validate_message, queue_stats, peek_messages, list_queues, contract_consumers.</summary>
+    /// <summary>list_contracts, validate_message, queue_stats, peek_messages, list_queues, contract_consumers, find_message, recent_activity.</summary>
     Read,
     /// <summary>publish_* (events); may be limited to contracts.</summary>
     Publish,

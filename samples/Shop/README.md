@@ -33,7 +33,7 @@ Claude-ს სთხოვეთ თანმიმდევრობით:
 6. **„გააფორმე შეკვეთა: TV-55, 2 ცალი, 900 ლარი.“** 1000-ზე მეტი შეკვეთისთვის სერვისი დასტურს ითხოვს (`ApproveLargeOrder`).
 7. **„არის დასადასტურებელი შეკვეთა? დაამტკიცე, დამამტკიცებელი: ანა.“** `pending_requests` request-ს აჩვენებს, `reply_order_approved` კი პასუხს უგზავნის სერვისს. სტატუსი ხდება `Approved by ანა`. უარყოფისთვის თქვით „უარყავი, მიზეზი: …“: გამოიყენება `reply_order_rejected` ან `reject_request`.
 
-ყველა მოქმედება rabbit-mcp-ის audit-ში იწერება: `docker compose -f samples/Shop/docker-compose.yml logs mcp`.
+ყველა მოქმედება rabbit-mcp-ის audit-ში იწერება. მისი ნახვა Claude-იდანაც შეიძლება: **„ვინ რა გადაიტანა dead-letter რიგში ბოლო საათში?“** (`recent_activity`) ან **„სად არის შეკვეთა …?“** (`find_message`).
 
 ## როგორ არის აწყობილი
 

@@ -73,16 +73,17 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
 24. ✅ Supply chain: CycloneDX SBOM of the server (checked in CI) attached to releases, image SBOM + SLSA provenance,
     build provenance attestations for archives/nupkg/SBOM (tags), base images pinned by digest (Dependabot updates).
 
-## Phase 9 — Operations (`phase-9/operations`) ⬜
+## Phase 9 — Operations ✅ (2026-10-18)
 25. ✅ `dead_letter_from_error` (decision 2026-10-18: a dead-letter queue, never delete): poison messages move from
     `_error`/`_skipped` to `{queue}_dead` (`DeadLetterQueue`, created durable) with confirms, body and all headers kept
     plus `X-Dead-Lettered-*`/`X-Dead-Letter-Reason`; preview + `confirm`, `messageIds`, audited (`deadletter`);
     gated like republish (`EnableRepublish`, role permission `republish` — it moves, nothing is removed);
     `republish_from_error` brings messages back; `_dead` queues are listed as error queues.
-26. ⬜ `find_message`: find a message by `messageId` or `correlationId` across queues (named queues, or all queues
-    via the Management API), bounded scan, never removes anything; shows queue, fault and republish target.
-27. ⬜ `recent_activity`: query the audit file (who sent / republished / rejected what, filters by action, contract,
-    client, time) — only when `AuditLogPath` is set; permission `read`.
+26. ✅ `find_message`: by `messageId`, `correlationId` or body text (`contains`, e.g. an order id) across the error
+    queues (`_error`/`_skipped`/`_dead`, default), every non-empty queue (`scope=all`) or named queues; peek-based and
+    bounded (`maxPerQueue`), queues with consumers skipped unless `force`; permission `read`.
+27. ✅ `recent_activity`: the audit file read backwards (newest first, stops at `since`), filters by action, outcome,
+    contract, client, queue, id; payload only on request; only when `AuditLogPath` is set; permission `read`.
 
 ## Phase 10 — Usability (`phase-10/usability`) ⬜
 28. ⬜ MCP prompts (slash commands in clients): `diagnose_errors` (all error queues → causes → suggested action),

@@ -45,6 +45,8 @@ services:
       # ... but never sends them itself.
       RabbitMcp__PublishDeny: ApproveLargeOrder
       RabbitMcp__ApiKeys: "demo:${SHOP_MCP_KEY:-shop-demo-key-change-me-0123456789abcdef}"
+      # Audit as JSON Lines: recent_activity answers "who did what".
+      RabbitMcp__AuditLogPath: /tmp/rabbit-mcp/audit.jsonl
       # Optional roles, e.g. a read-only key for a second person:
       # RabbitMcp__Roles__viewer: read
       # RabbitMcp__Roles__operator: "*"

@@ -92,7 +92,8 @@ def main():
         "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "sample-e2e", "version": "1"}})), 180)
     tools = {t["name"] for t in rpc("tools/list")["tools"]}
     expected = {"publish_order_placed", "request_get_order_status", "peek_messages", "republish_from_error",
-                "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request", "dead_letter_from_error"}
+                "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request", "dead_letter_from_error",
+                "find_message", "recent_activity"}
     assert expected <= tools, f"missing tools: {expected - tools}"
     assert "request_approve_large_order" not in tools, "PublishDeny should hide request_approve_large_order"
     step(f"{len(tools)} tools, including the shop's contracts")
@@ -144,6 +145,14 @@ def main():
     assert dead["headers"].get("X-Dead-Letter-Reason") == "Product no longer exists", dead["headers"]
     assert "no longer exists" in (dead.get("fault") or {}).get("exceptionMessage", ""), dead
     step("dead_letter_from_error: the poison message is parked in order-placed_dead with its fault and the reason")
+
+    found = eventually("find_message locates the parked order", lambda: (r := call("find_message", contains=broken))
+                       and any(m["queue"] == "order-placed_dead" for m in r["matches"]) and r)
+    step(f"find_message: order {broken[:8]}… is in order-placed_dead")
+
+    moved = call("recent_activity", action="deadletter", since="1h")["events"]
+    assert any(e["outcome"] == "moved" and e.get("messageId") == poison["messageId"] for e in moved), moved
+    step(f"recent_activity: {moved[0]['client']} moved it ({moved[0]['detail']})")
 
     # --- 3. responder: the shop asks, the model answers
     large = str(uuid.uuid4())

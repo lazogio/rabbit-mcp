@@ -57,7 +57,7 @@ def names(var, default):
     raw = os.environ.get(var)
     return {n.strip() for n in raw.split(",") if n.strip()} if raw else set(default)
 
-expected = names("SMOKE_EXPECT_TOOLS", ["list_contracts", "validate_message", "queue_stats", "peek_messages", "list_queues", "contract_consumers",
+expected = names("SMOKE_EXPECT_TOOLS", ["list_contracts", "validate_message", "queue_stats", "peek_messages", "list_queues", "contract_consumers", "find_message",
                  "republish_from_error", "dead_letter_from_error", "publish_order_submitted", "publish_order_cancelled", "request_get_order_status"])
 forbidden = names("SMOKE_FORBID_TOOLS", [])
 missing = expected - tools.keys()

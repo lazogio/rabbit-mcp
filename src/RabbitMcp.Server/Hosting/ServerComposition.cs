@@ -120,7 +120,11 @@ public static class ServerComposition
                     }
                 });
             })
-            .WithTools<BrokerTools>(ToolJson.Options);
+            .WithTools<BrokerTools>(ToolJson.Options)
+            .WithTools<SearchTools>(ToolJson.Options);
+
+        if (!string.IsNullOrWhiteSpace(settings.AuditLogPath))
+            mcp.WithTools<AuditTools>(ToolJson.Options);
 
         // publish_* for events, request_* for request/response contracts.
         if (settings.EnablePublish)
