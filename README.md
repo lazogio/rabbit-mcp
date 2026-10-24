@@ -54,14 +54,14 @@ Local RabbitMQ: `docker compose up -d` (UI: http://localhost:15672, guest/guest)
 
 | Tool | What it does | Enabled by |
 |---|---|---|
-| `list_contracts` | Contracts: event/request, version, format (MassTransit or plain JSON), exchange, routing key, reply types | always |
+| `list_contracts` | Contracts: event/request, version, format (MassTransit or plain JSON), exchange, routing key, reply types; `nameContains` and `limit` for large contract sets | always |
 | `validate_message` | Checks JSON against a contract without sending anything | always |
 | `queue_stats` | Ready messages and consumers of queues | always |
 | `peek_messages` | Shows messages without removing them: payload, contract check, fault, RabbitMQ dead-lettering history (`x-death`) | always |
 | `find_message` | Finds a message by messageId, correlationId or text (e.g. an order id) and shows which queue it is in. Searches every `_error`/`_skipped`/`_dead` queue by default (`ManagementUri`), or the queues you name | always |
 | `read_stream` | Reads a RabbitMQ stream from `first`, `last`, an offset or a time (`10m`) — removes nothing | always |
 | `list_queues` | Queues with filters; error queues show the queue they belong to | `ManagementUri` |
-| `contract_consumers` | Which queues a contract reaches, whether anything consumes it, its `_error`/`_skipped` backlog | `ManagementUri` |
+| `contract_consumers` | Which queues a contract reaches, whether anything consumes it, its `_error`/`_skipped` backlog (`nameContains`, `limit`) | `ManagementUri` |
 | `recent_activity` | Latest audit events with filters (action, outcome, contract, user, queue, id, `since: 2h`): "who republished yesterday?" | `AuditLogPath` |
 | `publish_<contract>` | Publishes an event | `EnablePublish` |
 | `request_<contract>` | Sends a request and returns the reply | `EnablePublish` |

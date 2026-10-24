@@ -1,5 +1,15 @@
 # Changes and decisions (newest first)
 
+### 2026-10-24 MCP best-practices review (review/mcp-best-practices)
+- Checked against the mcp-builder guide: annotations, titles, outputSchema, actionable McpExceptions, payload
+  truncation (MaxPayloadChars), count limits, HTTP auth + Origin + localhost default — all already fine.
+- Fixed: list_contracts and contract_consumers had no filter/limit (hundreds of contracts → huge result, one management
+  round trip per contract). Both take `nameContains` (name, tool, type, URN; `BrokerTools.Select`) and `limit`
+  (1–1000; 200 / 100) and report `Truncated` (list_contracts also `Matched`).
+- Decision: no `rabbitmq_` prefix on tool names. Clients namespace tools by server (Claude: mcp__<server>__<tool>), the
+  contract tools are already specific (publish_order_placed), and renaming every tool would break roles, ConfirmTools
+  and prompts. Decision: structured content only, no markdown response_format (outputSchema serves the model).
+
 ### 2026-10-24 Shop sample on PostgreSQL (sample/shop-postgres)
 - Shop.Service: EF Core 10 + Npgsql 10.0.0 + MassTransit.EntityFrameworkCore 8.5.10 (consumer outbox + inbox via
   AddConfigureEndpointsCallback, bus outbox for ApprovalWorker). Catalog with stock (xmin row version; only

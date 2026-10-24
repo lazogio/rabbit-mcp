@@ -54,14 +54,14 @@ claude mcp add rabbit-mcp \
 
 | ხელსაწყო | რას აკეთებს | ჩაირთვება |
 |---|---|---|
-| `list_contracts` | კონტრაქტების სია: event/request, ვერსია, ფორმატი (MassTransit ან უბრალო JSON), exchange, routing key, პასუხის ტიპები | ყოველთვის |
+| `list_contracts` | კონტრაქტების სია: event/request, ვერსია, ფორმატი (MassTransit ან უბრალო JSON), exchange, routing key, პასუხის ტიპები; ბევრი კონტრაქტისთვის `nameContains` და `limit` | ყოველთვის |
 | `validate_message` | JSON-ს კონტრაქტზე ამოწმებს გაგზავნის გარეშე | ყოველთვის |
 | `queue_stats` | რიგში მზა შეტყობინებების და consumer-ების რაოდენობა | ყოველთვის |
 | `peek_messages` | შეტყობინებები ამოღების გარეშე: payload, კონტრაქტის შემოწმება, fault, RabbitMQ-ის dead-lettering-ის ისტორია (`x-death`) | ყოველთვის |
 | `find_message` | ეძებს შეტყობინებას messageId-ით, correlationId-ით ან ტექსტით (მაგ. შეკვეთის ID) და აჩვენებს, რომელ რიგშია. ნაგულისხმევად ყველა `_error`/`_skipped`/`_dead` რიგში ეძებს (`ManagementUri`), ან მითითებულ რიგებში | ყოველთვის |
 | `read_stream` | კითხულობს RabbitMQ stream-ს `first`-იდან, `last`-იდან, offset-იდან ან დროიდან (`10m`) — არაფერს შლის | ყოველთვის |
 | `list_queues` | რიგების სია ფილტრებით. error რიგთან ჩანს, რომელ რიგს ეკუთვნის | `ManagementUri` |
-| `contract_consumers` | რომელ რიგებამდე აღწევს კონტრაქტი, ჰყავს თუ არა consumer, რამდენია `_error`/`_skipped`-ში | `ManagementUri` |
+| `contract_consumers` | რომელ რიგებამდე აღწევს კონტრაქტი, ჰყავს თუ არა consumer, რამდენია `_error`/`_skipped`-ში (`nameContains`, `limit`) | `ManagementUri` |
 | `recent_activity` | audit-ის ბოლო მოვლენები ფილტრებით (მოქმედება, შედეგი, კონტრაქტი, მომხმარებელი, რიგი, ID, `since: 2h`): „ვინ დააბრუნა გუშინ?“ | `AuditLogPath` |
 | `publish_<contract>` | აქვეყნებს event-ს | `EnablePublish` |
 | `request_<contract>` | აგზავნის request-ს და აბრუნებს პასუხს | `EnablePublish` |
