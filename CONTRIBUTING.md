@@ -52,5 +52,6 @@ the server in the MCP registry (`src/RabbitMcp.Server/.mcp/server.json`).
 
 ## Claude Code
 
-Project agents are in `.claude/agents/`; the history of changes, bugs and decisions is in
+Project agents are in `.claude/agents/` (`consumer-author` and `producer-author` add consumers and producers to a
+service, following the Shop sample); the history of changes, bugs and decisions is in
 `.claude/agent-memory/project-memory/`.

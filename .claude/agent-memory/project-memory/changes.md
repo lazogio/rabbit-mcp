@@ -1,5 +1,10 @@
 # Changes and decisions (newest first)
 
+### 2026-10-24 Agents consumer-author and producer-author
+- `.claude/agents/consumer-author.md` / `producer-author.md`: add consumers/producers to services using the Shop
+  patterns (outbox, retry only named transient exceptions, idempotency, IBus request client, raw RabbitMQ.Client,
+  PublishDeny for service-owned events, RespondTo for person-answered requests, e2e coverage).
+
 ### 2026-10-24 MCP best-practices review (review/mcp-best-practices)
 - Checked against the mcp-builder guide: annotations, titles, outputSchema, actionable McpExceptions, payload
   truncation (MaxPayloadChars), count limits, HTTP auth + Origin + localhost default — all already fine.

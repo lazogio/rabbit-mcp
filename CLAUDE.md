@@ -152,6 +152,8 @@ Knowledge about past changes, bugs and gotchas lives in `.claude/agent-memory/pr
 | Agent | Use it for |
 |---|---|
 | `contract-author` | adding or changing message contracts (events, requests, responses, versions) |
+| `consumer-author` | adding a consumer to a service (MassTransit or plain RabbitMQ): retries vs `_error`, outbox, idempotency, e2e |
+| `producer-author` | adding a producer: publishing events / sending requests through the outbox, request clients, `PublishDeny`/`RespondTo` |
 | `mcp-tool-designer` | designing or changing MCP tools: names, schemas, results, annotations, gating |
 | `masstransit-compat-reviewer` | checking wire compatibility with MassTransit after messaging changes |
 | `code-reviewer` | reviewing a diff against the guarantees above before merge |

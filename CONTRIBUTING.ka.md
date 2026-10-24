@@ -53,5 +53,6 @@ registry-ში ამატებს (`src/RabbitMcp.Server/.mcp/server.json`).
 
 ## Claude Code
 
-პროექტის აგენტები `.claude/agents/`-შია; ცვლილებების, ბაგებისა და გადაწყვეტილებების ისტორია —
+პროექტის აგენტები `.claude/agents/`-შია (`consumer-author` და `producer-author` სერვისს consumer-ებს და
+producer-ებს Shop-ის ნიმუშის მიხედვით ამატებს); ცვლილებების, ბაგებისა და გადაწყვეტილებების ისტორია —
 `.claude/agent-memory/project-memory/`-ში.
