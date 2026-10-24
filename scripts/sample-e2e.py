@@ -10,6 +10,8 @@ Walks through the Shop sample the way a model would, over MCP Streamable HTTP:
   4. publish_order_placed above the limit → pending_requests → reply_order_approved → Approved
   5. another large order → reject_request → Rejected with the reason
   6. request_get_shipping_quote → a plain RabbitMQ service (no MassTransit) answers over RabbitMQ RPC (Format = Raw)
+  7. the shop's own events: OrderConfirmed/OrderCancelled go out through its PostgreSQL outbox and its notification
+     consumer e-mails the customer (visible in the order history); an order it cannot fill is cancelled (out of stock)
 
 usage: scripts/sample-e2e.py <mcp-url> <api-key>
 """
@@ -73,6 +75,13 @@ def place(order_id, sku, quantity, price):
     })
 
 
+def emailed(order_id, kind):
+    """The shop published OrderConfirmed/OrderCancelled (outbox) and its notification consumer e-mailed the customer."""
+    order = eventually(f"{kind.lower()} e-mail for {order_id[:8]}", lambda: (s := status_of(order_id))
+                       and any(f"{kind} e-mail sent" in h for h in s["history"]) and s)
+    step(f"  event → customer-notifications: {next(h for h in order['history'] if "e-mail sent" in h).split("Z ", 1)[-1]}")
+
+
 def ready(probe):
     """eventually() probe that treats connection errors (container still starting) as 'not yet'."""
     def attempt():
@@ -97,21 +106,21 @@ def main():
                 "find_message", "recent_activity", "request_get_shipping_quote", "resend_corrected"}
     assert expected <= tools, f"missing tools: {expected - tools}"
     assert "request_approve_large_order" not in tools, "PublishDeny should hide request_approve_large_order"
+    assert not {"publish_order_confirmed", "publish_order_cancelled"} & tools, "PublishDeny should hide the shop's own events"
     step(f"{len(tools)} tools, including the shop's contracts")
 
     def shop_consuming():
         statuses = {c["contract"]: c["status"] for c in call("contract_consumers")["contracts"]}
-        return (statuses.get("OrderPlaced") == "ok" and statuses.get("GetOrderStatus") == "ok"
-                and statuses.get("GetShippingQuote") == "ok")
+        return all(statuses.get(c) == "ok" for c in
+                   ("OrderPlaced", "GetOrderStatus", "GetShippingQuote", "OrderConfirmed", "OrderCancelled"))
 
-
-    eventually("shop service consuming OrderPlaced, GetOrderStatus and GetShippingQuote", shop_consuming, 120)
+    eventually("shop service consuming its contracts and events", shop_consuming, 120)
     eventually("responder listening", lambda: call("pending_requests")["status"] == "listening")
     step("shop service is consuming, responder is listening")
 
     # --- 1. request/response
     demo = eventually("demo order", lambda: status_of(DEMO_ORDER))
-    assert demo["status"] == "Shipped", demo
+    assert demo["status"] == "Shipped" and any("Shipped" in h for h in demo["history"]), demo
     step(f"request_get_order_status: demo order is {demo['status']}")
 
     # --- 2. _error queue and republish
@@ -129,6 +138,7 @@ def main():
     assert republished["republished"] == 1, republished
     order = eventually("republished order approved", lambda: (s := status_of(flaky)) and s["status"] == "Approved" and s)
     step(f"republish_from_error: the order was processed again → {order['status']}")
+    emailed(flaky, "Confirmation")
 
     # --- 2b. a poison message goes to the dead-letter queue, nothing is deleted
     broken = str(uuid.uuid4())
@@ -196,6 +206,15 @@ def main():
     order = eventually("order rejected", lambda: (s := status_of(rejected)) and s["status"] == "Rejected" and s)
     assert "credit limit" in order.get("note", ""), order
     step(f"reject_request → shop stored: {order['status']} ({order['note']})")
+    emailed(rejected, "Cancellation")
+
+    # --- 4b. real stock: the last vase cannot fill an order of three
+    vases = str(uuid.uuid4())
+    place(vases, "VASE-01", 3, 35)
+    order = eventually("order cancelled for lack of stock", lambda: (s := status_of(vases)) and s["status"] == "Cancelled" and s)
+    assert "Out of stock: VASE-01" in order.get("note", ""), order
+    step(f"out of stock → {order['status']} ({order['note']})")
+    emailed(vases, "Cancellation")
 
     # --- 5. a service without MassTransit: plain JSON + RabbitMQ RPC (reply_to / correlation_id)
     contracts = {c["name"]: c for c in call("list_contracts")["contracts"]}

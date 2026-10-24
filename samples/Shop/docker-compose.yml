@@ -1,7 +1,8 @@
-# The whole sample: RabbitMQ, the shop service and rabbit-mcp over HTTP.
+# The whole sample: RabbitMQ, PostgreSQL, the shop service and rabbit-mcp over HTTP.
 #   docker compose -f samples/Shop/docker-compose.yml up -d --build
 #   claude mcp add --transport http shop http://localhost:5080/mcp --header "X-Api-Key: shop-demo-key-change-me-0123456789abcdef"
 # Ports are bound to localhost only. RabbitMQ UI: http://localhost:15672 (shop/shop).
+# Database: psql postgresql://shop:shop@localhost:5432/shop
 name: rabbit-mcp-shop
 
 services:
@@ -19,6 +20,20 @@ services:
       timeout: 10s
       retries: 30
 
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "shop", "-d", "shop"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
   shop:
     build:
       context: ../..
@@ -26,8 +41,11 @@ services:
       target: service
     environment:
       RABBITMQ_URI: amqp://shop:shop@rabbitmq:5672/
+      ConnectionStrings__Shop: Host=postgres;Database=shop;Username=shop;Password=shop
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
   mcp:
@@ -42,8 +60,8 @@ services:
       RabbitMcp__EnableRepublish: "true"
       # The model answers the shop's approval requests ...
       RabbitMcp__RespondTo: ApproveLargeOrder
-      # ... but never sends them itself.
-      RabbitMcp__PublishDeny: ApproveLargeOrder
+      # ... but never sends them itself, nor fakes the shop's own events.
+      RabbitMcp__PublishDeny: ApproveLargeOrder;OrderConfirmed;OrderCancelled
       RabbitMcp__ApiKeys: "demo:${SHOP_MCP_KEY:-shop-demo-key-change-me-0123456789abcdef}"
       # Audit as JSON Lines: recent_activity answers "who did what".
       RabbitMcp__AuditLogPath: /tmp/rabbit-mcp/audit.jsonl
