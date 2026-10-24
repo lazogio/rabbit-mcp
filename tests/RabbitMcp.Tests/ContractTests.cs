@@ -1,6 +1,7 @@
 // Copyright (c) 2026 lazogio
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using RabbitMcp.Contracts;
 using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
@@ -111,6 +112,28 @@ public class ContractValidatorTests
     {
         var errors = ContractValidator.Validate(ValidOrder() with { Lines = [] });
         Assert.Contains(errors, e => e.StartsWith("lines:"));
+    }
+
+    [Fact]
+    public void Decimal_range_limits_parse_under_a_comma_decimal_culture()
+    {
+        var culture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo("ka-GE");
+        try
+        {
+            Assert.Empty(ContractValidator.Validate(ValidOrder()));
+
+            var errors = ContractValidator.Validate(ValidOrder() with
+            {
+                Lines = [new OrderLine { Sku = "ABC-123", Quantity = 1, UnitPrice = 0m }],
+            });
+            Assert.Contains(errors, e => e.StartsWith("lines[0].unitPrice:") && e.Contains("0.01"));
+            Assert.Equal("ka-GE", CultureInfo.CurrentCulture.Name);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = culture;
+        }
     }
 
     [Fact]

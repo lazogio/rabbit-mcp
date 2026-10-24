@@ -3,6 +3,7 @@
 
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 
@@ -24,7 +25,20 @@ public static class ContractValidator
             return errors;
         }
 
-        ValidateObject(instance, path: "", errors, new HashSet<object>(ReferenceEqualityComparer.Instance));
+        // Attributes such as [Range(typeof(decimal), "0.01", "1000")] parse their limits with the current
+        // culture, which throws on comma-decimal locales (ka-GE, de-DE). Contract DLLs are external, so
+        // validate under the invariant culture instead of relying on ParseLimitsInInvariantCulture.
+        var culture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        try
+        {
+            ValidateObject(instance, path: "", errors, new HashSet<object>(ReferenceEqualityComparer.Instance));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = culture;
+        }
+
         return errors;
     }
 

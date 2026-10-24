@@ -1,6 +1,14 @@
 # Bugs (newest first)
 
-Next ID: BUG-028
+Next ID: BUG-029
+
+### BUG-028 Decimal [Range] crashed validation on comma-decimal locales — fixed (2026-10-24, branch fix/validator-invariant-culture)
+- Symptom (local unit tests, macOS region Georgia): 9 failures, `0.01 is not a valid value for Decimal`; CI (invariant/en) green.
+- Root cause: `[Range(typeof(decimal), "0.01", …)]` parses its string limits with CurrentCulture; ka-GE uses ',' so
+  `ContractValidator.Validate` threw for every contract with a decimal range (server too, not only tests).
+- Fix: `ContractValidator.Validate` runs under `CultureInfo.InvariantCulture` (restored in finally) — works for
+  external contract DLLs without `ParseLimitsInInvariantCulture`. Guard: `Decimal_range_limits_parse_under_a_comma_decimal_culture`.
+- Lesson: CI runs one culture only; run tests under a comma-decimal culture when touching parsing/validation.
 
 ### BUG-027 Schema bounds written in YAML were ignored — fixed before merge (2026-10-18, commit e06c536)
 - Symptom (CI unit test): `quantity: 0` passed `minimum: 1` for the warehouse.yaml contract.
