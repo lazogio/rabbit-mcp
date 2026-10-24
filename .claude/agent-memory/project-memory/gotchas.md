@@ -22,6 +22,8 @@
   request parked in a DLQ does not expire again when republished.
 
 ## C# / tests
+- `RangeAttribute(typeof(decimal), "0.01", …)` parses limits with CurrentCulture (throws under ka-GE, de-DE);
+  `ContractValidator` therefore validates under InvariantCulture. The owner's Mac runs with region Georgia.
 - `JsonValue.TryGetValue<T>` succeeds only for the stored CLR type (a `JsonValue.Create(long)` is not a decimal);
   for numbers from mixed sources use `GetValueKind()` + the JSON text.
 - MCP C# SDK: `Tool.InputSchema` (ProtocolTool) is settable — a generated tool's schema can be replaced after `Create`.
