@@ -8,6 +8,7 @@ The user writes in Georgian: answer in Georgian, keep code, identifiers, commit 
 code comments in English. Documentation is bilingual: `README.md`, `CONTRIBUTING.md`, `samples/Shop/README.md` in
 English, the same content in Georgian in `*.ka.md` — always change both. README = users (install, tools, configuration,
 security); CONTRIBUTING = maintainers (build, tests, CI, release, agents) — keep maintainer material out of the README.
+Keep the README short (decided 2026-10-24): one line per tool/option, details belong in tool descriptions and samples.
 
 ## Commands
 
