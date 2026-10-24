@@ -79,7 +79,7 @@ def emailed(order_id, kind):
     """The shop published OrderConfirmed/OrderCancelled (outbox) and its notification consumer e-mailed the customer."""
     order = eventually(f"{kind.lower()} e-mail for {order_id[:8]}", lambda: (s := status_of(order_id))
                        and any(f"{kind} e-mail sent" in h for h in s["history"]) and s)
-    step(f"  event → customer-notifications: {next(h for h in order['history'] if "e-mail sent" in h).split("Z ", 1)[-1]}")
+    step(f"  event → customer-notifications: {next(h for h in order['history'] if 'e-mail sent' in h).split('Z ', 1)[-1]}")
 
 
 def ready(probe):
