@@ -38,7 +38,14 @@ public sealed record ContractInfo(
 
 public sealed record ContractList(
     IReadOnlyList<ContractInfo> Contracts,
-    [property: Description("Whether publish_* and request_* tools are enabled on this server.")] bool PublishEnabled);
+    [property: Description("Whether publish_* and request_* tools are enabled on this server.")] bool PublishEnabled)
+{
+    [Description("How many contracts matched nameContains (may be more than returned).")]
+    public int Matched { get; init; }
+
+    [Description("True when more contracts matched than were returned: narrow with nameContains or raise limit.")]
+    public bool Truncated { get; init; }
+}
 
 public sealed record ContractValidation(
     string Contract,
@@ -230,7 +237,11 @@ public sealed record ContractConsumersReport(
     IReadOnlyList<ContractConsumers> Contracts,
     int Ok,
     [property: Description("Contracts whose status is not ok.")] int WithProblems,
-    string Note);
+    string Note)
+{
+    [Description("True when not every matching contract was inspected (limit).")]
+    public bool Truncated { get; init; }
+}
 
 public sealed record FoundMessage(
     [property: Description("Queue the message is in.")] string Queue,

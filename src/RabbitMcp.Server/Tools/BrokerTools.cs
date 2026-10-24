@@ -27,18 +27,42 @@ public sealed class BrokerTools(
 {
     [McpServerTool(Name = "list_contracts", Title = "List message contracts",
         ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
-    [Description("Lists the message contracts this server knows: events (publish_*) and requests (request_*, with their possible replies), with version, wire format (masstransit or raw plain JSON), message type, exchange and routing key.")]
-    public ContractList ListContracts(ClaimsPrincipal? user = null)
+    [Description("Lists the message contracts this server knows: events (publish_*) and requests (request_*, with their possible replies), with version, wire format (masstransit or raw plain JSON), message type, exchange and routing key. With many contracts, narrow it with nameContains.")]
+    public ContractList ListContracts(
+        [Description("Case-insensitive part of the contract name, tool name, .NET type or message URN, e.g. 'order'.")] string? nameContains = null,
+        [Description("Maximum contracts to return, 1-1000 (default 200).")] int limit = 200,
+        ClaimsPrincipal? user = null)
     {
+        var (selected, matched) = Select(contracts.Contracts, nameContains, limit);
         var permissions = access.For(user);
         return new(
-            [.. contracts.Contracts.Select(c =>
+            [.. selected.Select(c =>
                 new ContractInfo(
                     c.Name, c.IsRequest ? "request" : "event", c.ToolName, c.Version, c.FormatName, c.MessageTypeUrn,
                     c.Exchange, c.RoutingKey.Length == 0 ? null : c.RoutingKey, c.Description, [.. c.Responses.Select(r => r.Name)],
                     Sendable: options.Value.EnablePublish && policy.IsAllowed(c) &&
                               permissions.Allows(c.IsRequest ? Permission.Request : Permission.Publish, c)))],
-            options.Value.EnablePublish);
+            options.Value.EnablePublish)
+        {
+            Matched = matched,
+            Truncated = matched > selected.Count,
+        };
+    }
+
+    public const int MaxContractLimit = 1000;
+
+    /// <summary>Contracts matching <paramref name="nameContains"/> (name, tool, type, URN), at most <paramref name="limit"/>.</summary>
+    internal static (IReadOnlyList<ContractDescriptor> Selected, int Matched) Select(
+        IEnumerable<ContractDescriptor> all, string? nameContains, int limit)
+    {
+        if (limit is < 1 or > MaxContractLimit)
+            throw new McpException($"limit must be between 1 and {MaxContractLimit}.");
+        var text = nameContains?.Trim();
+        var matching = string.IsNullOrEmpty(text)
+            ? all.ToList()
+            : all.Where(c => new[] { c.Name, c.ToolName, c.TypeName, c.MessageTypeUrn }
+                .Any(v => v?.Contains(text, StringComparison.OrdinalIgnoreCase) == true)).ToList();
+        return (matching.Take(limit).ToList(), matching.Count);
     }
 
     [McpServerTool(Name = "validate_message", Title = "Validate a message against a contract",

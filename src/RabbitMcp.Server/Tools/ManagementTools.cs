@@ -40,17 +40,25 @@ public sealed class ManagementTools(ManagementClient management, TopologyInspect
         "the contract's routing key on direct and topic exchanges; the default exchange reaches the queue it names), with " +
         "consumer counts and the backlog of each queue's _error and _skipped queue. Status shows problems at a glance: " +
         "no-exchange (nobody consumes or publishes it), no-queue (sending it now is unroutable), no-consumers (messages pile " +
-        "up / requests time out). Use before publishing, or to find where messages of a contract end up.")]
+        "up / requests time out). Use before publishing, or to find where messages of a contract end up. With many " +
+        "contracts, narrow it with nameContains.")]
     public async Task<ContractConsumersReport> ContractConsumersAsync(
         [Description("Contract name, e.g. OrderSubmitted. Empty: all contracts.")] string? contract = null,
         [Description("Only return contracts whose status is not ok.")] bool onlyProblems = false,
+        [Description("Case-insensitive part of the contract name, tool name, .NET type or URN, e.g. 'order'.")] string? nameContains = null,
+        [Description("Maximum contracts to inspect, 1-1000 (default 100); each costs a few management API calls.")] int limit = 100,
         CancellationToken cancellationToken = default)
     {
-        IEnumerable<ContractDescriptor> selected = contracts.Contracts;
+        IReadOnlyList<ContractDescriptor> selected;
+        var matched = 1;
         if (!string.IsNullOrWhiteSpace(contract))
         {
             selected = [contracts.FindByName(contract)
                 ?? throw new McpException($"Unknown contract '{contract}'. See list_contracts.")];
+        }
+        else
+        {
+            (selected, matched) = BrokerTools.Select(contracts.Contracts, nameContains, limit);
         }
 
         var results = new List<ContractConsumers>();
@@ -60,6 +68,10 @@ public sealed class ManagementTools(ManagementClient management, TopologyInspect
         var ok = results.Count(r => r.Status == "ok");
         return new ContractConsumersReport(
             [.. results.Where(r => !onlyProblems || r.Status != "ok")], ok, results.Count - ok,
-            "Consumer and message counts come from management statistics and can lag a few seconds.");
+            "Consumer and message counts come from management statistics and can lag a few seconds." +
+            (matched > selected.Count ? $" Only {selected.Count} of {matched} contracts were inspected: narrow with nameContains or raise limit." : ""))
+        {
+            Truncated = matched > selected.Count,
+        };
     }
 }
