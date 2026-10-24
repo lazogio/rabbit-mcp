@@ -9,6 +9,7 @@
 - Schema `2025-10-17` is not current (`2025-12-11`): publish only warns. The OCI entry needs a public GHCR package.
 - release.yml branch runs hit the artifact storage quota (all build/pack jobs red at upload-artifact): uploads are
   `continue-on-error` except on tags. On a tag the quota still breaks the release — delete old artifacts first.
+- ci.yml `Upload server binary` (main pushes only, so PRs stayed green) also hit the quota → `continue-on-error`.
 - Decision (owner): the first release is `v1.0.0`, not 0.1.0 — Version, server.json, README image tag `:1.0`.
 
 ### 2026-10-24 Agents consumer-author and producer-author
