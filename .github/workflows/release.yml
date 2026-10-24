@@ -103,7 +103,9 @@ jobs:
             out/*.zip
             out/*.tar.gz
 
+      # Branch runs only prove the packaging: a full artifact storage quota must not fail them (tags need the upload).
       - uses: actions/upload-artifact@v7
+        continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: package-${{ matrix.rid }}
           path: |
@@ -192,7 +194,9 @@ jobs:
             out/*.nupkg
             out/*.sbom.cdx.json
 
+      # Branch runs only prove the packaging: a full artifact storage quota must not fail them (tags need the upload).
       - uses: actions/upload-artifact@v7
+        continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: package-contracts-nupkg
           path: |

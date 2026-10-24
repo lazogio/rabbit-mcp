@@ -7,6 +7,8 @@
 - Bug fixed: server.json nuget `registryBaseUrl` was `https://api.nuget.org`; the registry accepts only
   `https://api.nuget.org/v3/index.json` (internal/validators/registries/nuget.go) — publish would have been rejected.
 - Schema `2025-10-17` is not current (`2025-12-11`): publish only warns. The OCI entry needs a public GHCR package.
+- release.yml branch runs hit the artifact storage quota (all build/pack jobs red at upload-artifact): uploads are
+  `continue-on-error` except on tags. On a tag the quota still breaks the release — delete old artifacts first.
 
 ### 2026-10-24 Agents consumer-author and producer-author
 - `.claude/agents/consumer-author.md` / `producer-author.md`: add consumers/producers to services using the Shop
