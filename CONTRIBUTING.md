@@ -42,13 +42,14 @@ samples/Shop                     runnable sample, walked through by CI (scripts/
 ## Releases
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
 A tag builds binaries for 5 platforms, the Docker image `ghcr.io/lazogio/rabbit-mcp`, the `RabbitMcp.Contracts` and
 `RabbitMcp.Server` (.NET tool) packages and a GitHub Release with attestations and an SBOM. Tags with `-` are
-prereleases. Packages go to nuget.org when the `NUGET_API_KEY` secret exists; afterwards `mcp-publisher publish` lists
-the server in the MCP registry (`src/RabbitMcp.Server/.mcp/server.json`).
+prereleases. Packages go to nuget.org when the `NUGET_API_KEY` secret exists; then the `mcp-registry` job lists the
+server in the MCP registry (`src/RabbitMcp.Server/.mcp/server.json`, GitHub OIDC, no secret). The registry checks that
+the GHCR image is public: before the first release switch the package to public, or re-run that job afterwards.
 
 ## Claude Code
 

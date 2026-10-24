@@ -1,6 +1,6 @@
 name: Release
 
-# A `v*` tag (e.g. v0.2.0) builds self-contained binaries for every platform and publishes a
+# A `v*` tag (e.g. v1.1.0) builds self-contained binaries for every platform and publishes a
 # GitHub Release. Pushing a change to this workflow file only builds (no release), so the
 # packaging is verified before the first tag is ever pushed.
 on:
@@ -103,7 +103,9 @@ jobs:
             out/*.zip
             out/*.tar.gz
 
+      # Branch runs only prove the packaging: a full artifact storage quota must not fail them (tags need the upload).
       - uses: actions/upload-artifact@v7
+        continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: package-${{ matrix.rid }}
           path: |
@@ -192,7 +194,9 @@ jobs:
             out/*.nupkg
             out/*.sbom.cdx.json
 
+      # Branch runs only prove the packaging: a full artifact storage quota must not fail them (tags need the upload).
       - uses: actions/upload-artifact@v7
+        continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: package-contracts-nupkg
           path: |
@@ -294,3 +298,59 @@ jobs:
           --api-key "$NUGET_API_KEY"
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
+
+  # Lists the release in the official MCP registry (https://registry.modelcontextprotocol.io) under
+  # io.github.lazogio/rabbit-mcp. GitHub OIDC proves the namespace (no secret). The registry checks that the NuGet
+  # package exists (README `mcp-name:`) and that the GHCR image is public with the server-name label — so it needs
+  # NUGET_API_KEY, and before the first release the GHCR package must be switched to public (or re-run this job).
+  mcp-registry:
+    name: MCP registry
+    needs: [release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v7
+        if: env.NUGET_API_KEY != ''
+
+      - name: Version in server.json
+        if: env.NUGET_API_KEY != ''
+        run: |
+          python3 - "${GITHUB_REF_NAME#v}" <<'PY'
+          import json, sys
+          path = "src/RabbitMcp.Server/.mcp/server.json"
+          manifest = json.load(open(path))
+          manifest["version"] = sys.argv[1]
+          for package in manifest["packages"]:
+              package["version"] = sys.argv[1]
+          json.dump(manifest, open(path, "w"), indent=2)
+          PY
+
+      - name: Install mcp-publisher
+        if: env.NUGET_API_KEY != ''
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          ./mcp-publisher --version || true
+
+      - name: Log in (GitHub OIDC)
+        if: env.NUGET_API_KEY != ''
+        run: ./mcp-publisher login github-oidc
+
+      # nuget.org indexes a freshly pushed package within minutes; the registry rejects the entry until it is there.
+      - name: Publish to the MCP registry
+        if: env.NUGET_API_KEY != ''
+        working-directory: src/RabbitMcp.Server/.mcp
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if ../../../mcp-publisher publish; then exit 0; fi
+            echo "Attempt $attempt failed (package not indexed yet?), retrying in 60 s"
+            sleep 60
+          done
+          exit 1
