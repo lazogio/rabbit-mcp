@@ -158,4 +158,4 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
 ## Phase 15 — Distribution ⏸ (when the owner decides to release)
 42. ⏸ First release `v0.1.0` (tag pushed by the owner): binaries, Docker image on GHCR (public package), NuGet.
 43. 🟡 Prepared: `RabbitMcp.Server` tool package (`dotnet tool install -g RabbitMcp.Server` / `dnx`, PackageType McpServer), built and smoke-tested by release.yml, pushed with the NuGet key. Live after #42.
-44. 🟡 Prepared: `src/RabbitMcp.Server/.mcp/server.json` (nuget + oci packages), `mcp-name` in README, image label. After #42 the owner runs `mcp-publisher login github` + `mcp-publisher publish` — was #33.
+44. 🟡 Prepared: `src/RabbitMcp.Server/.mcp/server.json` (nuget + oci packages), `mcp-name` in README, image label. release.yml's `mcp-registry` job publishes it on every tag (GitHub OIDC, needs NUGET_API_KEY and a public GHCR package) — was #33.

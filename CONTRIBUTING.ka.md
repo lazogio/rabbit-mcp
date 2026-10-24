@@ -48,8 +48,9 @@ git tag v0.2.0 && git push origin v0.2.0
 
 ტეგი აწყობს ბინარებს 5 პლატფორმისთვის, Docker image-ს `ghcr.io/lazogio/rabbit-mcp`, `RabbitMcp.Contracts` და
 `RabbitMcp.Server` (.NET tool) პაკეტებს და GitHub Release-ს attestation-ებით და SBOM-ით. `-`-იანი ტეგები prerelease-ია.
-პაკეტები nuget.org-ზე იტვირთება, თუ `NUGET_API_KEY` secret არსებობს; შემდეგ `mcp-publisher publish` სერვერს MCP
-registry-ში ამატებს (`src/RabbitMcp.Server/.mcp/server.json`).
+პაკეტები nuget.org-ზე იტვირთება, თუ `NUGET_API_KEY` secret არსებობს; შემდეგ `mcp-registry` job სერვერს MCP
+registry-ში ამატებს (`src/RabbitMcp.Server/.mcp/server.json`, GitHub OIDC, secret არ სჭირდება). Registry ამოწმებს, რომ
+GHCR image საჯაროა: პირველ რელიზამდე პაკეტი public გახადე, ან შემდეგ ეს job თავიდან გაუშვი.
 
 ## Claude Code
 
