@@ -43,7 +43,7 @@ samples/Shop                     გასაშვები ნიმუში,
 ## რელიზები
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
 ტეგი აწყობს ბინარებს 5 პლატფორმისთვის, Docker image-ს `ghcr.io/lazogio/rabbit-mcp`, `RabbitMcp.Contracts` და

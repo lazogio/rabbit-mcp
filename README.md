@@ -115,7 +115,7 @@ docker run -d -p 5080:5080 \
   -e RabbitMcp__Uri=amqp://user:pass@rabbit:5672/ \
   -e RabbitMcp__ApiKeys="team:$(openssl rand -base64 32)" \
   -e RabbitMcp__ContractAssemblies=/contracts/Billing.Contracts.dll -v ./contracts:/contracts:ro \
-  ghcr.io/lazogio/rabbit-mcp:0.1
+  ghcr.io/lazogio/rabbit-mcp:1.0
 ```
 
 **Roles** (HTTP only; without roles every caller may use every enabled tool):

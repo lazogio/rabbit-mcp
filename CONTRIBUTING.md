@@ -42,7 +42,7 @@ samples/Shop                     runnable sample, walked through by CI (scripts/
 ## Releases
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
 A tag builds binaries for 5 platforms, the Docker image `ghcr.io/lazogio/rabbit-mcp`, the `RabbitMcp.Contracts` and

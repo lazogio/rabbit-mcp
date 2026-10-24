@@ -1,6 +1,6 @@
 name: Release
 
-# A `v*` tag (e.g. v0.2.0) builds self-contained binaries for every platform and publishes a
+# A `v*` tag (e.g. v1.1.0) builds self-contained binaries for every platform and publishes a
 # GitHub Release. Pushing a change to this workflow file only builds (no release), so the
 # packaging is verified before the first tag is ever pushed.
 on:

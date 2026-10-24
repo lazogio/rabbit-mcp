@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.lazogio/rabbit-mcp",
   "description": "Contract-first MCP server for RabbitMQ: one typed tool per message contract (MassTransit, plain JSON or AsyncAPI), safe error-queue recovery, audit and roles.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "repository": {
     "url": "https://github.com/lazogio/rabbit-mcp",
     "source": "github"
@@ -12,7 +12,7 @@
       "registryType": "nuget",
       "registryBaseUrl": "https://api.nuget.org/v3/index.json",
       "identifier": "RabbitMcp.Server",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "transport": {
         "type": "stdio"
       },
@@ -59,7 +59,7 @@
     {
       "registryType": "oci",
       "identifier": "ghcr.io/lazogio/rabbit-mcp",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"
