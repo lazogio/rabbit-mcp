@@ -1,5 +1,18 @@
 # Changes and decisions (newest first)
 
+### 2026-10-24 Shop sample on PostgreSQL (sample/shop-postgres)
+- Shop.Service: EF Core 10 + Npgsql 10.0.0 + MassTransit.EntityFrameworkCore 8.5.10 (consumer outbox + inbox via
+  AddConfigureEndpointsCallback, bus outbox for ApprovalWorker). Catalog with stock (xmin row version; only
+  DbUpdateConcurrencyException is retried), orders/lines/history, Emails table. Schema via EnsureCreated + seed in
+  `Database.InitializeAsync` before host.Run.
+- Unknown SKU = permanent failure ("Product X no longer exists in the catalog."), FLAKY-* = transient (Warehouse).
+  VASE-01 has stock 1 → out-of-stock cancellation. Shop publishes OrderConfirmed/OrderCancelled (contracts, but
+  PublishDeny in compose); CustomerNotificationsConsumer (queue customer-notifications) writes history "… e-mail sent".
+- ApprovalWorker polls AwaitingApproval orders (ApprovalRequested flag reset on start) and uses
+  `IBus.CreateRequestClient` — a scoped request client would go through the bus outbox and never leave without SaveChanges.
+- OrderStatus gained `History`; sample-e2e checks events, e-mails and out-of-stock. CI: test-result artifact uploads are
+  continue-on-error (the repo hit its artifact storage quota on 2026-10-24).
+
 ### 2026-10-18 Phase 15 prepared — distribution without a release (phase-15/prepare-distribution)
 - `RabbitMcp.Server` tool package: csproj has PackageId/ToolCommandName rabbit-mcp/PackageType McpServer/readme +
   `.mcp/server.json`; `PackAsTool` only on the release pack command (`-p:PackAsTool=true`) so the self-contained

@@ -42,7 +42,7 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
 | `src/RabbitMcp.Server/Tools` | MCP tools and their result records (`ToolResults.cs` = outputSchemas); `OperatorPrompts` (MCP prompts); `ContractResources` (`contract://<Name>`) |
 | `tests/RabbitMcp.Tests` | xUnit unit tests, no broker needed |
 | `tests/RabbitMcp.ExternalContracts` | a user-style contracts DLL, loaded at runtime by loader tests and smoke tests |
-| `samples/Shop` | runnable sample (contracts, MassTransit service + a plain RabbitMQ.Client shipping desk, compose); CI walks it with `scripts/sample-e2e.py` — keep it working when tools change |
+| `samples/Shop` | runnable sample (contracts, MassTransit service on PostgreSQL with EF Core outbox/inbox, its own events + a notification consumer, a plain RabbitMQ.Client shipping desk, compose); CI walks it with `scripts/sample-e2e.py` — keep it working when tools change |
 | `tests/RabbitMcp.IntegrationTests` | end-to-end against real RabbitMQ + MassTransit v8 (`BrokerFixture`); test-only contracts in `TestContracts.cs` |
 
 ## Conventions (must not break)

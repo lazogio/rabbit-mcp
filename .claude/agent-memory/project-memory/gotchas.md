@@ -120,3 +120,8 @@
 - Republish that consumes with `ack_requeue_false` before publishing → message lost if publish fails.
 - Management API `/get` with `truncate: 50000` used for republish → large bodies republished truncated.
 - Untyped `publish_message(exchange, routingKey, payload: string)` → no contract validation.
+
+- MassTransit bus outbox (`UseBusOutbox`) replaces scoped IPublishEndpoint/ISendEndpointProvider: anything resolved from
+  a scope (also a scoped request client) only goes out after that scope's DbContext.SaveChanges. Send requests that must
+  leave now from `IBus` (`bus.CreateRequestClient<T>()`).
+- GitHub artifact storage quota full → `upload-artifact` fails the job; uploads of test results are continue-on-error.
