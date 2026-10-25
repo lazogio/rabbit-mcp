@@ -1,5 +1,13 @@
 # Changes and decisions (newest first)
 
+### 2026-10-25 v1.0.1: MCP registry rejected the OCI entry (fix/server-json-oci-version)
+- 400 `OCI packages must not have 'version' field - include version in 'identifier'` (internal/validators/registries/
+  oci.go also forbids registryBaseUrl/fileSha256, needs a public image with the server-name label). The registry's
+  `/v0/validate` endpoint does NOT run these package checks (it called the broken manifest valid).
+- `scripts/stamp-server-json.py VERSION` (used by both release.yml jobs) writes the version: nuget → "version",
+  oci → identifier tag `ghcr.io/lazogio/rabbit-mcp:VERSION`, no "version"; and fails on description > 100.
+- nuget.org needed ~11 min to index 1.0.1 (the 10 × 60 s retry loop ran out one minute early).
+
 ### 2026-10-25 Release button (release/run-workflow-button)
 - Owner tagged `V1.0.1` and `v.1.0.1` by hand: the first started nothing (filter `v*` is case-sensitive), the second
   started a run with version `.1.0.1` (cancelled). release.yml now: tag filter `v[0-9]+.[0-9]+.[0-9]+` (+ `-*`),
