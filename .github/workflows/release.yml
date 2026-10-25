@@ -364,16 +364,18 @@ jobs:
             | tar xz mcp-publisher
           ./mcp-publisher --version || true
 
-      - name: Log in (GitHub OIDC)
-        run: ./mcp-publisher login github-oidc
-
-      # nuget.org indexes a freshly pushed package within minutes; the registry rejects the entry until it is there.
+      # nuget.org can take 10+ minutes to index a freshly pushed version and the registry rejects the entry until it is
+      # there. The registry token from `login` lives only a few minutes, so every attempt logs in again. Any other
+      # error (validation, ownership) is final and fails at once instead of retrying.
       - name: Publish to the MCP registry
         working-directory: src/RabbitMcp.Server/.mcp
         run: |
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            if ../../../mcp-publisher publish; then exit 0; fi
-            echo "Attempt $attempt failed (package not indexed yet?), retrying in 60 s"
+          for attempt in $(seq 1 25); do
+            ../../../mcp-publisher login github-oidc
+            if out=$(../../../mcp-publisher publish 2>&1); then echo "$out"; exit 0; fi
+            echo "$out"
+            if ! grep -q "does not exist in the registry" <<< "$out"; then exit 1; fi
+            echo "Attempt $attempt: package not indexed on nuget.org yet, retrying in 60 s"
             sleep 60
           done
           exit 1
