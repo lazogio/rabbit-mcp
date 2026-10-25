@@ -47,7 +47,7 @@ git tag v1.1.0 && git push origin v1.1.0
 
 A tag builds binaries for 5 platforms, the Docker image `ghcr.io/lazogio/rabbit-mcp`, the `RabbitMcp.Contracts` and
 `RabbitMcp.Server` (.NET tool) packages and a GitHub Release with attestations and an SBOM. Tags with `-` are
-prereleases. Packages go to nuget.org when the `NUGET_API_KEY` secret exists; then the `mcp-registry` job lists the
+prereleases. Packages go to nuget.org through Trusted Publishing (a nuget.org policy for `release.yml`, no API key); then the `mcp-registry` job lists the
 server in the MCP registry (`src/RabbitMcp.Server/.mcp/server.json`, GitHub OIDC, no secret). The registry checks that
 the GHCR image is public: before the first release switch the package to public, or re-run that job afterwards.
 

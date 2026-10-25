@@ -260,9 +260,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-    env:
-      # Optional repository secret; without it the package is only attached to the GitHub Release.
-      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      id-token: write      # nuget.org Trusted Publishing
 
     steps:
       - uses: actions/download-artifact@v8
@@ -290,9 +288,18 @@ jobs:
               $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)
           fi
 
+      # nuget.org Trusted Publishing: the GitHub OIDC token is exchanged for a short-lived API key (no secret). The
+      # policy on nuget.org (owner lazogio, repository rabbit-mcp, workflow release.yml, RabbitMcp.*) must exist.
+      - name: Log in to nuget.org (Trusted Publishing)
+        id: nuget
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER || github.repository_owner }}
+
       # Both packages: RabbitMcp.Contracts and the RabbitMcp.Server tool (an MCP server package on nuget.org).
       - name: Publish the packages to nuget.org
-        if: env.NUGET_API_KEY != ''
+        env:
+          NUGET_API_KEY: ${{ steps.nuget.outputs.NUGET_API_KEY }}
         run: >
           dotnet nuget push dist/*.nupkg
           --api-key "$NUGET_API_KEY"
@@ -301,8 +308,8 @@ jobs:
 
   # Lists the release in the official MCP registry (https://registry.modelcontextprotocol.io) under
   # io.github.lazogio/rabbit-mcp. GitHub OIDC proves the namespace (no secret). The registry checks that the NuGet
-  # package exists (README `mcp-name:`) and that the GHCR image is public with the server-name label — so it needs
-  # NUGET_API_KEY, and before the first release the GHCR package must be switched to public (or re-run this job).
+  # package exists (README `mcp-name:`) and that the GHCR image is public with the server-name label — before the
+  # first release the GHCR package must be switched to public (or re-run this job).
   mcp-registry:
     name: MCP registry
     needs: [release]
@@ -312,15 +319,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
     steps:
       - uses: actions/checkout@v7
-        if: env.NUGET_API_KEY != ''
 
       - name: Version in server.json
-        if: env.NUGET_API_KEY != ''
         run: |
           python3 - "${GITHUB_REF_NAME#v}" <<'PY'
           import json, sys
@@ -333,19 +336,16 @@ jobs:
           PY
 
       - name: Install mcp-publisher
-        if: env.NUGET_API_KEY != ''
         run: |
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
             | tar xz mcp-publisher
           ./mcp-publisher --version || true
 
       - name: Log in (GitHub OIDC)
-        if: env.NUGET_API_KEY != ''
         run: ./mcp-publisher login github-oidc
 
       # nuget.org indexes a freshly pushed package within minutes; the registry rejects the entry until it is there.
       - name: Publish to the MCP registry
-        if: env.NUGET_API_KEY != ''
         working-directory: src/RabbitMcp.Server/.mcp
         run: |
           for attempt in 1 2 3 4 5 6 7 8 9 10; do

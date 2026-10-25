@@ -1,5 +1,11 @@
 # Changes and decisions (newest first)
 
+### 2026-10-25 nuget.org Trusted Publishing (release/nuget-trusted-publishing)
+- Owner created a nuget.org Trusted Publishing policy (owner lazogio, repo rabbit-mcp, workflow release.yml,
+  RabbitMcp.*) instead of an API key. release job: `id-token: write`, `NuGet/login@v1` (user = vars.NUGET_USER or
+  the repository owner) → short-lived key for `dotnet nuget push`. NUGET_API_KEY secret and its gates are gone; the
+  mcp-registry job always runs on tags.
+
 ### 2026-10-24 MCP registry publishing automated (release/mcp-registry-publish)
 - release.yml job `mcp-registry` (after `release`, tags only, skipped without NUGET_API_KEY): stamps the version into
   server.json, installs mcp-publisher (latest release), `login github-oidc` (id-token: write), `publish` with 10
