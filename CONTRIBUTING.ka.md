@@ -42,6 +42,10 @@ samples/Shop                     გასაშვები ნიმუში,
 
 ## რელიზები
 
+**Actions → Release → Run workflow** (branch `main`), აირჩიე `patch`, `minor` ან `major`: workflow ბოლო `vX.Y.Z`
+ტეგს იღებს, შემდეგს ქმნის და აქვეყნებს. ხელით ტეგიც მუშაობს, ოღონდ მხოლოდ `v1.2.3` (ან `v1.2.3-rc.1`) ფორმით;
+`V1.2.3` ან `v.1.2.3` არაფერს უშვებს.
+
 ```bash
 git tag v1.1.0 && git push origin v1.1.0
 ```

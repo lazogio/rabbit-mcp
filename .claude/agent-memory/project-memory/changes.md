@@ -1,5 +1,12 @@
 # Changes and decisions (newest first)
 
+### 2026-10-25 Release button (release/run-workflow-button)
+- Owner tagged `V1.0.1` and `v.1.0.1` by hand: the first started nothing (filter `v*` is case-sensitive), the second
+  started a run with version `.1.0.1` (cancelled). release.yml now: tag filter `v[0-9]+.[0-9]+.[0-9]+` (+ `-*`),
+  workflow_dispatch input bump=patch|minor|major; new `version` job (main only) computes the next tag from the latest
+  vX.Y.Z, pushes it with GITHUB_TOKEN (starts no second run) and every job uses needs.version.outputs
+  (version/tag/release) instead of github.ref. Docker semver tags take `value=` the tag.
+
 ### 2026-10-25 v1.0.0: MCP registry rejected server.json (fix/server-json-description)
 - `mcp-publisher publish` → 422 `body.description: expected length <= 100` (ours was ~150). Shortened; the pack job now
   asserts the length so a branch run catches it. The v1.0.0 tag carries the old manifest: publish 1.0.0 from main by
