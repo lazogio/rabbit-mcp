@@ -48,7 +48,7 @@ Status: ⬜ todo · 🔄 in progress · ✅ done. Each phase is developed on its
     others stand by and take over (MCP has no reliable way to wake the model, so long poll instead of notifications).
 17. ✅ `contract_consumers`: bindings from each contract exchange down to queues, consumers, `_error`/`_skipped` backlog.
 18. ✅ `rabbit-mcp contracts diff OLD.dll NEW.dll`: wire-compatibility check for service CI (exit 1 on breaking).
-19. ✅ Docker image `ghcr.io/lazogio/rabbit-mcp` (amd64/arm64) and nuget.org publishing (when `NUGET_API_KEY` exists).
+19. ✅ Docker image `ghcr.io/lazogio/rabbit-mcp` (amd64/arm64) and nuget.org publishing (Trusted Publishing, no API key).
 20. ⏸ Scheduled/delayed messages — not done: needs the rabbitmq_delayed_message_exchange plugin (not in standard
     RabbitMQ images) or an external scheduler (Quartz/Hangfire); revisit if a broker with the plugin is used.
 
@@ -158,4 +158,4 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
 ## Phase 15 — Distribution ⏸ (when the owner decides to release)
 42. ⏸ First release `v1.0.0` (tag pushed by the owner): binaries, Docker image on GHCR (public package), NuGet.
 43. 🟡 Prepared: `RabbitMcp.Server` tool package (`dotnet tool install -g RabbitMcp.Server` / `dnx`, PackageType McpServer), built and smoke-tested by release.yml, pushed with the NuGet key. Live after #42.
-44. 🟡 Prepared: `src/RabbitMcp.Server/.mcp/server.json` (nuget + oci packages), `mcp-name` in README, image label. release.yml's `mcp-registry` job publishes it on every tag (GitHub OIDC, needs NUGET_API_KEY and a public GHCR package) — was #33.
+44. 🟡 Prepared: `src/RabbitMcp.Server/.mcp/server.json` (nuget + oci packages), `mcp-name` in README, image label. release.yml's `mcp-registry` job publishes it on every tag (GitHub OIDC, needs a public GHCR package) — was #33.
