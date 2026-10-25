@@ -21,7 +21,7 @@ docker compose up -d                                     # local RabbitMQ 4 (567
 scripts/smoke-test.sh out/rabbit-mcp                     # MCP stdio session against the published binary
 docker build -t rabbit-mcp . && scripts/smoke-test-http.sh docker:rabbit-mcp   # container (HTTP transport)
 out/rabbit-mcp contracts diff OLD.dll NEW.dll             # wire-compatibility check (CLI, not MCP)
-git tag vX.Y.Z && git push origin vX.Y.Z                 # release: binaries for 5 platforms + GitHub Release
+# release (owner only): Actions → Release → Run workflow (patch/minor/major) or push a vX.Y.Z tag
 ```
 
 CI (`.github/workflows/ci.yml`) builds and tests every push (any branch) and PR, with a separate

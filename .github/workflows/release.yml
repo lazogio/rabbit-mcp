@@ -1,21 +1,81 @@
 name: Release
 
-# A `v*` tag (e.g. v1.1.0) builds self-contained binaries for every platform and publishes a
-# GitHub Release. Pushing a change to this workflow file only builds (no release), so the
-# packaging is verified before the first tag is ever pushed.
+# Release: Actions → Release → Run workflow (on main), pick patch/minor/major. The `version` job takes the latest
+# vX.Y.Z tag, creates the next one and every job below publishes it (binaries, image, NuGet, GitHub Release, MCP
+# registry). Pushing a vX.Y.Z (or vX.Y.Z-pre) tag by hand works too; other tags (V1.0.1, v.1.0.1) are ignored.
+# Pushing a change to this workflow file only builds (no release), so the packaging is verified first.
 on:
   push:
-    tags: ['v*']
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*']
     branches: ['**']
     paths: ['.github/workflows/release.yml']
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Next version from the latest vX.Y.Z tag
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 permissions:
   contents: read
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write      # pushes the new tag (Run workflow only)
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A tag pushed with GITHUB_TOKEN starts no second run: this run publishes it.
+      - name: Version
+        id: version
+        shell: bash
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+              echo "::error::Run the release from main (this run is on $GITHUB_REF_NAME)."
+              exit 1
+            fi
+            latest=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            major=${major:-0} minor=${minor:-0} patch=${patch:-0}
+            case "$BUMP" in
+              major) major=$((major + 1)) minor=0 patch=0 ;;
+              minor) minor=$((minor + 1)) patch=0 ;;
+              *)     patch=$((patch + 1)) ;;
+            esac
+            tag="v$major.$minor.$patch"
+            echo "Latest ${latest:-none} → $tag ($BUMP) on $GITHUB_SHA"
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "refs/tags/$tag"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build ${{ matrix.rid }}
+    needs: version
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -38,16 +98,6 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Version
-        id: version
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=0.0.0-ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-          fi
-
       # Self-contained single file: users need no .NET runtime. Not trimmed: the MCP SDK and
       # System.Text.Json rely on reflection over the contract types.
       - name: Publish
@@ -57,7 +107,7 @@ jobs:
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:DebugType=none
-          -p:Version=${{ steps.version.outputs.version }}
+          -p:Version=${{ needs.version.outputs.version }}
           -o out/rabbit-mcp
 
       - name: MCP smoke test (single-file binary)
@@ -83,7 +133,7 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          name="rabbit-mcp-${{ steps.version.outputs.version }}-${{ matrix.rid }}"
+          name="rabbit-mcp-${{ needs.version.outputs.version }}-${{ matrix.rid }}"
           cp README.md README.ka.md LICENSE out/rabbit-mcp/
           cd out
           if [[ "${{ matrix.rid }}" == win-* ]]; then
@@ -96,7 +146,7 @@ jobs:
       # Signed SLSA provenance: `gh attestation verify <file> --repo lazogio/rabbit-mcp` proves which workflow and
       # commit built the archive.
       - name: Attest build provenance
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: needs.version.outputs.release == 'true'
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
@@ -105,7 +155,7 @@ jobs:
 
       # Branch runs only prove the packaging: a full artifact storage quota must not fail them (tags need the upload).
       - uses: actions/upload-artifact@v7
-        continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        continue-on-error: ${{ needs.version.outputs.release != 'true' }}
         with:
           name: package-${{ matrix.rid }}
           path: |
@@ -116,6 +166,7 @@ jobs:
 
   pack:
     name: Pack RabbitMcp.Contracts + SBOM
+    needs: version
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -129,20 +180,13 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Version
-        id: version
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-ci.${GITHUB_RUN_NUMBER}"; fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
       - name: Pack
-        run: dotnet pack src/RabbitMcp.Contracts -c Release -p:Version=${{ steps.version.outputs.version }} -o out
+        run: dotnet pack src/RabbitMcp.Contracts -c Release -p:Version=${{ needs.version.outputs.version }} -o out
 
       # The server as a .NET tool / NuGet MCP server package; its .mcp/server.json carries the release version.
       - name: Pack the server tool (RabbitMcp.Server)
         run: |
-          python3 - "${{ steps.version.outputs.version }}" <<'PY'
+          python3 - "${{ needs.version.outputs.version }}" <<'PY'
           import json, sys
           path = "src/RabbitMcp.Server/.mcp/server.json"
           manifest = json.load(open(path))
@@ -153,12 +197,12 @@ jobs:
               package["version"] = sys.argv[1]
           json.dump(manifest, open(path, "w"), indent=2)
           PY
-          dotnet pack src/RabbitMcp.Server -c Release -p:PackAsTool=true -p:Version=${{ steps.version.outputs.version }} -o out
+          dotnet pack src/RabbitMcp.Server -c Release -p:PackAsTool=true -p:Version=${{ needs.version.outputs.version }} -o out
 
       # Installed exactly as a user would, then driven over MCP stdio.
       - name: MCP smoke test (dotnet tool)
         run: |
-          dotnet tool install RabbitMcp.Server --tool-path tool --add-source out --version ${{ steps.version.outputs.version }}
+          dotnet tool install RabbitMcp.Server --tool-path tool --add-source out --version ${{ needs.version.outputs.version }}
           unzip -l out/RabbitMcp.Server.*.nupkg | grep -q ".mcp/server.json"
           unzip -p out/RabbitMcp.Server.*.nupkg '*.nuspec' | grep -q 'McpServer'
           scripts/smoke-test.sh tool/rabbit-mcp
@@ -166,14 +210,14 @@ jobs:
       # The SBOM lists every NuGet package inside the server (read from deps.json of a framework-dependent publish;
       # the single-file binaries contain the same packages).
       - name: Publish for the SBOM
-        run: dotnet publish src/RabbitMcp.Server -c Release -p:Version=${{ steps.version.outputs.version }} -o sbom-input
+        run: dotnet publish src/RabbitMcp.Server -c Release -p:Version=${{ needs.version.outputs.version }} -o sbom-input
 
       - name: SBOM (CycloneDX)
         uses: anchore/sbom-action@v0
         with:
           path: sbom-input
           format: cyclonedx-json
-          output-file: out/rabbit-mcp-${{ steps.version.outputs.version }}.sbom.cdx.json
+          output-file: out/rabbit-mcp-${{ needs.version.outputs.version }}.sbom.cdx.json
           upload-artifact: false
           upload-release-assets: false
 
@@ -189,7 +233,7 @@ jobs:
           PY
 
       - name: Attest build provenance
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: needs.version.outputs.release == 'true'
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
@@ -198,7 +242,7 @@ jobs:
 
       # Branch runs only prove the packaging: a full artifact storage quota must not fail them (tags need the upload).
       - uses: actions/upload-artifact@v7
-        continue-on-error: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        continue-on-error: ${{ needs.version.outputs.release != 'true' }}
         with:
           name: package-contracts-nupkg
           path: |
@@ -210,6 +254,7 @@ jobs:
   # Multi-arch image; pushed to ghcr.io only for tags (branch runs prove it builds for both platforms).
   docker:
     name: Docker image (ghcr.io)
+    needs: version
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -218,17 +263,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Version
-        id: version
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-ci.${GITHUB_RUN_NUMBER}"; fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: needs.version.outputs.release == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -239,26 +277,26 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.tag }}
             type=sha
 
       - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          push: ${{ needs.version.outputs.release == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ steps.version.outputs.version }}
+          build-args: VERSION=${{ needs.version.outputs.version }}
           # Image SBOM and SLSA provenance, attached to the image in the registry (tags only: nothing is pushed otherwise).
-          sbom: ${{ startsWith(github.ref, 'refs/tags/v') }}
-          provenance: ${{ startsWith(github.ref, 'refs/tags/v') && 'mode=max' || 'false' }}
+          sbom: ${{ needs.version.outputs.release == 'true' }}
+          provenance: ${{ needs.version.outputs.release == 'true' && 'mode=max' || 'false' }}
 
   release:
     name: GitHub Release
-    needs: [build, pack, docker]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, build, pack, docker]
+    if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -280,14 +318,15 @@ jobs:
       - name: Create release (or attach to an existing one)
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
         shell: bash
         run: |
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
-              --title "$GITHUB_REF_NAME" --generate-notes \
-              $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" --generate-notes \
+              $([[ "$TAG" == *-* ]] && echo --prerelease)
           fi
 
       # nuget.org Trusted Publishing: the GitHub OIDC token is exchanged for a short-lived API key (no secret). The
@@ -314,8 +353,8 @@ jobs:
   # first release the GHCR package must be switched to public (or re-run this job).
   mcp-registry:
     name: MCP registry
-    needs: [release]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, release]
+    if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -327,7 +366,7 @@ jobs:
 
       - name: Version in server.json
         run: |
-          python3 - "${GITHUB_REF_NAME#v}" <<'PY'
+          python3 - "${{ needs.version.outputs.version }}" <<'PY'
           import json, sys
           path = "src/RabbitMcp.Server/.mcp/server.json"
           manifest = json.load(open(path))

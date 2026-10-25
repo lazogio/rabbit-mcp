@@ -41,11 +41,15 @@ samples/Shop                     runnable sample, walked through by CI (scripts/
 
 ## Releases
 
+**Actions → Release → Run workflow** (branch `main`), pick `patch`, `minor` or `major`: the workflow takes the latest
+`vX.Y.Z` tag, creates the next one and publishes it. A hand-pushed tag works too, but only in the form `v1.2.3` (or
+`v1.2.3-rc.1`); `V1.2.3` or `v.1.2.3` start nothing.
+
 ```bash
 git tag v1.1.0 && git push origin v1.1.0
 ```
 
-A tag builds binaries for 5 platforms, the Docker image `ghcr.io/lazogio/rabbit-mcp`, the `RabbitMcp.Contracts` and
+A release builds binaries for 5 platforms, the Docker image `ghcr.io/lazogio/rabbit-mcp`, the `RabbitMcp.Contracts` and
 `RabbitMcp.Server` (.NET tool) packages and a GitHub Release with attestations and an SBOM. Tags with `-` are
 prereleases. Packages go to nuget.org through Trusted Publishing (a nuget.org policy for `release.yml`, no API key); then the `mcp-registry` job lists the
 server in the MCP registry (`src/RabbitMcp.Server/.mcp/server.json`, GitHub OIDC, no secret). The registry checks that
