@@ -1,5 +1,11 @@
 # Changes and decisions (newest first)
 
+### 2026-10-25 v1.0.2: registry token expired during the retry loop (fix/mcp-registry-relogin)
+- The Run workflow button worked (v1.0.2 created and built). mcp-registry: `login github-oidc` ran once, then
+  attempt 8 got 401 "token is expired" — the registry JWT lives only minutes. Now every attempt logs in again, up to
+  25 attempts (nuget.org needed ~11 min for 1.0.1), and only "does not exist in the registry" is retried; any other
+  error fails at once.
+
 ### 2026-10-25 v1.0.1: MCP registry rejected the OCI entry (fix/server-json-oci-version)
 - 400 `OCI packages must not have 'version' field - include version in 'identifier'` (internal/validators/registries/
   oci.go also forbids registryBaseUrl/fileSha256, needs a public image with the server-name label). The registry's
