@@ -1,5 +1,10 @@
 # Changes and decisions (newest first)
 
+### 2026-10-25 v1.0.0: MCP registry rejected server.json (fix/server-json-description)
+- `mcp-publisher publish` → 422 `body.description: expected length <= 100` (ours was ~150). Shortened; the pack job now
+  asserts the length so a branch run catches it. The v1.0.0 tag carries the old manifest: publish 1.0.0 from main by
+  hand (`mcp-publisher login github` + `publish` in src/RabbitMcp.Server/.mcp) or ship 1.0.1.
+
 ### 2026-10-25 nuget.org Trusted Publishing (release/nuget-trusted-publishing)
 - Owner created a nuget.org Trusted Publishing policy (owner lazogio, repo rabbit-mcp, workflow release.yml,
   RabbitMcp.*) instead of an API key. release job: `id-token: write`, `NuGet/login@v1` (user = vars.NUGET_USER or

@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.lazogio/rabbit-mcp",
-  "description": "Contract-first MCP server for RabbitMQ: one typed tool per message contract (MassTransit, plain JSON or AsyncAPI), safe error-queue recovery, audit and roles.",
+  "description": "Contract-first MCP server for RabbitMQ: one typed tool per message contract, safe error recovery.",
   "version": "1.0.0",
   "repository": {
     "url": "https://github.com/lazogio/rabbit-mcp",
