@@ -37,6 +37,7 @@ Stop: `docker compose -f samples/Shop/docker-compose.yml down -v`.
 | "Place an order: VASE-01, 3 pieces, 35." | only one in stock → `Cancelled`, cancellation e-mail |
 | "Shipping for 2 kg to Georgia?" | `request_get_shipping_quote` → the plain RabbitMQ desk answers over RPC |
 | "What was moved to a dead-letter queue in the last hour?" | `recent_activity` from the audit |
+| "Keep a copy of every new order in shop-audit-orders." | `declare_queue` with the `order-copy` template: a queue bound to `Shop.Contracts:OrderPlaced` |
 
 ## How it is built
 
@@ -48,5 +49,7 @@ Stop: `docker compose -f samples/Shop/docker-compose.yml down -v`.
   production service would use migrations.
 - **`PublishDeny=ApproveLargeOrder;OrderConfirmed;OrderCancelled`:** the model answers approvals but cannot send one
   or fake the shop's events.
+- **Topology:** `TopologyAllow=shop-audit-*` limits what the model may create; the `order-copy` template fixes the
+  binding, so the model only picks a name.
 
 CI walks through the same scenario: `scripts/sample-e2e.py`.

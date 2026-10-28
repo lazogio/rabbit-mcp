@@ -37,6 +37,7 @@ RabbitMQ UI: http://localhost:15672 (`shop`/`shop`). ბაზა: `psql postgre
 | „გააფორმე შეკვეთა: VASE-01, 3 ცალი, 35.“ | მარაგში ერთია → `Cancelled`, გაუქმების e-mail |
 | „რა ღირს 2 კგ-ის გაგზავნა საქართველოში?“ | `request_get_shipping_quote` → უბრალო RabbitMQ სერვისი RPC-ით პასუხობს |
 | „რა გადავიდა dead-letter რიგში ბოლო საათში?“ | `recent_activity` audit-იდან |
+| „ყოველი ახალი შეკვეთის ასლი შეინახე shop-audit-orders-ში.“ | `declare_queue` `order-copy` შაბლონით: რიგი, რომელიც `Shop.Contracts:OrderPlaced`-ზეა მიბმული |
 
 ## როგორ არის აწყობილი
 
@@ -48,5 +49,7 @@ RabbitMQ UI: http://localhost:15672 (`shop`/`shop`). ბაზა: `psql postgre
   სერვისი migrations-ს გამოიყენებდა.
 - **`PublishDeny=ApproveLargeOrder;OrderConfirmed;OrderCancelled`:** მოდელი დასტურებს პასუხობს, მაგრამ თავად ვერც
   მოთხოვნას გააგზავნის და ვერც მაღაზიის event-ებს გააყალბებს.
+- **ტოპოლოგია:** `TopologyAllow=shop-audit-*` ზღუდავს, რისი შექმნა შეუძლია მოდელს; `order-copy` შაბლონი binding-ს
+  აფიქსირებს, ამიტომ მოდელი მხოლოდ სახელს ირჩევს.
 
 იგივე სცენარს CI გადის: `scripts/sample-e2e.py`.

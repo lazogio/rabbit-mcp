@@ -62,6 +62,10 @@ services:
       RabbitMcp__RespondTo: ApproveLargeOrder
       # ... but never sends them itself, nor fakes the shop's own events.
       RabbitMcp__PublishDeny: ApproveLargeOrder;OrderConfirmed;OrderCancelled
+      # declare_exchange / declare_queue: only shop-audit-* names, and a template for "a copy of every order".
+      RabbitMcp__EnableTopology: "true"
+      RabbitMcp__TopologyAllow: shop-audit-*
+      RabbitMcp__TopologyTemplates__order-copy: kind=queue;bind=Shop.Contracts:OrderPlaced
       RabbitMcp__ApiKeys: "demo:${SHOP_MCP_KEY:-shop-demo-key-change-me-0123456789abcdef}"
       # Audit as JSON Lines: recent_activity answers "who did what".
       RabbitMcp__AuditLogPath: /tmp/rabbit-mcp/audit.jsonl
