@@ -30,6 +30,8 @@ tests/                           unit, integration, a user-style contracts DLL
 samples/Shop                     runnable sample, walked through by CI (scripts/sample-e2e.py)
 ```
 
+Diagrams of the components, the request/response path and error recovery: [docs/architecture.md](docs/architecture.md).
+
 ## Rules
 
 - Documentation is bilingual: change `*.md` (English) and `*.ka.md` (Georgian) in the same pull request. Keep the
