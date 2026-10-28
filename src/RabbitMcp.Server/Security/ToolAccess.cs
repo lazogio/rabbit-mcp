@@ -19,7 +19,8 @@ public sealed record ToolRule(
     IReadOnlyList<ContractDescriptor> Contracts,
     string? QueueArgument = null,
     bool ByRequestId = false,
-    IReadOnlyList<string>? OverrideArguments = null);
+    IReadOnlyList<string>? OverrideArguments = null,
+    string QueueArgumentKind = "queue");
 
 /// <summary>
 /// Maps every tool to the permission it needs and decides, per caller, which tools are listed (tools/list) and
@@ -47,7 +48,8 @@ public sealed class ToolAccess(AccessControl control, ContractRegistry contracts
         ["resend_corrected"] = new(Permission.Republish, [], QueueArgument: "errorQueue"),
         // Patterns limit the name being created. A binding makes copies of another exchange's messages flow into it,
         // so choosing the source needs the permission without patterns (like targetExchange for republish).
-        ["declare_exchange"] = new(Permission.Topology, [], QueueArgument: "name", OverrideArguments: ["bindToExchange"]),
+        ["declare_exchange"] = new(Permission.Topology, [], QueueArgument: "name", OverrideArguments: ["bindToExchange"],
+            QueueArgumentKind: "exchange"),
         ["declare_queue"] = new(Permission.Topology, [], QueueArgument: "name", OverrideArguments: ["bindExchange"]),
         ["pending_requests"] = new(Permission.Respond, []),
         ["reject_request"] = new(Permission.Respond, [], ByRequestId: true),
@@ -101,7 +103,7 @@ public sealed class ToolAccess(AccessControl control, ContractRegistry contracts
 
         if (rule.QueueArgument is { } argument && Text(arguments, argument) is { } queue &&
             !user.AllowsQueue(rule.Permission, queue))
-            return Need($" on queue '{queue}'", null);
+            return Need($" on {rule.QueueArgumentKind} '{queue}'", null);
 
         if (rule.OverrideArguments?.FirstOrDefault(a => !string.IsNullOrWhiteSpace(Text(arguments, a))) is { } redirect &&
             !user.HasUnrestricted(rule.Permission))

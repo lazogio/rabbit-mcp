@@ -91,17 +91,34 @@ public sealed class TopologyPolicy
         if (!ExchangeTypes.Contains(kind))
             throw new McpException($"Unknown exchange type '{type}'. Use {string.Join(", ", ExchangeTypes)}.");
         var args = Arguments(arguments);
-
-        if (IsMassTransitExchange(name) && (kind != ExchangeType.Fanout || !durable || autoDelete || args.Count > 0))
-            throw new McpException(
-                $"'{name}' is the exchange of a MassTransit contract. MassTransit declares it as fanout, durable, " +
-                "not auto-delete and without arguments; any other settings make its services fail to start " +
-                "(406 PRECONDITION_FAILED). Call again with type=fanout, durable=true, autoDelete=false and no arguments.");
-
         var source = Source(bindToExchange, nameof(bindToExchange));
         if (source == name)
             throw new McpException("An exchange cannot be bound to itself.");
-        return new ExchangeSpec(name, kind, durable, autoDelete, args, source, routingKey ?? "");
+        var spec = new ExchangeSpec(name, kind, durable, autoDelete, args, source, routingKey ?? "");
+
+        if (IsMassTransitExchange(name))
+        {
+            RequireMassTransitSettings(spec, $"'{name}' is the exchange of a MassTransit contract");
+            if (source is not null)
+                throw new McpException(
+                    $"'{name}' is the exchange of a MassTransit contract: binding another exchange to it would deliver " +
+                    "foreign messages to its consumers. Create it without bindToExchange.");
+        }
+        return spec;
+    }
+
+    /// <summary>
+    /// MassTransit declares its exchanges fanout, durable, not auto-delete and without arguments; an exchange declared
+    /// differently makes its services fail to start (406 PRECONDITION_FAILED).
+    /// </summary>
+    /// <exception cref="McpException">The spec has other settings; <paramref name="why"/> says why it matters.</exception>
+    public static void RequireMassTransitSettings(ExchangeSpec spec, string why)
+    {
+        if (spec.Type != ExchangeType.Fanout || !spec.Durable || spec.AutoDelete || spec.Arguments.Count > 0)
+            throw new McpException(
+                $"{why}. MassTransit declares such exchanges as fanout, durable, not auto-delete and without arguments; " +
+                "any other settings make its services fail to start (406 PRECONDITION_FAILED). Call again with " +
+                "type=fanout, durable=true, autoDelete=false and no arguments.");
     }
 
     /// <exception cref="McpException">The queue may not be created like this; the message says why.</exception>
@@ -116,10 +133,25 @@ public sealed class TopologyPolicy
             throw new McpException($"{kind} queues are always durable: call again with durable=true.");
 
         var args = Arguments(arguments);
-        if (kind != "classic")
-            args["x-queue-type"] = kind;
+        // Always explicit: RabbitMQ accepts a declare without x-queue-type for a queue of any type, so only an explicit
+        // type makes the "same settings" check of an existing queue compare it.
+        args["x-queue-type"] = kind;
+        if (kind == "quorum" && !args.ContainsKey("x-dead-letter-exchange") && !args.ContainsKey("x-delivery-limit"))
+            throw new McpException(
+                "Quorum queues drop a message after 20 failed deliveries (RabbitMQ 4's default delivery limit) unless it " +
+                "can be dead-lettered. Pass arguments {\"x-dead-letter-exchange\": \"<existing exchange>\"} (or " +
+                "x-delivery-limit, if RabbitMcp:TopologyArguments allows it).");
         return new QueueSpec(name, kind, durable, args, Source(bindExchange, nameof(bindExchange)), routingKey ?? "");
     }
+
+    /// <summary>
+    /// Exchanges the arguments point to (dead-letter exchange, alternate exchange): messages sent to a missing one are
+    /// dropped by RabbitMQ, so they must exist before the entity is created. "" (the default exchange) always exists.
+    /// </summary>
+    public static IEnumerable<(string Argument, string Exchange)> ReferencedExchanges(IReadOnlyDictionary<string, object?> arguments) =>
+        new[] { "x-dead-letter-exchange", "alternate-exchange" }
+            .Where(a => arguments.TryGetValue(a, out var v) && v is string { Length: > 0 })
+            .Select(a => (a, (string)arguments[a]!));
 
     /// <summary>"urn:message:Billing.Contracts:PaymentCaptured" → "Billing.Contracts:PaymentCaptured".</summary>
     public static string? ExchangeOfUrn(string urn) =>

@@ -1,5 +1,21 @@
 # Changes and decisions (newest first)
 
+### 2026-10-28 declare_exchange / declare_queue (feat/topology-tools, PR #15, b27fcd2 + review fixes)
+- Off by default (`EnableTopology`); configurable `TopologyAllow`/`TopologyDeny` (case-sensitive names) and
+  `TopologyArguments` (default only DLX/DLX routing key/alternate-exchange/single-active-consumer: TTL, max-length and
+  expires drop messages). New role permission and rate-limit kind `topology`; binding sources need it unrestricted.
+- Decision: create-only. An existing entity is re-declared with the requested settings on a throwaway channel
+  (no-op → existed, 406 → existed-different, 403 → existed unchecked) and never gets a binding (that would change its
+  routing). Previews only passive-declare. Race left as is: an entity deleted between the passive check and the
+  re-declare is recreated with exactly the requested settings but audited as existed.
+- MassTransit: contract and response exchanges, and exchanges named like an existing queue (endpoint pairs), only
+  fanout/durable/no-arguments, and no binding onto a contract exchange. Not detectable: a service's endpoint names
+  before it ever started — use TopologyDeny for them.
+- Gotchas: RabbitMQ accepts a declare without x-queue-type for an existing quorum/stream queue, so x-queue-type is
+  always sent explicitly; quorum queues drop messages after 20 deliveries (RabbitMQ 4 default) without a DLX, so a DLX
+  (or x-delivery-limit) is required; a DLX/alternate exchange that does not exist silently drops messages, so it must
+  exist first.
+
 ### 2026-10-25 v1.0.2: registry token expired during the retry loop (fix/mcp-registry-relogin)
 - The Run workflow button worked (v1.0.2 created and built). mcp-registry: `login github-oidc` ran once, then
   attempt 8 got 401 "token is expired" — the registry JWT lives only minutes. Now every attempt logs in again, up to

@@ -39,7 +39,7 @@ public class TopologyTests
 
         var queue = Policy().Queue("billing-audit", null, durable: true, null, "billing.events", null);
         Assert.Equal("classic", queue.QueueType);
-        Assert.Empty(queue.Arguments);
+        Assert.Equal("classic", Assert.Single(queue.Arguments).Value); // explicit, so an existing quorum queue differs
         Assert.Equal("billing.events", queue.BindExchange);
         Assert.Equal("", queue.RoutingKey);
     }
@@ -103,7 +103,7 @@ public class TopologyTests
     [Fact]
     public void Queue_type_is_a_parameter_and_quorum_or_stream_are_durable()
     {
-        var quorum = Policy().Queue("q", "Quorum", true, null, null, null);
+        var quorum = Policy().Queue("q", "Quorum", true, Arg("x-dead-letter-exchange", "dlx"), null, null);
         Assert.Equal("quorum", quorum.QueueType);
         Assert.Equal("quorum", quorum.Arguments["x-queue-type"]);
 
@@ -111,6 +111,29 @@ public class TopologyTests
         Assert.Throws<McpException>(() => Policy().Queue("q", "lazy", true, null, null, null));
         Assert.Throws<McpException>(() => Policy(arguments: "*").Queue("q", null, true, Arg("x-queue-type", "quorum"), null, null));
         Assert.Throws<StartupException>(() => Policy(arguments: "x-queue-type"));
+    }
+
+    [Fact]
+    public void Quorum_queues_need_somewhere_to_dead_letter()
+    {
+        // RabbitMQ 4 drops a quorum queue's message after 20 deliveries unless it can be dead-lettered.
+        Assert.Contains("x-dead-letter-exchange", Assert.Throws<McpException>(() => Policy().Queue("q", "quorum", true, null, null, null)).Message);
+        Policy(arguments: "x-delivery-limit").Queue("q", "quorum", true, Arg("x-delivery-limit", -1), null, null);
+        Policy().Queue("q", "stream", true, null, null, null); // streams keep messages until retention
+    }
+
+    [Fact]
+    public void Dead_letter_and_alternate_exchanges_are_reported_for_an_existence_check()
+    {
+        var args = Policy().Queue("q", null, true, Args(new Dictionary<string, object>
+        {
+            ["x-dead-letter-exchange"] = "billing.dlx",
+            ["x-dead-letter-routing-key"] = "failed",
+        }), null, null).Arguments;
+        Assert.Equal(new[] { ("x-dead-letter-exchange", "billing.dlx") }, TopologyPolicy.ReferencedExchanges(args));
+
+        var defaultExchange = Policy().Queue("q", null, true, Arg("x-dead-letter-exchange", ""), null, null).Arguments;
+        Assert.Empty(TopologyPolicy.ReferencedExchanges(defaultExchange)); // the default exchange always exists
     }
 
     [Fact]
@@ -128,6 +151,10 @@ public class TopologyTests
         Assert.Throws<McpException>(() => policy.Exchange(SubmittedExchange, "fanout", true, autoDelete: true, null, null, null));
         Assert.Throws<McpException>(() => policy.Exchange(SubmittedExchange, "fanout", true, false,
             Arg("alternate-exchange", "unrouted"), null, null));
+
+        // Another exchange bound to it would deliver foreign messages to the contract's consumers.
+        Assert.Contains("bindToExchange", Assert.Throws<McpException>(() =>
+            policy.Exchange(SubmittedExchange, "fanout", true, false, null, "billing.events", null)).Message);
     }
 
     [Fact]
@@ -173,6 +200,8 @@ public class TopologyTests
         Assert.Null(tools.Check("declare_queue", Args(new { name = "billing.audit" }), alice));
         Assert.NotNull(tools.Check("declare_queue", Args(new { name = "orders.audit" }), alice));
         Assert.NotNull(tools.Check("declare_queue", Args(new { name = "Billing.audit" }), alice)); // case-sensitive
+        Assert.Contains("on exchange 'orders.events'", tools.Check("declare_exchange", Args(new { name = "orders.events" }), alice)!.Reason);
+        Assert.Contains("on queue 'orders.audit'", tools.Check("declare_queue", Args(new { name = "orders.audit" }), alice)!.Reason);
 
         // Binding to another exchange copies its messages: not with a name-limited grant.
         Assert.NotNull(tools.Check("declare_queue", Args(new { name = "billing.audit", bindExchange = "payments" }), alice));

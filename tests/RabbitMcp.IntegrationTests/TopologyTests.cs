@@ -20,6 +20,9 @@ public sealed class TopologyTests(BrokerFixture broker)
 
     private string SubmittedExchange => broker.Registry.Get(typeof(OrderSubmitted)).Exchange;
 
+    private Dictionary<string, JsonElement> DeadLetterTo(string exchange) =>
+        new() { ["x-dead-letter-exchange"] = JsonSerializer.SerializeToElement(exchange) };
+
     private static string? S(JsonElement e, string name) =>
         e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
@@ -63,9 +66,53 @@ public sealed class TopologyTests(BrokerFixture broker)
         var same = await manager.DeclareQueueAsync(queue, null, true, null, null, null, confirm: true, "it", default);
         Assert.Equal("existed", same.Outcome);
 
-        var different = await manager.DeclareQueueAsync(queue, "quorum", true, null, null, null, confirm: true, "it", default);
+        var different = await manager.DeclareQueueAsync(queue, "quorum", true, DeadLetterTo(SubmittedExchange), null, null,
+            confirm: true, "it", default);
         Assert.Equal("existed-different", different.Outcome);
         Assert.True(await broker.Connection.QueueExistsAsync(queue, default)); // still there, still classic
+
+        // No binding is added to something that exists: that would change where its messages go.
+        var bind = await Assert.ThrowsAsync<McpException>(() => manager.DeclareQueueAsync(queue, null, true, null,
+            SubmittedExchange, null, confirm: true, "it", default));
+        Assert.Contains("already exists", bind.Message);
+    }
+
+    [Fact]
+    public async Task A_classic_request_for_an_existing_quorum_queue_is_reported_as_different()
+    {
+        var queue = $"it-topology-{Guid.NewGuid():N}";
+        var manager = Manager();
+        Assert.Equal("created", (await manager.DeclareQueueAsync(queue, "quorum", true, DeadLetterTo(SubmittedExchange),
+            null, null, confirm: true, "it", default)).Outcome);
+
+        var classic = await manager.DeclareQueueAsync(queue, "classic", true, null, null, null, confirm: true, "it", default);
+        Assert.Equal("existed-different", classic.Outcome);
+    }
+
+    [Fact]
+    public async Task MassTransits_own_endpoint_queue_and_exchange_match_the_defaults()
+    {
+        // Endpoint queue and its same-named exchange, declared by the bus: our defaults must be no-ops, not 406s.
+        var queue = await Manager().DeclareQueueAsync(BrokerFixture.OrderSubmittedQueue, null, true, null, null, null,
+            confirm: true, "it", default);
+        Assert.Equal("existed", queue.Outcome);
+
+        var exchange = await Manager().DeclareExchangeAsync(BrokerFixture.OrderSubmittedQueue, "fanout", true, false, null,
+            null, null, confirm: true, "it", default);
+        Assert.Equal("existed", exchange.Outcome);
+        await Assert.ThrowsAsync<McpException>(() => Manager().DeclareExchangeAsync(BrokerFixture.OrderSubmittedQueue,
+            "direct", true, false, null, null, null, confirm: false, "it", default));
+    }
+
+    [Fact]
+    public async Task A_missing_dead_letter_exchange_is_refused()
+    {
+        var queue = $"it-topology-{Guid.NewGuid():N}";
+        var ex = await Assert.ThrowsAsync<McpException>(() => Manager().DeclareQueueAsync(queue, "quorum", true,
+            DeadLetterTo("it-no-such-dlx"), null, null, confirm: true, "it", default));
+
+        Assert.Contains("x-dead-letter-exchange", ex.Message);
+        Assert.False(await broker.Connection.QueueExistsAsync(queue, default));
     }
 
     [Fact]
