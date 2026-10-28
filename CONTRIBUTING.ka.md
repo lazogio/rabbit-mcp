@@ -31,6 +31,8 @@ tests/                           unit, integration, მომხმარებ�
 samples/Shop                     გასაშვები ნიმუში, CI მას გადის (scripts/sample-e2e.py)
 ```
 
+კომპონენტების, request/response გზისა და შეცდომის აღდგენის დიაგრამები: [docs/architecture.ka.md](docs/architecture.ka.md).
+
 ## წესები
 
 - დოკუმენტაცია ორენოვანია: `*.md` (ინგლისური) და `*.ka.md` (ქართული) ერთსა და იმავე pull request-ში შეცვალეთ.
