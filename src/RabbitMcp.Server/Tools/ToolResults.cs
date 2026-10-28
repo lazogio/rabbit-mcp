@@ -116,6 +116,19 @@ public sealed record RepublishResult(
     public bool MoreMayRemain { get; init; }
 }
 
+public sealed record DeclareResult(
+    [property: Description("exchange or queue")] string Kind,
+    string Name,
+    [property: Description("Exchange type (fanout, direct, topic, headers) or queue type (classic, quorum, stream).")] string Type,
+    bool Durable,
+    [property: Description("Exchanges only: deleted by RabbitMQ when its last binding is removed. Always false for queues.")] bool AutoDelete,
+    [property: Description("x-arguments the entity is (or would be) declared with.")] IReadOnlyDictionary<string, string> Arguments,
+    [property: Description("Exchange it is (or would be) bound to and receives messages from; null for no binding.")] string? BoundTo,
+    [property: Description("Routing key of that binding; null without a binding.")] string? RoutingKey,
+    [property: Description("False for a preview (confirm=false): nothing was changed.")] bool Executed,
+    [property: Description("Preview: would-create | exists. Executed: created | existed | existed-different (left unchanged).")] string Outcome,
+    IReadOnlyList<string> Notes);
+
 public sealed record DeadLetterOutcome(
     string? MessageId,
     [property: Description("moved | skipped | failed")] string Status,

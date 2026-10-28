@@ -48,6 +48,7 @@ Claude Desktop: იგივე, `"command"` და `"env"` ველები�
 | `republish_from_error` | აბრუნებს შეტყობინებებს error ან dead-letter რიგიდან: ჯერ preview, შემდეგ `confirm=true`. ინციდენტებისთვის — ფილტრები (`exceptionType`, `contract`, `since` …) | `EnableRepublish` |
 | `dead_letter_from_error` | შეტყობინებებს, რომლებიც ვერასოდეს შესრულდება, მიზეზთან ერთად `<queue>_dead`-ში გადადებს | `EnableRepublish` |
 | `resend_corrected` | აგზავნის ჩავარდნილი შეტყობინების გასწორებულ ასლს და ორიგინალს გადადებს | `EnableRepublish` + `EnablePublish` |
+| `declare_exchange`, `declare_queue` | ქმნის არარსებულ exchange-ს / რიგს, სურვილისამებრ binding-ით; არსებულს არასდროს ცვლის და არ შლის | `EnableTopology` |
 | `pending_requests`, `reply_<response>`, `reject_request` | სერვისების request-ები, რომლებიც პასუხს ელოდება | `RespondTo` |
 
 შედეგები სტრუქტურირებულია (`outputSchema`); შეცდომები ამბობს, რა უნდა გაკეთდეს შემდეგ. prompts `diagnose_errors`, `investigate_message`, `review_approvals` და `contract_health` ხშირ ამოცანებს გადის, ხოლო ყველა კონტრაქტი resource-ია: `contract://<Name>`.
@@ -127,7 +128,7 @@ RabbitMcp__UserRoles="alice=operator;ci=viewer"
 RabbitMcp__DefaultRoles="viewer"
 ```
 
-უფლებები: `read`, `publish`, `request`, `republish`, `respond`, `*`; pattern-ები მათ კონტრაქტით ან რიგით ზღუდავს. მომხმარებელი იცნობა API key-ის სახელით, token-ის მომხმარებლით ან JWT `roles` claim-ით. მომხმარებელი მხოლოდ თავის ხელსაწყოებს ხედავს და ყოველი გამოძახება თავიდან მოწმდება.
+უფლებები: `read`, `publish`, `request`, `republish`, `respond`, `topology`, `*`; pattern-ები მათ კონტრაქტით, რიგით ან (`topology`) exchange-ის/რიგის სახელით ზღუდავს. მომხმარებელი იცნობა API key-ის სახელით, token-ის მომხმარებლით ან JWT `roles` claim-ით. მომხმარებელი მხოლოდ თავის ხელსაწყოებს ხედავს და ყოველი გამოძახება თავიდან მოწმდება.
 
 ## კონფიგურაცია
 
@@ -139,10 +140,12 @@ RabbitMcp__DefaultRoles="viewer"
 | `ContractAssemblies` / `ContractFiles` | — | კონტრაქტების DLL-ები / AsyncAPI ფაილები. ცარიელი: ჩაშენებული ნიმუშები |
 | `ManagementUri` | — | Management API, მაგ. `http://localhost:15672` |
 | `EnablePublish` / `EnableRepublish` | `false` | გაგზავნის / შეტყობინებების გადატანის ნებართვა |
+| `EnableTopology` / `TopologyAllow` / `TopologyDeny` | `false` / — / — | exchange-ებისა და რიგების შექმნის ნებართვა / სახელები, რომელთა შექმნა შეიძლება / არასდროს შეიძლება |
+| `TopologyArguments` | DLX, alternate exchange, single active consumer | x-arguments, რომლებსაც declare ხელსაწყოები იღებს (`*` ნებისმიერი, `none`); TTL და max-length შეტყობინებებს აგდებს, ამიტომ შეგნებულად დაამატეთ |
 | `PublishAllow` / `PublishDeny` | — | კონტრაქტები, რომელთა გაგზავნა შეიძლება / არასოდეს შეიძლება |
 | `DeadLetterQueue` | `{queue}_dead` | სად იდება poison შეტყობინებები |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | responder-ის კონტრაქტები / მომლოდინე request-ების ლიმიტი |
-| `HumanConfirmation` / `ConfirmTools` | `auto` / აღდგენის სამი ხელსაწყო | ცვლილებას ადამიანი ადასტურებს კლიენტის დიალოგში (`required` უარს ამბობს, თუ კითხვა ვერ ხერხდება, `off` `confirm`-ს ენდობა) |
+| `HumanConfirmation` / `ConfirmTools` | `auto` / აღდგენისა და declare ხელსაწყოები | ცვლილებას ადამიანი ადასტურებს კლიენტის დიალოგში (`required` უარს ამბობს, თუ კითხვა ვერ ხერხდება, `off` `confirm`-ს ენდობა) |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | Audit ფაილი (JSON Lines) / შეტყობინებების სხეულიც |
 | `MaxMessagesPerCall` / `MaxBulkMessages` / `MaxPayloadChars` | `50` / `1000` / `16000` | ლიმიტები |
 | `RateLimits` | — | ცვლილებები თითო მომხმარებელზე, მაგ. `publish:100/h;*:1000/d` |
@@ -157,7 +160,7 @@ OpenTelemetry: მიუთითეთ `OTEL_EXPORTER_OTLP_ENDPOINT`; trace-ე
 
 - **ჩუმი დაკარგვა არ ხდება:** არასწორი შეტყობინება არ იგზავნება; publisher confirms და `mandatory` მიუწვდომელ შეტყობინებას შეცდომად აქცევს.
 - **უსაფრთხო გადატანა:** შეტყობინება error რიგიდან მხოლოდ მაშინ გადის, როცა broker-მა ახალი ასლი დაადასტურა; სხეული არ იცვლება.
-- **არაფერი იშლება:** poison შეტყობინებები ყველა header-ით იდება და შეიძლება დაბრუნდეს.
+- **არაფერი იშლება:** poison შეტყობინებები ყველა header-ით იდება და შეიძლება დაბრუნდეს; exchange-ები და რიგები მხოლოდ იქმნება.
 - **ადამიანი ადასტურებს:** MCP elicitation-ის მქონე კლიენტები (მაგ. Claude Code) ყოველ ცვლილებამდე დიალოგს აჩვენებს; stateless HTTP-ზე `confirm=true` მოქმედებს.
 - **Audit:** ყოველი გაგზავნა, გადატანა და პასუხი — უარყოფილებიც — მომხმარებლით.
 - **შინაარსს არ ენდობა:** header-ები შეტყობინების მიმართულებას ვერ ცვლის; პაროლები არც log-ებში ჩანს, არც შეცდომებში.

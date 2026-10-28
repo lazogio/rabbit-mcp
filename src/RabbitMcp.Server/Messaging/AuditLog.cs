@@ -37,6 +37,7 @@ public static class AuditActions
     public const string Access = "access";     // a tool call refused by the caller's roles
     public const string Confirm = "confirm";   // the person was asked (or could not be) before a change
     public const string Correct = "correct";   // resend_corrected: corrected copy sent, original parked
+    public const string Declare = "declare";   // declare_exchange / declare_queue: created, existed or refused
 }
 
 /// <summary>

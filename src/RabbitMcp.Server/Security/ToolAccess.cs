@@ -10,7 +10,7 @@ namespace RabbitMcp.Server.Security;
 
 /// <summary>
 /// What a tool needs: a permission, optionally for specific contracts (publish_*/request_*/reply_*), for the error
-/// queue named in an argument (republish_from_error) or for the contract of the pending request it answers.
+/// queue named in an argument (republish_from_error; the exchange/queue name for declare_*) or for the contract of the pending request it answers.
 /// <see cref="OverrideArguments"/> redirect messages elsewhere (another exchange or queue): they need the permission
 /// without patterns, otherwise a role limited to some error queues could move their messages into any queue.
 /// </summary>
@@ -45,6 +45,10 @@ public sealed class ToolAccess(AccessControl control, ContractRegistry contracts
             OverrideArguments: ["deadLetterQueue"]),
         // The contract's publish permission is checked inside the tool, once the message's contract is known.
         ["resend_corrected"] = new(Permission.Republish, [], QueueArgument: "errorQueue"),
+        // Patterns limit the name being created. A binding makes copies of another exchange's messages flow into it,
+        // so choosing the source needs the permission without patterns (like targetExchange for republish).
+        ["declare_exchange"] = new(Permission.Topology, [], QueueArgument: "name", OverrideArguments: ["bindToExchange"]),
+        ["declare_queue"] = new(Permission.Topology, [], QueueArgument: "name", OverrideArguments: ["bindExchange"]),
         ["pending_requests"] = new(Permission.Respond, []),
         ["reject_request"] = new(Permission.Respond, [], ByRequestId: true),
     };

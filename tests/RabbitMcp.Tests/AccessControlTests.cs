@@ -258,7 +258,7 @@ public class AccessControlTests
     {
         var tools = Tools(Create(null, null, ("viewer", "read")));
         foreach (var name in new[] { "list_contracts", "validate_message", "queue_stats", "peek_messages", "list_queues",
-                                     "contract_consumers", "find_message", "recent_activity", "read_stream", "republish_from_error", "dead_letter_from_error", "resend_corrected", "pending_requests",
+                                     "contract_consumers", "find_message", "recent_activity", "read_stream", "republish_from_error", "dead_letter_from_error", "resend_corrected", "declare_exchange", "declare_queue", "pending_requests",
                                      "reject_request" })
             Assert.NotNull(tools.RuleFor(name));
         foreach (var contract in Registry.Contracts)

@@ -21,6 +21,8 @@ public enum Permission
     Republish,
     /// <summary>pending_requests, reply_*, reject_request; may be limited to request contracts.</summary>
     Respond,
+    /// <summary>declare_exchange and declare_queue; may be limited to exchange/queue names (case-sensitive).</summary>
+    Topology,
 }
 
 /// <summary>One permission of a role, optionally limited to subjects matching <c>*</c> patterns (empty: everything).</summary>
@@ -187,7 +189,7 @@ public sealed class AccessControl
         return names;
     }
 
-    /// <summary>"read;publish:Billing.*,Order*;request:Get*;republish:orders-*_error;respond" or "*".</summary>
+    /// <summary>"read;publish:Billing.*,Order*;request:Get*;republish:orders-*_error;respond;topology:billing.*" or "*".</summary>
     public static RoleDefinition ParseRole(string role, string? definition)
     {
         var grants = new List<Grant>();
@@ -207,7 +209,7 @@ public sealed class AccessControl
             if (!Enum.TryParse<Permission>(name, ignoreCase: true, out var permission) || !Enum.IsDefined(permission)
                 || int.TryParse(name, out _))
                 throw new StartupException(
-                    $"RabbitMcp:Roles:{role}: unknown permission '{name}'. Use read, publish, request, republish, respond or *.");
+                    $"RabbitMcp:Roles:{role}: unknown permission '{name}'. Use read, publish, request, republish, respond, topology or *.");
             if (permission == Permission.Read && patterns.Length > 0)
                 throw new StartupException($"RabbitMcp:Roles:{role}: 'read' cannot be limited to patterns.");
             if (colon >= 0 && patterns.Length == 0)

@@ -63,7 +63,7 @@ public static class ServerComposition
         var limiter = new RateLimiter(settings, TimeProvider.System);
         if (access.Enabled && settings.Transport.Trim().Equals("stdio", StringComparison.OrdinalIgnoreCase))
             Console.Error.WriteLine("rabbit-mcp: note: RabbitMcp:Roles apply to the HTTP transport; over stdio the local " +
-                                    "user has every enabled tool (limit it with EnablePublish/EnableRepublish/PublishAllow).");
+                                    "user has every enabled tool (limit it with EnablePublish/EnableRepublish/EnableTopology/PublishAllow).");
 
         builder.Services
             .AddSingleton(access)
@@ -183,6 +183,14 @@ public static class ServerComposition
 
         if (settings.EnableRepublish)
             mcp.WithTools<RepublishTools>(ToolJson.Options);
+
+        if (settings.EnableTopology)
+        {
+            builder.Services
+                .AddSingleton(new TopologyPolicy(settings, contracts))
+                .AddSingleton<TopologyManager>();
+            mcp.WithTools<TopologyTools>(ToolJson.Options);
+        }
 
         // A correction moves a message (republish) and sends new content (publish): it needs both.
         if (settings.EnableRepublish && settings.EnablePublish)

@@ -20,6 +20,25 @@ public sealed class RabbitMcpOptions
     /// <summary>Registers republish_from_error. Off by default.</summary>
     public bool EnableRepublish { get; set; }
 
+    /// <summary>Registers declare_exchange and declare_queue (create missing exchanges/queues, never change or delete). Off by default.</summary>
+    public bool EnableTopology { get; set; }
+
+    /// <summary>
+    /// Exchange and queue names declare_exchange/declare_queue may create, ";"-separated case-sensitive "*" patterns.
+    /// Empty: any name (except amq.*).
+    /// </summary>
+    public string? TopologyAllow { get; set; }
+
+    /// <summary>Names that may never be created; same pattern syntax; wins over TopologyAllow.</summary>
+    public string? TopologyDeny { get; set; }
+
+    /// <summary>
+    /// x-arguments the declare tools accept, ";"-separated, "*" for any, "none" for none. Default (empty): arguments that cannot drop messages
+    /// (dead-letter exchange/routing key, alternate-exchange, single active consumer). Add x-message-ttl, x-max-length
+    /// or x-expires deliberately: they discard messages or queues unless dead-lettering is set up.
+    /// </summary>
+    public string? TopologyArguments { get; set; }
+
     /// <summary>
     /// Where dead_letter_from_error parks messages that cannot be processed: a queue name, "{queue}" is replaced by the
     /// queue the error queue belongs to (order-placed_error → order-placed_dead). Created (durable) if missing.
@@ -101,7 +120,7 @@ public sealed class RabbitMcpOptions
     /// Tools whose changes the person confirms (";"-separated "*" patterns). Tools with a preview (confirm argument)
     /// are asked only when executing. Add e.g. "publish_*;request_*;reply_*;reject_request" to confirm every send.
     /// </summary>
-    public string ConfirmTools { get; set; } = "republish_from_error;dead_letter_from_error;resend_corrected";
+    public string ConfirmTools { get; set; } = "republish_from_error;dead_letter_from_error;resend_corrected;declare_exchange;declare_queue";
 
     /// <summary>"stdio" (default: one client, started by it) or "http" (shared server, Streamable HTTP + authorization).</summary>
     public string Transport { get; set; } = "stdio";
@@ -131,8 +150,9 @@ public sealed class RabbitMcpOptions
     public string? HttpAllowedOrigins { get; set; }
 
     /// <summary>
-    /// HTTP: roles and their permissions (read, publish, request, republish, respond or *), ";"-separated; publish,
-    /// request and respond may be limited to contracts, republish to error queues: "read;publish:Billing.*,Order*".
+    /// HTTP: roles and their permissions (read, publish, request, republish, respond, topology or *), ";"-separated;
+    /// publish, request and respond may be limited to contracts, republish to error queues, topology to exchange/queue
+    /// names: "read;publish:Billing.*,Order*".
     /// Env: RabbitMcp__Roles__operator="read;publish;request". Empty: every authenticated caller may use every tool.
     /// </summary>
     public Dictionary<string, string> Roles { get; set; } = new(StringComparer.OrdinalIgnoreCase);

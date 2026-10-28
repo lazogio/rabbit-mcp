@@ -19,7 +19,7 @@ public sealed class AuditTools(AuditLog audit, TimeProvider time)
         "replies and refused calls, with outcome, ids, contract, queue and who did it. Answers questions like " +
         "'who republished from order-placed_error today?' or 'what happened to message X?'.")]
     public RecentActivity GetRecentActivity(
-        [Description("publish, request, republish, deadletter, receive, respond or access.")] string? action = null,
+        [Description("publish, request, republish, deadletter, correct, declare, receive, respond, confirm or access.")] string? action = null,
         [Description("e.g. sent, error, republished, moved, denied, refused.")] string? outcome = null,
         [Description("Contract name, e.g. OrderPlaced.")] string? contract = null,
         [Description("Part of the client: user (API key name, token user) or MCP client name.")] string? client = null,

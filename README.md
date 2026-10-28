@@ -48,6 +48,7 @@ Claude Desktop: the same as `"command"` and `"env"` in `claude_desktop_config.js
 | `republish_from_error` | Moves messages back from an error or dead-letter queue: preview, then `confirm=true`. Filters (`exceptionType`, `contract`, `since` …) for incidents | `EnableRepublish` |
 | `dead_letter_from_error` | Parks messages that can never succeed in `<queue>_dead`, with a reason | `EnableRepublish` |
 | `resend_corrected` | Sends a fixed copy of a failed message and parks the original | `EnableRepublish` + `EnablePublish` |
+| `declare_exchange`, `declare_queue` | Creates a missing exchange / queue, optionally with a binding; never changes or deletes one | `EnableTopology` |
 | `pending_requests`, `reply_<response>`, `reject_request` | Requests from services waiting for an answer | `RespondTo` |
 
 Results are structured (`outputSchema`); errors say what to do next. Prompts `diagnose_errors`, `investigate_message`, `review_approvals` and `contract_health` walk through common tasks, and every contract is a resource `contract://<Name>`.
@@ -127,7 +128,7 @@ RabbitMcp__UserRoles="alice=operator;ci=viewer"
 RabbitMcp__DefaultRoles="viewer"
 ```
 
-Permissions: `read`, `publish`, `request`, `republish`, `respond`, `*`; patterns limit them by contract or queue. Users are matched by API key name, token user or the JWT `roles` claim. Callers see only the tools they may use, and each call is checked again.
+Permissions: `read`, `publish`, `request`, `republish`, `respond`, `topology`, `*`; patterns limit them by contract, queue or (`topology`) exchange/queue name. Users are matched by API key name, token user or the JWT `roles` claim. Callers see only the tools they may use, and each call is checked again.
 
 ## Configuration
 
@@ -139,10 +140,12 @@ Environment variable `RabbitMcp__<Option>` or `appsettings.json`. Lists are `;`-
 | `ContractAssemblies` / `ContractFiles` | — | Contract DLLs / AsyncAPI files. Empty: built-in samples |
 | `ManagementUri` | — | Management API, e.g. `http://localhost:15672` |
 | `EnablePublish` / `EnableRepublish` | `false` | Allow sending / moving messages |
+| `EnableTopology` / `TopologyAllow` / `TopologyDeny` | `false` / — / — | Allow creating exchanges and queues / names that may / may never be created |
+| `TopologyArguments` | DLX, alternate exchange, single active consumer | x-arguments the declare tools accept (`*` any, `none`); TTL and max-length drop messages, so add them deliberately |
 | `PublishAllow` / `PublishDeny` | — | Contracts that may / may never be sent |
 | `DeadLetterQueue` | `{queue}_dead` | Where poison messages are parked |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | Responder contracts / waiting-request limit |
-| `HumanConfirmation` / `ConfirmTools` | `auto` / the three recovery tools | The person confirms changes in the client's dialog (`required` refuses when it cannot ask, `off` trusts `confirm`) |
+| `HumanConfirmation` / `ConfirmTools` | `auto` / the recovery and declare tools | The person confirms changes in the client's dialog (`required` refuses when it cannot ask, `off` trusts `confirm`) |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | Audit file (JSON Lines) / include message bodies |
 | `MaxMessagesPerCall` / `MaxBulkMessages` / `MaxPayloadChars` | `50` / `1000` / `16000` | Limits |
 | `RateLimits` | — | Changes per caller, e.g. `publish:100/h;*:1000/d` |
@@ -157,7 +160,7 @@ OpenTelemetry: set `OTEL_EXPORTER_OTLP_ENDPOINT`; traces join the MassTransit co
 
 - **No silent loss:** invalid messages are not sent; publisher confirms and `mandatory` turn an undeliverable message into an error.
 - **Safe moves:** a message leaves the error queue only after the broker confirmed its new copy; the body never changes.
-- **Nothing is deleted:** poison messages are parked with every header, and can be brought back.
+- **Nothing is deleted:** poison messages are parked with every header, and can be brought back; exchanges and queues are only ever created.
 - **A person confirms:** clients with MCP elicitation (e.g. Claude Code) show a dialog before anything moves; stateless HTTP falls back to `confirm=true`.
 - **Audited:** every send, move and answer — including refused ones — with the user.
 - **Untrusted content:** message headers never redirect where messages go; passwords never appear in logs or errors.
