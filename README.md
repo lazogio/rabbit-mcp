@@ -32,6 +32,8 @@ claude mcp add rabbit-mcp \
 
 Claude Desktop: the same as `"command"` and `"env"` in `claude_desktop_config.json`. Local RabbitMQ: `docker compose up -d`.
 
+**Let Claude set it up:** copy [docs/skills/rabbit-mcp-setup](docs/skills/rabbit-mcp-setup) to `~/.claude/skills/` and ask "set up rabbit-mcp".
+
 **Try it:** [samples/Shop](samples/Shop) starts RabbitMQ, PostgreSQL, a MassTransit shop and rabbit-mcp with one command, and walks through orders, error recovery and approvals.
 
 ## Tools

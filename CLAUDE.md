@@ -9,6 +9,8 @@ code comments in English. Documentation is bilingual: `README.md`, `CONTRIBUTING
 English, the same content in Georgian in `*.ka.md` — always change both. README = users (install, tools, configuration,
 security); CONTRIBUTING = maintainers (build, tests, CI, release, agents) — keep maintainer material out of the README.
 Keep the README short (decided 2026-10-24): one line per tool/option, details belong in tool descriptions and samples.
+`docs/skills/rabbit-mcp-setup/SKILL.md` (English, for users' Claude) walks through install and configuration — keep it in
+step when install ways, options, permissions or startup errors change.
 
 ## Commands
 
