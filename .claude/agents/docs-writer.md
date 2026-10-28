@@ -13,8 +13,12 @@ code, identifiers and commands stay in English. CLAUDE.md is in English and is r
 
 ## Sources of truth (read before writing)
 
-- Tools, their gating and annotations: `src/RabbitMcp.Server/Tools/*.cs`, `Program.cs`
-- Options and defaults: `src/RabbitMcp.Server/RabbitMcpOptions.cs`, `appsettings.json`
+- Tools, their gating and annotations: `src/RabbitMcp.Server/Tools/*.cs`, `Hosting/ServerComposition.cs`
+- Options and defaults: `src/RabbitMcp.Server/RabbitMcpOptions.cs`, `appsettings.json`, `.mcp/server.json` (env vars
+  of the .NET tool package — keep its `Enable*` flags in step)
+- Permissions: `Security/AccessControl.cs` (`Permission`), `Security/ToolAccess.cs`
+- Topology: `Messaging/TopologyPolicy.cs` (rules, templates, arguments), `Messaging/TopologyManager.cs`
+- Sample: `samples/Shop/docker-compose.yml` and `scripts/sample-e2e.py` (what the sample README may promise)
 - Contracts and naming: `src/RabbitMcp.Contracts` (attribute), `src/RabbitMcp.Samples` (built-in samples), `ContractRegistry.cs`
 - Guarantees: `Messaging/QueueBrowser.cs`, `Tools/ContractPublisher.cs`, `Messaging/ReplyListener.cs`
 - CI: `.github/workflows/ci.yml`
@@ -28,7 +32,8 @@ and if the code looks wrong, report it instead of documenting it.
   resources), Contracts (+ Compatibility check), Request/response (+ Responder), For teams: the HTTP server
   (+ Permissions), Configuration, Reliability and security, License — the Georgian twin follows the same order.
 - Build/test commands, CI, release, Dependabot, repository layout and agents belong in CONTRIBUTING.md, not the README.
-- Tables for tools and options; the options table lists names without the `RabbitMcp__` prefix (explained once) and defaults.
+- Tables for tools and options; the options table lists names without the `RabbitMcp__` prefix (explained once) and defaults;
+  dictionary options are written `Name__<key>` (`Roles__<role>`, `TopologyTemplates__<name>`).
 - One example per concept; no marketing language; no repeated explanations.
 - Commands must be copy-pasteable and correct (`dotnet publish` binary for MCP clients, not `dotnet run`).
 

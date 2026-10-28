@@ -25,6 +25,7 @@ is what MassTransit produces. You do not edit code; you report findings with evi
 | reply address + exchange flags (`ReplyEndpoint`, `ReplyListener`) | `Transports/MassTransit.RabbitMqTransport/RabbitMqEndpointAddress.cs` (`temporary`, `durable`, `autodelete`, `bind`) |
 | response / fault routing (`ReplyInterpreter`) | `MassTransit/Contexts/ConsumeContextEndpointExtensions.cs`, `Fault<T>` contracts |
 | republish target (`RepublishTargetResolver`) | receive endpoint topology: queue ↔ same-name fanout exchange |
+| topology guards (`TopologyPolicy.RequireMassTransitSettings`, endpoint-pair check in `TopologyManager`) | the exchange/queue declare defaults in `Transports/MassTransit.RabbitMqTransport` (grep `Durable`, `AutoDelete`, `ExchangeType.Fanout` under its topology/configuration folders): publish exchanges, endpoint queues and their exchanges, queue arguments such as `x-queue-type` |
 
 4. Think through both directions: a MassTransit consumer receiving our message, and our parser
    receiving a MassTransit message (including `Fault<T>`, nested/generic type URNs, Newtonsoft vs STJ).
