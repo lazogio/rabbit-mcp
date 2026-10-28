@@ -83,8 +83,10 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   responses, and exchanges named like an existing queue (MassTransit endpoints), are created only fanout/durable/
   no-arguments. Bindings only for entities the call creates. `TopologyArguments` defaults to arguments that cannot drop
   messages (no TTL/max-length/expires); a referenced DLX/alternate-exchange must exist, quorum queues need a DLX (or
-  x-delivery-limit), `x-queue-type` is always explicit. Permission `topology` (name patterns); a binding source needs it
-  unrestricted.
+  x-delivery-limit), `x-queue-type` is always explicit. These guards are `TopologyRules` (require-dead-letter,
+  check-references, protect-masstransit; opt-in bind-existing, templates-only). `TopologyTemplates` are operator-written
+  settings (arguments not limited by TopologyArguments; explicit call values win). Permission `topology` (name
+  patterns); a binding source passed by the caller needs it unrestricted (a template's bind does not).
 - **Nothing is ever deleted**: there is no tool that removes messages. Poison messages are parked with
   `dead_letter_from_error` (same get → confirmed publish → ack sequence as republish, all headers kept).
 - **Never trust message content for routing**: envelope addresses and AMQP headers are written by whoever published

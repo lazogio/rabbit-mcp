@@ -127,7 +127,11 @@ public sealed record DeclareResult(
     [property: Description("Routing key of that binding; null without a binding.")] string? RoutingKey,
     [property: Description("False for a preview (confirm=false): nothing was changed.")] bool Executed,
     [property: Description("Preview: would-create | exists. Executed: created | existed | existed-different (left unchanged).")] string Outcome,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes)
+{
+    [Description("RabbitMcp:TopologyTemplates entry the settings came from; null without a template.")]
+    public string? Template { get; init; }
+}
 
 public sealed record DeadLetterOutcome(
     string? MessageId,

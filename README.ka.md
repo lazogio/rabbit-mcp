@@ -142,6 +142,8 @@ RabbitMcp__DefaultRoles="viewer"
 | `EnablePublish` / `EnableRepublish` | `false` | გაგზავნის / შეტყობინებების გადატანის ნებართვა |
 | `EnableTopology` / `TopologyAllow` / `TopologyDeny` | `false` / — / — | exchange-ებისა და რიგების შექმნის ნებართვა / სახელები, რომელთა შექმნა შეიძლება / არასდროს შეიძლება |
 | `TopologyArguments` | DLX, alternate exchange, single active consumer | x-arguments, რომლებსაც declare ხელსაწყოები იღებს (`*` ნებისმიერი, `none`); TTL და max-length შეტყობინებებს აგდებს, ამიტომ შეგნებულად დაამატეთ |
+| `TopologyRules` | `require-dead-letter;check-references;protect-masstransit` | declare ხელსაწყოების უსაფრთხოების წესები (`none` — არცერთი); სურვილისამებრ `bind-existing`, `templates-only` |
+| `TopologyTemplates__<name>` | — | სახელიანი პარამეტრები declare ხელსაწყოების `template`-ისთვის, მაგ. `kind=queue;type=quorum;x-dead-letter-exchange=billing.dlx` |
 | `PublishAllow` / `PublishDeny` | — | კონტრაქტები, რომელთა გაგზავნა შეიძლება / არასოდეს შეიძლება |
 | `DeadLetterQueue` | `{queue}_dead` | სად იდება poison შეტყობინებები |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | responder-ის კონტრაქტები / მომლოდინე request-ების ლიმიტი |

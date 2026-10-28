@@ -11,6 +11,11 @@
 - MassTransit: contract and response exchanges, and exchanges named like an existing queue (endpoint pairs), only
   fanout/durable/no-arguments, and no binding onto a contract exchange. Not detectable: a service's endpoint names
   before it ever started — use TopologyDeny for them.
+- Configurable (owner asked for "rules + templates"): the guards are `TopologyRules` (default require-dead-letter;
+  check-references;protect-masstransit; opt-in bind-existing, templates-only). `TopologyTemplates__<name>` =
+  "kind=queue|exchange;type=…;durable;autoDelete;bind=…;routingKey=…;x-…=…": operator-written, so its arguments skip
+  TopologyArguments and its bind skips the unrestricted-permission check; explicit call values win; templates-only
+  lets the caller pass only name + template.
 - Gotchas: RabbitMQ accepts a declare without x-queue-type for an existing quorum/stream queue, so x-queue-type is
   always sent explicitly; quorum queues drop messages after 20 deliveries (RabbitMQ 4 default) without a DLX, so a DLX
   (or x-delivery-limit) is required; a DLX/alternate exchange that does not exist silently drops messages, so it must

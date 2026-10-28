@@ -142,6 +142,8 @@ Environment variable `RabbitMcp__<Option>` or `appsettings.json`. Lists are `;`-
 | `EnablePublish` / `EnableRepublish` | `false` | Allow sending / moving messages |
 | `EnableTopology` / `TopologyAllow` / `TopologyDeny` | `false` / — / — | Allow creating exchanges and queues / names that may / may never be created |
 | `TopologyArguments` | DLX, alternate exchange, single active consumer | x-arguments the declare tools accept (`*` any, `none`); TTL and max-length drop messages, so add them deliberately |
+| `TopologyRules` | `require-dead-letter;check-references;protect-masstransit` | Safety rules of the declare tools (`none` for none); opt-in `bind-existing`, `templates-only` |
+| `TopologyTemplates__<name>` | — | Named settings the declare tools' `template` uses, e.g. `kind=queue;type=quorum;x-dead-letter-exchange=billing.dlx` |
 | `PublishAllow` / `PublishDeny` | — | Contracts that may / may never be sent |
 | `DeadLetterQueue` | `{queue}_dead` | Where poison messages are parked |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | Responder contracts / waiting-request limit |

@@ -40,6 +40,22 @@ public sealed class RabbitMcpOptions
     public string? TopologyArguments { get; set; }
 
     /// <summary>
+    /// Safety rules of the declare tools, ";"-separated, "none" for none. Default (empty): require-dead-letter (quorum
+    /// queues need a DLX or x-delivery-limit), check-references (a DLX/alternate exchange must exist) and
+    /// protect-masstransit (MassTransit exchanges only with MassTransit's settings). Opt-in: bind-existing (also bind
+    /// existing exchanges/queues) and templates-only (callers may only pick a TopologyTemplates entry).
+    /// </summary>
+    public string? TopologyRules { get; set; }
+
+    /// <summary>
+    /// Named settings for the declare tools' template argument, e.g.
+    /// RabbitMcp__TopologyTemplates__billing-queue="kind=queue;type=quorum;x-dead-letter-exchange=billing.dlx".
+    /// Keys: kind (queue|exchange), type, durable, autoDelete, bind, routingKey and x-arguments (not limited by
+    /// TopologyArguments). Values passed in the call win over the template's.
+    /// </summary>
+    public Dictionary<string, string> TopologyTemplates { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Where dead_letter_from_error parks messages that cannot be processed: a queue name, "{queue}" is replaced by the
     /// queue the error queue belongs to (order-placed_error → order-placed_dead). Created (durable) if missing.
     /// </summary>
