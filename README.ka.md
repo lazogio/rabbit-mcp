@@ -32,6 +32,8 @@ claude mcp add rabbit-mcp \
 
 Claude Desktop: იგივე, `"command"` და `"env"` ველებით `claude_desktop_config.json`-ში. ლოკალური RabbitMQ: `docker compose up -d`.
 
+**გამართვა Claude-ით:** დააკოპირეთ [docs/skills/rabbit-mcp-setup](docs/skills/rabbit-mcp-setup) `~/.claude/skills/`-ში და სთხოვეთ „გამართე rabbit-mcp“.
+
 **სცადეთ:** [samples/Shop](samples/Shop) ერთი ბრძანებით უშვებს RabbitMQ-ს, PostgreSQL-ს, MassTransit მაღაზიას და rabbit-mcp-ს, და გადის შეკვეთებს, შეცდომების აღდგენას და დასტურებს.
 
 ## ხელსაწყოები
