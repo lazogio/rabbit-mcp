@@ -17,6 +17,10 @@ You keep `.github/workflows/ci.yml` green. Read CLAUDE.md first, and grep
   `.../check-runs/<job id>/annotations`. Full logs need authentication — if unavailable, reproduce locally.
 - Reproduce with the same commands as the workflow: `dotnet restore RabbitMcp.slnx`,
   `dotnet build -c Release --no-restore`, `dotnet test -c Release --no-build`.
+- Jobs: `Build & test` (unit), `Integration (RabbitMQ + MassTransit)`, `Sample (Shop, end to end)`
+  (`scripts/sample-e2e.py` against `samples/Shop/docker-compose.yml`), `Docker image`. Cloud sessions often have no
+  .NET SDK and cannot reach the dotnet download host: then CI is the build, and the GitHub MCP tools
+  (`get_check_runs`, `get_job_logs`) give the logs.
 
 ## Fixing
 

@@ -17,10 +17,16 @@ You do not edit files. Read CLAUDE.md and `.claude/agent-memory/project-memory/b
    - Anything that removes a message from a queue acks only after the replacement publish is confirmed;
      failures are nacked with requeue; bodies are moved byte-for-byte (no truncation/re-serialization).
    - Passive declares run on throwaway channels.
+   - Topology (`declare_exchange` / `declare_queue`): create-only — existing entities are only re-declared with the
+     requested settings (406 → `existed-different`), never get a binding unless `TopologyRules` has bind-existing;
+     MassTransit exchanges keep fanout/durable/no-arguments; a referenced DLX/alternate exchange must exist.
    - Request/response: listener registered before the request is sent; pending entries always removed
      (`finally`); late replies ignored; TTL matches the timeout.
 2. **Security**: AMQP URI/credentials never logged or returned; nothing written to stdout; mutating
-   tools gated and off by default; destructive tools require confirmation.
+   tools gated and off by default; changing tools have a preview and are in `HumanConfirmation.PreviewTools` /
+   `ConfirmTools`; every new tool has a `ToolAccess` rule (arguments that redirect or copy messages in
+   `OverrideArguments`); executed, refused and failed calls are audited; message-derived values in logs go through
+   `AuditLog.OneLine`.
 3. **Correctness**: async/await and cancellation passed through; disposal of channels/connections;
    thread safety of shared state (`RabbitConnection`, `ReplyListener`); nullability; edge cases
    (empty queue, missing exchange, broker down, invalid input, large bodies).
@@ -30,7 +36,8 @@ You do not edit files. Read CLAUDE.md and `.claude/agent-memory/project-memory/b
    should be checked by `masstransit-compat-reviewer` — say so if the diff touches them.
 6. **Tests**: every behaviour change has a unit test; pure logic is not hidden inside broker calls.
    Run `dotnet build` and `dotnet test` if the environment can restore packages; otherwise say CI must confirm.
-7. **Docs**: README / CLAUDE.md updated when tools, options or guarantees change.
+7. **Docs**: README + README.ka / CLAUDE.md updated when tools, options or guarantees change; new `Enable*` options in
+   `.mcp/server.json`; the Shop sample (`samples/Shop`, `scripts/sample-e2e.py`) still matches the tools.
 
 ## Output
 

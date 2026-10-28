@@ -14,7 +14,9 @@ and follow their style (xUnit, `Fact`/`Theory`, small builders such as `Contract
 
 - Target pure logic: `ContractRegistry`, `ContractValidator`, `EnvelopeFactory`/`MassTransitEnvelope`,
   `BrokerAddress`, `FaultHeaders`, `RepublishTargetResolver`, `MessageInspector`, `PendingRequests`,
-  `ReplyInterpreter`, tool schemas via `ContractToolFactory.CreateTool(...).ProtocolTool`.
+  `ReplyInterpreter`, `TopologyPolicy` (names, arguments, rules, templates), `ToolAccess` / `AccessControl`,
+  `HumanConfirmation`, `RateLimiter`, tool schemas via `ContractToolFactory.CreateTool(...).ProtocolTool`.
+- A new tool also extends `AccessControlTests.Every_fixed_tool_has_a_rule`.
 - AMQP header strings arrive as `byte[]` — test with `byte[]` values, not strings.
 - Assert on observable contracts (JSON field names, error paths like `lines[0].quantity`, tool names,
   required lists), not on implementation details.
@@ -24,11 +26,15 @@ and follow their style (xUnit, `Fact`/`Theory`, small builders such as `Contract
 
 - Separate project `tests/RabbitMcp.IntegrationTests`, `Testcontainers.RabbitMq` with image `rabbitmq:4-management`,
   marked `[Trait("Category", "Integration")]` so unit runs can filter them out.
+- Use the shared `BrokerFixture` (RabbitMQ 4 + a MassTransit v8 bus, audit file) via `[Collection(BrokerCollection.Name)]`;
+  unique queue/exchange names per test (`it-<feature>-{Guid}`).
 - Scenarios worth covering: publish to missing exchange → error and nothing sent; unbound exchange →
   returned; publish → MassTransit consumer receives it; request → `RespondAsync` reply; consumer throws →
-  `faulted`; timeout; peek leaves messages in place; republish acks only after confirm and keeps failures.
+  `faulted`; timeout; peek leaves messages in place; republish acks only after confirm and keeps failures;
+  topology: created vs existed vs existed-different, MassTransit's own entities re-declare as no-ops, refusals audited.
 - MassTransit is a test-only dependency there (v8 is open source); never add it to the server.
-- Add a CI job (or step) for them with a `services:`-free Testcontainers run on `ubuntu-latest`.
+- CI runs them in the `Integration (RabbitMQ + MassTransit)` job; the Shop sample is walked end to end by
+  `scripts/sample-e2e.py` (`Sample (Shop, end to end)` job) — extend it when a tool changes what the sample shows.
 
 ## Always
 
