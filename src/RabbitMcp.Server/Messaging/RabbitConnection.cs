@@ -48,11 +48,11 @@ public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, TimePro
     /// <summary>
     /// Passive declare on a throwaway channel: the broker closes a channel when
     /// the entity is missing (404), so this must never share a working channel.
-    /// Positive results are cached for RabbitMcp:ExchangeCacheSeconds.
+    /// Positive results are cached for RabbitMcp:ExchangeCacheSeconds unless <paramref name="useCache"/> is false.
     /// </summary>
-    public async Task<bool> ExchangeExistsAsync(string exchange, CancellationToken ct)
+    public async Task<bool> ExchangeExistsAsync(string exchange, CancellationToken ct, bool useCache = true)
     {
-        if (_exchanges.IsKnownToExist(exchange))
+        if (useCache && _exchanges.IsKnownToExist(exchange))
             return true;
 
         await using var channel = await CreateChannelAsync(publisherConfirms: false, ct);

@@ -103,7 +103,8 @@ def main():
     tools = {t["name"] for t in rpc("tools/list")["tools"]}
     expected = {"publish_order_placed", "request_get_order_status", "peek_messages", "republish_from_error",
                 "contract_consumers", "pending_requests", "reply_order_approved", "reply_order_rejected", "reject_request", "dead_letter_from_error",
-                "find_message", "recent_activity", "request_get_shipping_quote", "resend_corrected"}
+                "find_message", "recent_activity", "request_get_shipping_quote", "resend_corrected", "declare_queue",
+                "declare_exchange"}
     assert expected <= tools, f"missing tools: {expected - tools}"
     assert "request_approve_large_order" not in tools, "PublishDeny should hide request_approve_large_order"
     assert not {"publish_order_confirmed", "publish_order_cancelled"} & tools, "PublishDeny should hide the shop's own events"
@@ -123,6 +124,16 @@ def main():
     assert demo["status"] == "Shipped" and any("Shipped" in h for h in demo["history"]), demo
     step(f"request_get_order_status: demo order is {demo['status']}")
 
+    # --- 1b. topology: a copy of every new order, from an operator-defined template
+    preview = call("declare_queue", name="shop-audit-orders", template="order-copy")
+    assert preview["executed"] is False and preview["outcome"] == "would-create", preview
+    assert preview["boundTo"] == "Shop.Contracts:OrderPlaced", preview
+    created = call("declare_queue", name="shop-audit-orders", template="order-copy", confirm=True)
+    assert created["outcome"] == "created" and created["template"] == "order-copy", created
+    refused = rpc("tools/call", {"name": "declare_queue", "arguments": {"name": "order-placed", "confirm": True}})
+    assert refused.get("isError"), refused  # TopologyAllow: only shop-audit-*
+    step("declare_queue: shop-audit-orders bound to OrderPlaced from the order-copy template; other names refused")
+
     # --- 2. _error queue and republish
     flaky = str(uuid.uuid4())
     place(flaky, "FLAKY-LAMP", 1, 20)
@@ -139,6 +150,9 @@ def main():
     order = eventually("republished order approved", lambda: (s := status_of(flaky)) and s["status"] == "Approved" and s)
     step(f"republish_from_error: the order was processed again → {order['status']}")
     emailed(flaky, "Confirmation")
+    copies = eventually("order copies in shop-audit-orders", lambda: (q := call("queue_stats", queues=["shop-audit-orders"])
+                        ["queues"][0]) and (q["readyMessages"] or 0) >= 1 and q)
+    step(f"shop-audit-orders holds {copies['readyMessages']} order cop{'y' if copies['readyMessages'] == 1 else 'ies'}")
 
     # --- 2b. a poison message goes to the dead-letter queue, nothing is deleted
     broken = str(uuid.uuid4())

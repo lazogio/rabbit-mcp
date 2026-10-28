@@ -77,6 +77,16 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   (`reply_*`) or rejects (`Fault<T>`). Replies go to `responseAddress`, faults to `faultAddress ?? responseAddress`;
   a reply that fails validation is not sent and the request stays pending. The responder queue name is
   deterministic and exclusive (`{ClientName}-responder`): one active instance, others stand by (405 RESOURCE_LOCKED).
+- **Topology** (`EnableTopology`, `TopologyPolicy`, `TopologyManager`): `declare_exchange` / `declare_queue` only create —
+  an existing entity is re-declared with the requested settings on a throwaway channel (no-op or 406 →
+  `existed-different`, left unchanged); previews use passive declares only. Exchanges of MassTransit contracts and their
+  responses, and exchanges named like an existing queue (MassTransit endpoints), are created only fanout/durable/
+  no-arguments. Bindings only for entities the call creates. `TopologyArguments` defaults to arguments that cannot drop
+  messages (no TTL/max-length/expires); a referenced DLX/alternate-exchange must exist, quorum queues need a DLX (or
+  x-delivery-limit), `x-queue-type` is always explicit. These guards are `TopologyRules` (require-dead-letter,
+  check-references, protect-masstransit; opt-in bind-existing, templates-only). `TopologyTemplates` are operator-written
+  settings (arguments not limited by TopologyArguments; explicit call values win). Permission `topology` (name
+  patterns); a binding source passed by the caller needs it unrestricted (a template's bind does not).
 - **Nothing is ever deleted**: there is no tool that removes messages. Poison messages are parked with
   `dead_letter_from_error` (same get → confirmed publish → ack sequence as republish, all headers kept).
 - **Never trust message content for routing**: envelope addresses and AMQP headers are written by whoever published
@@ -97,8 +107,8 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   them into readable `McpException`s (`BrokerErrors`). Sending paths still catch `Exception` themselves to audit.
 - `contracts diff` compares the System.Text.Json schema with `MassTransitJson` naming; keep it in sync if the
   envelope serialization options change. The CLI writes to stdout — it is never run as an MCP server.
-- **Roles** (`Security/AccessControl`, `ToolAccess`): HTTP callers get permissions read/publish/request/republish/respond
-  from `Roles`/`UserRoles`/`DefaultRoles`/JWT roles claim. The MCP filters in `ServerComposition` hide tools in
+- **Roles** (`Security/AccessControl`, `ToolAccess`): HTTP callers get permissions
+  read/publish/request/republish/respond/topology from `Roles`/`UserRoles`/`DefaultRoles`/JWT roles claim. The MCP filters in `ServerComposition` hide tools in
   tools/list and re-check tools/call (audited as `access denied`). **Every new tool needs a rule in `ToolAccess`**
   (unknown tools are denied once roles are on). Stdio is unrestricted; Enable*/PublishAllow stay the ceiling.
   Arguments that redirect messages (`targetExchange`, `targetQueue`, `deadLetterQueue`: `ToolRule.OverrideArguments`)

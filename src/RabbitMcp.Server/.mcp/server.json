@@ -37,6 +37,12 @@
           "isSecret": false
         },
         {
+          "name": "RabbitMcp__EnableTopology",
+          "description": "true to enable declare_exchange / declare_queue (off by default).",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
           "name": "RabbitMcp__ManagementUri",
           "description": "RabbitMQ Management API, e.g. http://localhost:15672 (list_queues, contract_consumers).",
           "isRequired": false,

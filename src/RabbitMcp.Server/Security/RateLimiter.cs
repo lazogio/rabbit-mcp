@@ -9,7 +9,7 @@ using RabbitMcp.Server.Hosting;
 namespace RabbitMcp.Server.Security;
 
 /// <summary>
-/// RabbitMcp:RateLimits — at most N changing calls per caller and kind (publish, request, republish, respond, or * for
+/// RabbitMcp:RateLimits — at most N changing calls per caller and kind (publish, request, republish, respond, topology, or * for
 /// all of them) in a sliding window. Read-only calls and previews never count. Kept in memory per server instance.
 /// </summary>
 public sealed partial class RateLimiter
@@ -29,9 +29,9 @@ public sealed partial class RateLimiter
             var colon = entry.IndexOf(':');
             var kind = colon < 0 ? "" : entry[..colon].Trim().ToLowerInvariant();
             var value = colon < 0 ? "" : entry[(colon + 1)..].Trim();
-            if (kind is not ("publish" or "request" or "republish" or "respond" or Any))
+            if (kind is not ("publish" or "request" or "republish" or "respond" or "topology" or Any))
                 throw new StartupException(
-                    $"RabbitMcp:RateLimits: '{entry}' — use publish, request, republish, respond or * followed by :N/unit, e.g. publish:100/h.");
+                    $"RabbitMcp:RateLimits: '{entry}' — use publish, request, republish, respond, topology or * followed by :N/unit, e.g. publish:100/h.");
             if (ValueRegex().Match(value) is not { Success: true } m || !int.TryParse(m.Groups[1].Value, CultureInfo.InvariantCulture, out var limit) || limit < 1)
                 throw new StartupException($"RabbitMcp:RateLimits: '{entry}' — the limit must look like 100/h (units s, m, h, d).");
             var window = m.Groups[2].Value.ToLowerInvariant() switch

@@ -80,7 +80,7 @@ public sealed class HumanConfirmation
 {
     /// <summary>Tools with a preview: calls without confirm=true change nothing and are never asked about.</summary>
     public static readonly IReadOnlySet<string> PreviewTools =
-        new HashSet<string>(StringComparer.Ordinal) { "republish_from_error", "dead_letter_from_error", "resend_corrected" };
+        new HashSet<string>(StringComparer.Ordinal) { "republish_from_error", "dead_letter_from_error", "resend_corrected", "declare_exchange", "declare_queue" };
 
     private const int MaxSummaryChars = 1500;
 
