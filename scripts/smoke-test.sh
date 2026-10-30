@@ -16,6 +16,9 @@ OUT=$(mktemp)
 ERR=$(mktemp)
 trap 'rm -f "$OUT" "$ERR"' EXIT
 
+# macOS has no timeout(1). SIGALRM survives exec and ends the server the same way.
+command -v timeout >/dev/null || timeout() { local limit=$1; shift; perl -e 'alarm shift; exec @ARGV or die' "$limit" "$@"; }
+
 export RabbitMcp__EnablePublish=true
 export RabbitMcp__EnableRepublish=true
 export RabbitMcp__ManagementUri=${RabbitMcp__ManagementUri:-http://localhost:15672}   # registers list_queues; never called

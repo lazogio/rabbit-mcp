@@ -8,6 +8,7 @@ Last updated: 2026-10-24 · Bugs: 28 (0 open) · Next ID: BUG-029
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-10-30 fix/schema-bounds-macos-smoke: BUG-029 decimal [Range] limits are numbers in schemas; smoke scripts run on macOS (no timeout(1), no --network host)
 - 2026-10-28 feat/topology-tools (PR #15): declare_exchange / declare_queue behind EnableTopology, create-only; review fixes in the same PR
 - 2026-10-24 fix/validator-invariant-culture: BUG-028 decimal [Range] limits threw under ka-GE; validator uses invariant culture
 - 2026-10-18 phase-14/asyncapi: ContractFiles (AsyncAPI 3/2, YAML/JSON), own schema validator, export + diff; BUG-027

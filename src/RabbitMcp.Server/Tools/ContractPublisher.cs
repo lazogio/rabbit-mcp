@@ -402,6 +402,7 @@ public static class ContractToolFactory
         OpenWorld = true,
         UseStructuredContent = true,
         SerializerOptions = ToolJson.Options,
+        SchemaCreateOptions = ToolJson.SchemaOptions,
     };
 
     private static McpServerTool CreateTypedTool(ContractDescriptor contract) =>

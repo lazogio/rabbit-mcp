@@ -6,3 +6,4 @@ obj/
 TestResults/
 appsettings.*.local.json
 __pycache__/
+out/
