@@ -1,6 +1,7 @@
 // Copyright (c) 2026 lazogio
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Text.Json;
 using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
@@ -57,6 +58,38 @@ public class ToolSchemaTests
 
         // CancellationToken is bound by the SDK, never part of the schema.
         Assert.False(schema.GetProperty("properties").TryGetProperty("cancellationToken", out _));
+    }
+
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("ka-GE")]
+    public void Decimal_range_limits_are_numbers_in_the_input_schema(string culture)
+    {
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+        try
+        {
+            var tool = ContractToolFactory.CreateTool(Registry.Get(typeof(OrderSubmitted))).ProtocolTool;
+            var unitPrice = tool.InputSchema.GetProperty("properties").GetProperty("message").GetProperty("properties")
+                .GetProperty("lines").GetProperty("items").GetProperty("properties").GetProperty("unitPrice");
+
+            Assert.Equal(JsonValueKind.Number, unitPrice.GetProperty("minimum").ValueKind);
+            Assert.Equal(0.01m, unitPrice.GetProperty("minimum").GetDecimal());
+            Assert.Equal(1000000m, unitPrice.GetProperty("maximum").GetDecimal());
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    [Fact]
+    public void Decimal_range_limits_are_numbers_in_contract_resources()
+    {
+        var json = ContractResources.Describe(Registry.Get(typeof(OrderSubmitted)));
+
+        Assert.DoesNotContain("\"minimum\": \"", json);
+        Assert.Contains("\"minimum\": 0.01", json);
     }
 
     [Fact]

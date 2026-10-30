@@ -15,8 +15,9 @@ export RabbitMcp__Transport=http RabbitMcp__HttpUrls="http://127.0.0.1:$PORT" \
        RabbitMcp__ApiKeys="smoke:$KEY" RabbitMcp__EnablePublish=true
 if [[ "$BIN" == docker:* ]]; then
   CONTAINER="rabbit-mcp-smoke-$$"
-  docker run --rm --name "$CONTAINER" --network host \
-    -e RabbitMcp__Transport -e RabbitMcp__HttpUrls -e RabbitMcp__ApiKeys -e RabbitMcp__EnablePublish \
+  # A published port, not --network host: on Docker Desktop host networking does not reach the Mac or Windows host.
+  docker run --rm --name "$CONTAINER" -p "127.0.0.1:$PORT:$PORT" \
+    -e RabbitMcp__Transport -e RabbitMcp__HttpUrls="http://0.0.0.0:$PORT" -e RabbitMcp__ApiKeys -e RabbitMcp__EnablePublish \
     "${BIN#docker:}" >"$LOG" 2>&1 &
 else
   "$BIN" >"$LOG" 2>&1 &

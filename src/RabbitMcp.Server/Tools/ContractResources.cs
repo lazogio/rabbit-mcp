@@ -61,5 +61,5 @@ public static class ContractResources
     }
 
     private static JsonNode? Schema(Type type) =>
-        JsonNode.Parse(AIJsonUtilities.CreateJsonSchema(type, serializerOptions: ToolJson.Options).GetRawText());
+        JsonNode.Parse(AIJsonUtilities.CreateJsonSchema(type, serializerOptions: ToolJson.Options, inferenceOptions: ToolJson.SchemaOptions).GetRawText());
 }

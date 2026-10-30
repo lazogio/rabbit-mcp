@@ -1,6 +1,13 @@
 # Bugs (newest first)
 
-Next ID: BUG-029
+Next ID: BUG-030
+
+### BUG-029 Decimal [Range] limits were strings in tool schemas — fixed (2026-10-30, branch fix/schema-bounds-macos-smoke)
+- Symptom (local run, tools/list): `unitPrice` had `"minimum": "0.01"`, `"maximum": "1000000"`; invalid JSON Schema (limits must be numbers).
+- Root cause: schema generation (Microsoft.Extensions.AI) writes `[Range(typeof(decimal), …)]` limits as the attribute's strings.
+- Fix: `ToolJson.SchemaOptions` turns them into numbers (invariant culture); used by typed tools, reply_* tools and contract resources.
+  Guards: `Decimal_range_limits_are_numbers_in_the_input_schema`, `Decimal_range_limits_are_numbers_in_contract_resources`.
+- Lesson: build new C# schema paths with `ToolJson.SchemaOptions`, or tools and resources drift apart.
 
 ### BUG-028 Decimal [Range] crashed validation on comma-decimal locales — fixed (2026-10-24, branch fix/validator-invariant-culture)
 - Symptom (local unit tests, macOS region Georgia): 9 failures, `0.01 is not a valid value for Decimal`; CI (invariant/en) green.

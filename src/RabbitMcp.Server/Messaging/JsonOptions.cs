@@ -4,8 +4,10 @@
 using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Microsoft.Extensions.AI;
 
 namespace RabbitMcp.Server.Messaging;
 
@@ -13,6 +15,27 @@ namespace RabbitMcp.Server.Messaging;
 public static class ToolJson
 {
     public static JsonSerializerOptions Options { get; } = Create();
+
+    /// <summary>Schema generation for everything built from a C# contract, so tools and resources show the same schema.</summary>
+    public static AIJsonSchemaCreateOptions SchemaOptions { get; } = new() { TransformSchemaNode = NumericLimits };
+
+    /// <summary>
+    /// [Range(typeof(decimal), "0.01", "100")] comes out with its limits as strings, which is not valid JSON Schema
+    /// (minimum and maximum must be numbers). The limits are invariant-culture text, see ContractValidator.
+    /// </summary>
+    private static JsonNode NumericLimits(AIJsonSchemaCreateContext context, JsonNode schema)
+    {
+        if (schema is JsonObject keywords)
+        {
+            foreach (var name in (string[])["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"])
+            {
+                if (keywords[name] is JsonValue limit && limit.TryGetValue<string>(out var text) &&
+                    decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+                    keywords[name] = number;
+            }
+        }
+        return schema;
+    }
 
     private static JsonSerializerOptions Create()
     {

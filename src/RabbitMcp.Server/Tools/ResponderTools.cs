@@ -132,6 +132,7 @@ public static class ReplyToolFactory
                 OpenWorld = true,
                 UseStructuredContent = true,
                 SerializerOptions = ToolJson.Options,
+                SchemaCreateOptions = ToolJson.SchemaOptions,
             });
     }
 }
