@@ -1,6 +1,14 @@
 # Bugs (newest first)
 
-Next ID: BUG-030
+Next ID: BUG-031
+
+### BUG-030 messageIds and filters only saw the first message without count — fixed (2026-10-30, branch fix/message-ids-scan-and-warning)
+- Symptom (local live run): `dead_letter_from_error` with messageIds skipped a message at position 2: "Not found in the first 1 message(s)".
+  Filters had the same trap although the description promises one call moves up to MaxBulkMessages.
+- Root cause: `count` defaulted to 1 and is the scan depth in `QueueBrowser`.
+- Fix: `count` is optional; `RepublishTools.ScanDepth` uses MaxMessagesPerCall with messageIds, MaxBulkMessages with a filter, an explicit
+  count still wins. Previews stay at 1. Guard: `Selected_messages_are_found_behind_the_head_without_count`.
+- Lesson: in these tools count limits the scan, not the number of messages moved.
 
 ### BUG-029 Decimal [Range] limits were strings in tool schemas — fixed (2026-10-30, branch fix/schema-bounds-macos-smoke)
 - Symptom (local run, tools/list): `unitPrice` had `"minimum": "0.01"`, `"maximum": "1000000"`; invalid JSON Schema (limits must be numbers).

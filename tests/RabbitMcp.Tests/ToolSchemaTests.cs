@@ -1,14 +1,28 @@
 // Copyright (c) 2026 lazogio
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Text.Json;
+using RabbitMcp.Contracts;
 using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Messaging;
 using RabbitMcp.Server.Tools;
 
 namespace RabbitMcp.Tests;
+
+[MessageContract("Asks for a price.", Responses = new[] { typeof(PriceFound) })]
+public sealed record PriceLookup
+{
+    public required string Sku { get; init; }
+}
+
+public sealed record PriceFound
+{
+    [Range(typeof(decimal), "0.01", "100")]
+    public required decimal Price { get; init; }
+}
 
 /// <summary>What the model sees in tools/list for the generated publish tools.</summary>
 public class ToolSchemaTests
@@ -81,6 +95,18 @@ public class ToolSchemaTests
         {
             CultureInfo.CurrentCulture = previous;
         }
+    }
+
+    [Fact]
+    public void Decimal_range_limits_are_numbers_in_reply_tools()
+    {
+        var registry = new ContractRegistry([typeof(PriceLookup)]);
+        var tool = Assert.Single(ReplyToolFactory.CreateTools(ResponderContracts.From(registry, "*"))).ProtocolTool;
+        var price = tool.InputSchema.GetProperty("properties").GetProperty("response")
+            .GetProperty("properties").GetProperty("price");
+
+        Assert.Equal(JsonValueKind.Number, price.GetProperty("minimum").ValueKind);
+        Assert.Equal(0.01m, price.GetProperty("minimum").GetDecimal());
     }
 
     [Fact]
