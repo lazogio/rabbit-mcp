@@ -14,7 +14,8 @@ namespace RabbitMcp.Server.Tools;
 public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptions> options, TimeProvider time)
 {
     private const string CountHelp =
-        "How many messages from the head of the queue to process (default 1; up to MaxMessagesPerCall, or MaxBulkMessages with a filter).";
+        "How many messages from the head of the queue to process. Default 1; with messageIds MaxMessagesPerCall, with a " +
+        "filter MaxBulkMessages, so the selected messages are found anywhere in that range. Up to those same limits.";
     private const string TypeHelp = "Filter: only messages whose exception type contains this, e.g. TimeoutException.";
     private const string MessageHelp = "Filter: only messages whose exception message (or dead-lettering reason) contains this.";
     private const string ContractHelp = "Filter: only messages of this contract, e.g. OrderPlaced.";
@@ -34,7 +35,7 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
         "the preview then groups the matching messages by fault, and one confirmed call moves up to MaxBulkMessages.")]
     public async Task<RepublishResult> RepublishFromErrorAsync(
         [Description("Error queue name, e.g. submit-order_error.")] string errorQueue,
-        [Description(CountHelp)] int count = 1,
+        [Description(CountHelp)] int? count = null,
         [Description("Set to true to execute. Without it, only a preview is returned.")] bool confirm = false,
         [Description("Only republish messages with these MessageIds (from the preview). Others are left in place.")] string[]? messageIds = null,
         [Description("Override the destination exchange. By default it is taken from MT-Fault-InputAddress.")] string? targetExchange = null,
@@ -58,11 +59,11 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
                 {
                     Selection = await browser.SummarizeAsync(errorQueue, selection, options.Value.MaxBulkMessages, force, cancellationToken),
                 };
-            var preview = await browser.PeekAsync(errorQueue, count, force, cancellationToken, target?.Display);
+            var preview = await browser.PeekAsync(errorQueue, count ?? 1, force, cancellationToken, target?.Display);
             return new RepublishResult(errorQueue, Executed: false, preview, Outcomes: [], Republished: 0, Requeued: 0);
         }
 
-        return await browser.RepublishAsync(errorQueue, count, messageIds, targetExchange, cancellationToken,
+        return await browser.RepublishAsync(errorQueue, ScanDepth(count, messageIds, selection), messageIds, targetExchange, cancellationToken,
             AuditLog.ClientOf(server, user), targetQueue, selection);
     }
 
@@ -77,7 +78,7 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
         "Two steps: call without confirm to preview, then confirm=true with the messageIds from the preview.")]
     public async Task<DeadLetterResult> DeadLetterFromErrorAsync(
         [Description("Error queue name, e.g. submit-order_error.")] string errorQueue,
-        [Description(CountHelp)] int count = 1,
+        [Description(CountHelp)] int? count = null,
         [Description("Set to true to execute. Without it, only a preview is returned.")] bool confirm = false,
         [Description("Only move messages with these MessageIds (from the preview). Others are left in place.")] string[]? messageIds = null,
         [Description("Why they are parked, e.g. 'customer deleted, cannot be fixed'. Stored as a header and in the audit.")] string? reason = null,
@@ -101,11 +102,17 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
                 {
                     Selection = await browser.SummarizeAsync(errorQueue, selection, options.Value.MaxBulkMessages, force: false, cancellationToken),
                 };
-            var preview = await browser.PeekAsync(errorQueue, count, force: false, cancellationToken);
+            var preview = await browser.PeekAsync(errorQueue, count ?? 1, force: false, cancellationToken);
             return new DeadLetterResult(errorQueue, target, Executed: false, preview, Outcomes: [], Moved: 0, Requeued: 0);
         }
 
-        return await browser.DeadLetterAsync(errorQueue, count, messageIds, deadLetterQueue, reason, cancellationToken,
+        return await browser.DeadLetterAsync(errorQueue, ScanDepth(count, messageIds, selection), messageIds, deadLetterQueue, reason, cancellationToken,
             AuditLog.ClientOf(server, user), selection);
     }
+
+    /// <summary>A selection must not stop at the first message just because count was left out.</summary>
+    private int ScanDepth(int? count, string[]? messageIds, MessageFilter? selection) =>
+        count ?? (selection is not null ? options.Value.MaxBulkMessages
+            : messageIds is { Length: > 0 } ? options.Value.MaxMessagesPerCall
+            : 1);
 }

@@ -3,6 +3,7 @@
 
 using ModelContextProtocol;
 using RabbitMcp.Samples.Orders;
+using RabbitMcp.Server.Tools;
 
 namespace RabbitMcp.IntegrationTests;
 
@@ -69,6 +70,29 @@ public sealed class ErrorQueueTests(BrokerFixture broker)
         // Clean up for other tests: republish to the real target.
         await broker.Browser.RepublishAsync(ErrorQueue, 5, [id], null, CancellationToken.None);
         await broker.WaitForCancelled(orderId);
+        await broker.WaitForQueueCount(ErrorQueue, 0);
+    }
+
+    [Fact]
+    public async Task Selected_messages_are_found_behind_the_head_without_count()
+    {
+        var orderIds = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        foreach (var orderId in orderIds)
+            await broker.Publisher.PublishAsync(new OrderCancelled { OrderId = orderId, Reason = "Behind the head" });
+        await broker.WaitForQueueCount(ErrorQueue, 3);
+        var ids = (await broker.Browser.PeekAsync(ErrorQueue, 5, false, CancellationToken.None)).Messages
+            .Select(m => m.MessageId!).ToArray();
+        var tools = new RepublishTools(broker.Browser, broker.Options, TimeProvider.System);
+
+        var byId = await tools.RepublishFromErrorAsync(ErrorQueue, confirm: true, messageIds: [ids[2]]);
+        Assert.Equal(1, byId.Republished);
+        await broker.WaitForQueueCount(ErrorQueue, 2);
+
+        var byFilter = await tools.RepublishFromErrorAsync(ErrorQueue, confirm: true, contract: nameof(OrderCancelled));
+        Assert.Equal(2, byFilter.Republished);
+
+        foreach (var orderId in orderIds)
+            await broker.WaitForCancelled(orderId);
         await broker.WaitForQueueCount(ErrorQueue, 0);
     }
 
