@@ -13,6 +13,7 @@ using RabbitMcp.Server.Cli;
 using RabbitMcp.Server.Contracts;
 using RabbitMcp.Server.Hosting;
 using RabbitMcp.Server.Messaging;
+using RabbitMcp.Server.Security;
 using RabbitMcp.Server.Tools;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -441,6 +442,32 @@ public class QaRegressionTests
 
         Assert.Equal(unreadable.GetRawText(), MessageInspector.WithEnumNumbers(contract, unreadable).GetRawText());
         Assert.NotEmpty(MessageInspector.Validate(contract, unreadable, MassTransitJson.Options));
+    }
+
+    [Theory]
+    [InlineData("publish,respond")] // would become topology
+    [InlineData("publish,request")] // would become republish
+    [InlineData("read,publish")]
+    [InlineData("read, publish")]
+    [InlineData("read,publish:Order*")]
+    [InlineData("1")]
+    [InlineData("3")]
+    public void A_role_entry_must_name_exactly_one_permission(string definition)
+    {
+        var ex = Assert.Throws<StartupException>(() => AccessControl.ParseRole("r", definition));
+
+        Assert.Contains("unknown permission", ex.Message);
+        Assert.Contains("separated by ';'", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("read", Permission.Read)]
+    [InlineData("READ", Permission.Read)]
+    [InlineData("Publish:Order*,Billing*", Permission.Publish)]
+    [InlineData(" topology ", Permission.Topology)]
+    public void Permission_names_keep_working_in_any_case(string definition, Permission expected)
+    {
+        Assert.Equal(expected, Assert.Single(AccessControl.ParseRole("r", definition).Grants).Permission);
     }
 
     [Fact]

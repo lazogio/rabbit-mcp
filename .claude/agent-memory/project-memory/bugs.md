@@ -1,6 +1,6 @@
 # Bugs (newest first)
 
-Next ID: BUG-065
+Next ID: BUG-066
 
 ### BUG-031..047 Black-box QA run (2026-10-31) — fixed (2026-10-31, on main)
 Found by driving the published binary over real MCP against RabbitMQ 4.4 and the official TypeScript client. Guards: `QaRegressionTests`,
@@ -43,6 +43,7 @@ Found by driving the published binary over real MCP against RabbitMQ 4.4 and the
 - BUG-062 (corrections) `resend_corrected` refused enum names. Fix: `MessageInspector.WithEnumNumbers`.
 - BUG-063 (text) A message held by a parallel peek read "Not found". Fix: text says it may be further back, held, or gone.
 - BUG-064 (streams) `basic.get` on a stream closed the whole connection (540, reported at first as a missing hint). Fix: browsing connection, `StreamQueueException`, moves try the first message there first. A null queue name is refused plainly.
+- BUG-065 (security) A comma in a role granted a different permission: `Enum.TryParse` ORs "publish,respond" into topology, and `IsDefined` then passes. Fix: `ParseRole` matches names exactly. Lesson: never validate external text with `Enum.TryParse`.
 
 ### BUG-030 messageIds and filters only saw the first message without count — fixed (2026-10-30, branch fix/message-ids-scan-and-warning)
 - Symptom (local live run): `dead_letter_from_error` with messageIds skipped a message at position 2: "Not found in the first 1 message(s)".

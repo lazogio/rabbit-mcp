@@ -206,10 +206,11 @@ public sealed class AccessControl
             var name = (colon < 0 ? entry : entry[..colon]).Trim();
             var patterns = colon < 0 ? [] : SplitList(entry[(colon + 1)..], ',');
 
-            if (!Enum.TryParse<Permission>(name, ignoreCase: true, out var permission) || !Enum.IsDefined(permission)
-                || int.TryParse(name, out _))
-                throw new StartupException(
-                    $"RabbitMcp:Roles:{role}: unknown permission '{name}'. Use read, publish, request, republish, respond, topology or *.");
+            // By name only: Enum.TryParse would take "publish,respond" and OR the values into a different permission.
+            var known = Enum.GetNames<Permission>().FirstOrDefault(n => n.Equals(name, StringComparison.OrdinalIgnoreCase))
+                ?? throw new StartupException(
+                    $"RabbitMcp:Roles:{role}: unknown permission '{name}'. Use read, publish, request, republish, respond, topology or *, separated by ';'.");
+            var permission = Enum.Parse<Permission>(known);
             if (permission == Permission.Read && patterns.Length > 0)
                 throw new StartupException($"RabbitMcp:Roles:{role}: 'read' cannot be limited to patterns.");
             if (colon >= 0 && patterns.Length == 0)
