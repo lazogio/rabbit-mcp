@@ -471,6 +471,30 @@ public class QaRegressionTests
     }
 
     [Fact]
+    public void A_refused_tls_handshake_is_not_reported_as_a_broker_that_is_down()
+    {
+        var cause = new System.Security.Authentication.AuthenticationException("The remote certificate is invalid: UntrustedRoot");
+        var refused = new BrokerUnreachableException(new AggregateException(new IOException("handshake", cause)));
+
+        var message = BrokerErrors.CannotConnect("broker:5671 (vhost '/')", usesTls: true, refused);
+
+        Assert.Contains("TLS failed", message);
+        Assert.Contains("UntrustedRoot", message);
+        Assert.DoesNotContain("credentials", message);
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void Only_amqps_connections_mention_certificates(bool usesTls, bool mentionsCertificates)
+    {
+        var message = BrokerErrors.CannotConnect("broker:5672 (vhost '/')", usesTls, new BrokerUnreachableException(new IOException("refused")));
+
+        Assert.Contains("credentials", message);
+        Assert.Equal(mentionsCertificates, message.Contains("client certificate", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Help_describes_the_server_and_its_commands()
     {
         Assert.Contains("--version", ContractsCommand.ServerUsage);

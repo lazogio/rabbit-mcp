@@ -117,7 +117,7 @@ Start a new session (the client loads MCP servers at start), then:
 |---|---|
 | Client shows no tools or "connection closed" | started with `dotnet run`, or a wrong binary path; use the published binary / `dnx` |
 | `rabbit-mcp: …` one line, exit code 1 | a configuration error; the line names the option (e.g. an unknown permission, `ApiKeys` too short) |
-| `Cannot connect to RabbitMQ at host:5672/vhost` | broker down, wrong host/port/vhost or credentials; the password is never shown |
+| `Cannot connect to RabbitMQ at host:5672/vhost` | broker down, wrong host/port/vhost or credentials; the password is never shown. With `amqps://`, the broker's certificate must be trusted and match its host name. Client certificates are not supported |
 | `403 ACCESS_REFUSED` | the RabbitMQ user lacks configure/write/read permission on that vhost or entity |
 | `publish_*` / `request_*` missing | `EnablePublish` not set, or `PublishDeny` / roles hide them |
 | `list_queues` missing | `ManagementUri` not set |

@@ -46,6 +46,12 @@ public static class ServerComposition
     /// <summary>Reply queues add the machine name (at most 63) and a GUID, and a queue name has at most 255 bytes.</summary>
     private const int MaxClientNameChars = 150;
 
+    /// <summary>
+    /// Every scan holds its messages and returns them at the end, and returning slows sharply with their number: on a
+    /// small broker a queue stayed busy 7 seconds after 10,000 messages and over 5 minutes after 50,000.
+    /// </summary>
+    private const int MaxBulkMessagesLimit = 10_000;
+
     /// <exception cref="StartupException">A value the server cannot work with.</exception>
     private static void Validate(RabbitMcpOptions options)
     {
@@ -63,8 +69,8 @@ public static class ServerComposition
             throw new StartupException($"RabbitMcp:ClientName must be at most {MaxClientNameChars} characters: queue names are built from it.");
         if (options.MaxMessagesPerCall is < 1 or > 1000)
             throw new StartupException("RabbitMcp:MaxMessagesPerCall must be 1-1000.");
-        if (options.MaxBulkMessages is < 1 or > 100_000)
-            throw new StartupException("RabbitMcp:MaxBulkMessages must be 1-100000.");
+        if (options.MaxBulkMessages is < 1 or > MaxBulkMessagesLimit)
+            throw new StartupException($"RabbitMcp:MaxBulkMessages must be 1-{MaxBulkMessagesLimit}.");
         if (options.MaxPayloadChars < 1)
             throw new StartupException("RabbitMcp:MaxPayloadChars must be at least 1.");
         if (options.PublishTimeoutSeconds is < 1 or > 300)

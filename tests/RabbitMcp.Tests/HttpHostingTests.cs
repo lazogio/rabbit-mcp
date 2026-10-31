@@ -308,6 +308,7 @@ public class HttpHostingTests
     [InlineData("MaxMessagesPerCall", "0")]
     [InlineData("PublishTimeoutSeconds", "0")]
     [InlineData("MaxBulkMessages", "0")]
+    [InlineData("MaxBulkMessages", "10001")]
     [InlineData("MaxPayloadChars", "0")]
     [InlineData("ManagementUri", "ftp://broker")]
     [InlineData("MaxMessagesPerCall", "many")]

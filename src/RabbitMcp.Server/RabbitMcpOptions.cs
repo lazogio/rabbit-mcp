@@ -66,7 +66,7 @@ public sealed class RabbitMcpOptions
 
     /// <summary>
     /// Upper bound for count when republish_from_error / dead_letter_from_error select by a filter (exceptionType,
-    /// contract, since …): one scan, every message still acked only after its confirm.
+    /// contract, since …), at most 10000: one scan, every message still acked only after its confirm.
     /// </summary>
     public int MaxBulkMessages { get; set; } = 1000;
 

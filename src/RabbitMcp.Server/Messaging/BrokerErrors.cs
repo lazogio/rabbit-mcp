@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Security.Authentication;
 using System.Text.Json;
 using ModelContextProtocol;
 using RabbitMQ.Client.Exceptions;
@@ -68,6 +69,32 @@ public static class BrokerErrors
             method?.DeclaringType?.Namespace is { } name
             && ((name.StartsWith("RabbitMcp.Server.", StringComparison.Ordinal) && !name.EndsWith(".Hosting", StringComparison.Ordinal))
                 || (name.StartsWith("System.Text.Json", StringComparison.Ordinal) && method.Name.StartsWith("Serialize", StringComparison.Ordinal))));
+
+    /// <summary>
+    /// A connection that could not be opened. A refused TLS handshake reaches the client as the same exception as a broker
+    /// that is down, so its cause is looked for, and the text names TLS. The cause names certificates, never the URI.
+    /// </summary>
+    public static string CannotConnect(string broker, bool usesTls, Exception ex)
+    {
+        if (Causes(ex).OfType<AuthenticationException>().FirstOrDefault() is { } refused)
+            return $"Cannot connect to RabbitMQ at {broker}: TLS failed ({refused.Message}). " +
+                   "Check that the broker's certificate is trusted here and matches its host name.";
+        return $"Cannot connect to RabbitMQ at {broker}. Is the broker running and are the credentials correct?" +
+               (usesTls ? " With amqps://, also check its TLS certificate. This server cannot send a client certificate." : "");
+    }
+
+    private static IEnumerable<Exception> Causes(Exception? ex)
+    {
+        for (; ex is not null; ex = ex.InnerException)
+        {
+            yield return ex;
+            if (ex is AggregateException all)
+            {
+                foreach (var cause in all.InnerExceptions.SelectMany(Causes))
+                    yield return cause;
+            }
+        }
+    }
 
     /// <summary>The exception itself if it is already an McpException, else a readable one (or a generic one).</summary>
     public static McpException ToMcp(Exception ex) =>

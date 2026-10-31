@@ -139,3 +139,5 @@
 - `connection.blocked` arrives only after that connection tried to publish, and channel.open on a blocked connection hangs for the continuation
   timeout. `channel.DisposeAsync` hangs the same way, which is why `PublishChannel` closes a stalled channel in the background.
 - `JsonElement` accepts a lone surrogate and invalid UTF-8 inside strings: `GetRawText` or writing fails later. Check with `MessageInspector.CanShow`.
+- Returning many unacked messages at once costs the broker far more than fetching them: 1,000 took 0.5 s, 20,000 took 40 s, 50,000 over 5 minutes on a
+  1 GB broker, and the queue answers nothing meanwhile. Moving matching messages out has no such cost. This is why `MaxBulkMessages` stops at 10,000.

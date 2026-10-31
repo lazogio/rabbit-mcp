@@ -246,8 +246,7 @@ public sealed class RabbitConnection(IOptions<RabbitMcpOptions> options, TimePro
             {
                 // Never surface the URI itself: it contains credentials.
                 logger.LogWarning(ex, "Cannot connect to RabbitMQ at {Broker}", BrokerAddress.Describe(BrokerUri));
-                throw new McpException(
-                    $"Cannot connect to RabbitMQ at {BrokerAddress.Describe(BrokerUri)}. Is the broker running and are the credentials correct?");
+                throw new McpException(BrokerErrors.CannotConnect(BrokerAddress.Describe(BrokerUri), BrokerUri.Scheme == "amqps", ex));
             }
 
             if (purpose == Purpose.Publishing)
