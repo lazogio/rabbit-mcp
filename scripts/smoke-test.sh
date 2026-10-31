@@ -29,11 +29,15 @@ export RabbitMcp__ManagementUri=${RabbitMcp__ManagementUri:-http://localhost:156
   printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
   printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"prompts/list"}'
   printf '%s\n' '{"jsonrpc":"2.0","id":4,"method":"resources/list"}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_contracts","arguments":{}}}'
   sleep 5   # keep stdin open until the server has answered
 } | timeout 30 "$BIN" >"$OUT" 2>"$ERR" || true
 
-python3 - "$OUT" "$ERR" <<'PY'
-import json, sys
+python3 - "$OUT" "$ERR" "$(dirname "$0")" <<'PY'
+import json, os, sys
+
+sys.path.insert(0, sys.argv[3])
+from mcp_schema import problems as schema_problems
 
 out, err = sys.argv[1], sys.argv[2]
 lines = [l for l in open(out, encoding="utf-8").read().splitlines() if l.strip()]
@@ -57,7 +61,6 @@ else:
     print(f"server: {init['serverInfo']['name']} {init['serverInfo']['version']}, protocol {init['protocolVersion']}")
 
 tools = {t["name"]: t for t in responses.get(2, {}).get("result", {}).get("tools", [])}
-import os
 def names(var, default):
     raw = os.environ.get(var)
     return {n.strip() for n in raw.split(",") if n.strip()} if raw else set(default)
@@ -82,6 +85,13 @@ if missing_prompts:
 resources = [r["uri"] for r in responses.get(4, {}).get("result", {}).get("resources", [])]
 if not resources or not all(u.startswith("contract://") for u in resources):
     problems.append(f"expected contract:// resources, got {resources}")
+
+# list_contracts needs no broker: one real result, checked the way strict clients check every result.
+listed = responses.get(5, {}).get("result", {}).get("structuredContent")
+if listed is None:
+    problems.append(f"list_contracts returned no structured content (got {responses.get(5)})")
+elif "list_contracts" in tools:
+    problems.extend(schema_problems(tools["list_contracts"]["outputSchema"], listed))
 
 if problems:
     print("SMOKE TEST FAILED", *problems, "--- stderr ---", open(err, encoding="utf-8").read()[-3000:], sep="\n")

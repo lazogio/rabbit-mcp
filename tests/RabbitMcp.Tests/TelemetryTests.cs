@@ -1,6 +1,7 @@
 // Copyright (c) 2026 lazogio
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text;
@@ -84,7 +85,8 @@ public class TelemetryTests
     [Fact]
     public void Every_audit_event_is_counted()
     {
-        var points = new List<(long Value, Dictionary<string, object?> Tags)>();
+        // Thread-safe: the listener also sees audit events of tests running in parallel in other classes.
+        var points = new ConcurrentQueue<(long Value, Dictionary<string, object?> Tags)>();
         using var meters = new MeterListener();
         meters.InstrumentPublished = (instrument, l) =>
         {
@@ -92,7 +94,7 @@ public class TelemetryTests
                 l.EnableMeasurementEvents(instrument);
         };
         meters.SetMeasurementEventCallback<long>((_, value, tags, _) =>
-            points.Add((value, tags.ToArray().ToDictionary(t => t.Key, t => t.Value))));
+            points.Enqueue((value, tags.ToArray().ToDictionary(t => t.Key, t => t.Value))));
         meters.Start();
 
         Telemetry.Count(new AuditEvent(DateTimeOffset.UtcNow, "publish", "sent", "c", Contract: "OrderSubmitted"));

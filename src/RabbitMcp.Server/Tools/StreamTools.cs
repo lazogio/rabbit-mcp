@@ -3,6 +3,7 @@
 
 using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using RabbitMcp.Server.Messaging;
 
@@ -27,9 +28,18 @@ public sealed class StreamTools(QueueBrowser browser, IServiceProvider services)
     {
         // The Management API knows the queue type; without it the first delivery tells.
         bool? isStream = null;
-        if (services.GetService<ManagementClient>() is { } management &&
-            await management.GetQueueAsync(queue, cancellationToken) is { Type: { } type })
-            isStream = type == "stream";
+        if (services.GetService<ManagementClient>() is { } management)
+        {
+            try
+            {
+                if (await management.GetQueueAsync(queue, cancellationToken) is { Type: { } type })
+                    isStream = type == "stream";
+            }
+            catch (McpException)
+            {
+                // Down or refused: reading needs only AMQP.
+            }
+        }
         return await browser.ReadStreamAsync(queue, from, count, isStream, force, cancellationToken);
     }
 }

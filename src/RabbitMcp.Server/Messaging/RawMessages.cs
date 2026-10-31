@@ -63,19 +63,8 @@ public sealed record RawReply(string? CorrelationId, string? Type, string? AppId
 {
     public static RawReply From(IReadOnlyBasicProperties props, ReadOnlySpan<byte> body, int maxChars)
     {
-        JsonElement? json = null;
+        var json = body.Length <= maxChars ? MessageInspector.TryParseJson(body) : null;
         string? text = null;
-        if (body.Length <= maxChars)
-        {
-            try
-            {
-                var reader = new Utf8JsonReader(body);
-                json = JsonElement.ParseValue(ref reader); // copies the data
-            }
-            catch (JsonException)
-            {
-            }
-        }
         if (json is null)
             text = Encoding.UTF8.GetString(body.Length > maxChars ? body[..maxChars] : body);
 

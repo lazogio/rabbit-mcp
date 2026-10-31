@@ -21,9 +21,12 @@ import time
 import urllib.request
 import uuid
 
+from mcp_schema import problems
+
 URL, KEY = sys.argv[1], sys.argv[2]
 DEMO_ORDER = "5ca1ab1e-0000-4000-8000-000000000001"
 _ids = iter(range(1, 1_000_000))
+_output_schemas = {}
 
 
 def rpc(method, params=None):
@@ -46,9 +49,14 @@ def rpc(method, params=None):
 
 
 def call(tool, **arguments):
+    if not _output_schemas:
+        _output_schemas.update({t["name"]: t.get("outputSchema") for t in rpc("tools/list")["tools"]})
     result = rpc("tools/call", {"name": tool, "arguments": arguments})
     if result.get("isError"):
         raise SystemExit(f"{tool} returned an error: {result['content'][0]['text']}")
+    mismatches = problems(_output_schemas.get(tool), result["structuredContent"])
+    if mismatches:
+        raise SystemExit(f"{tool} does not match its outputSchema: {mismatches[:5]}")
     return result["structuredContent"]
 
 

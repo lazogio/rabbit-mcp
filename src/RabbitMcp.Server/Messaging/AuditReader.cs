@@ -81,18 +81,24 @@ public static partial class AuditReader
         string.IsNullOrWhiteSpace(wanted) || (value?.Contains(wanted.Trim(), StringComparison.OrdinalIgnoreCase) ?? false);
 
     /// <summary>"30m", "2h", "7d" (before <paramref name="now"/>) or an ISO 8601 timestamp. Null for empty.</summary>
-    public static DateTimeOffset? ParseSince(string? value, DateTimeOffset now)
+    /// <param name="argument">The tool argument being read, named in the error.</param>
+    public static DateTimeOffset? ParseSince(string? value, DateTimeOffset now, string argument = "since")
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
-        var text = value.Trim();
+        return TryParseTime(value.Trim(), now, out var at)
+            ? at
+            : throw new McpException($"{argument} must be like 30m, 2h, 7d or an ISO 8601 time, not '{value}'.");
+    }
 
+    public static bool TryParseTime(string text, DateTimeOffset now, out DateTimeOffset at)
+    {
         if (RelativeRegex().Match(text) is { Success: true } m)
         {
             var amount = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
             try
             {
-                return m.Groups[2].Value.ToLowerInvariant() switch
+                at = m.Groups[2].Value.ToLowerInvariant() switch
                 {
                     "m" => now.AddMinutes(-amount),
                     "h" => now.AddHours(-amount),
@@ -101,13 +107,11 @@ public static partial class AuditReader
             }
             catch (ArgumentOutOfRangeException)
             {
-                return DateTimeOffset.MinValue; // "999999d" reaches before year 1: everything
+                at = DateTimeOffset.MinValue; // "999999d" reaches before year 1: everything
             }
+            return true;
         }
-        if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at))
-            return at;
-
-        throw new McpException($"since must be like 30m, 2h, 7d or an ISO 8601 time, not '{value}'.");
+        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out at);
     }
 
     [GeneratedRegex("^([0-9]{1,6})\\s*([mhdMHD])$")]

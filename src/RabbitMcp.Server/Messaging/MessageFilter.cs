@@ -23,7 +23,7 @@ public sealed record MessageFilter(
     {
         var filter = new MessageFilter(
             Clean(exceptionType), Clean(exceptionContains), Clean(contract),
-            AuditReader.ParseSince(since, now), AuditReader.ParseSince(until, now));
+            AuditReader.ParseSince(since, now), AuditReader.ParseSince(until, now, "until"));
         return filter is { ExceptionType: null, ExceptionContains: null, Contract: null, Since: null, Until: null } ? null : filter;
     }
 

@@ -84,13 +84,22 @@ public sealed record PeekedMessage(
     [property: Description("Body as text when it is not JSON or is too large (truncated for display only).")] string? RawBody,
     bool Truncated,
     int BodyBytes,
-    IReadOnlyDictionary<string, string?> Headers);
+    IReadOnlyDictionary<string, string?> Headers)
+{
+    [Description("Why the message is shown only in part, when it could not be read normally.")]
+    public string? Problem { get; init; }
+}
 
 public sealed record PeekResult(
     string Queue,
     int Returned,
     [property: Description("Ready messages left in the queue after the last fetched one.")] uint RemainingAfterLast,
-    IReadOnlyList<PeekedMessage> Messages);
+    IReadOnlyList<PeekedMessage> Messages)
+{
+    /// <summary>How many messages were read from the head of the queue; more than Returned when a selection applied.</summary>
+    [Description("Messages read from the head of the queue; more than returned when selecting by messageIds.")]
+    public int Scanned { get; init; }
+}
 
 public sealed record RepublishOutcome(
     string? MessageId,
@@ -266,7 +275,7 @@ public sealed record FoundMessage(
 
 public sealed record QueueSearch(
     string Queue,
-    [property: Description("searched | searched the first N of M | empty | missing | skipped: has consumers | skipped: exclusive to another connection | error: <reason>")] string Status,
+    [property: Description("searched | searched the first N of M | empty | missing | skipped: has consumers | skipped: exclusive to another connection | skipped: a stream; read it with read_stream | error: <reason>")] string Status,
     int Scanned,
     [property: Description("Ready messages in the queue.")] long? Ready);
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.Text;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -25,7 +26,8 @@ public sealed class SearchTools(
         "and shows where they are: queue, payload, fault and republish target. By default it searches every _error, " +
         "_skipped and _dead queue (needs ManagementUri); scope='all' searches every non-empty queue; or pass queues. " +
         "Each queue is read from the head like peek_messages (nothing is removed; peeked messages become 'redelivered'), " +
-        "at most maxPerQueue messages deep. Queues with active consumers are skipped unless force=true.")]
+        "at most maxPerQueue messages deep. Queues with active consumers are skipped unless force=true. Streams are " +
+        "reported in the result but not searched: read them with read_stream.")]
     public async Task<FindMessageResult> FindMessageAsync(
         [Description("MessageId to look for.")] string? messageId = null,
         [Description("CorrelationId to look for.")] string? correlationId = null,
@@ -55,6 +57,11 @@ public sealed class SearchTools(
                 searched.Add(new QueueSearch(queue, "skipped: exclusive to another connection", 0, null));
                 continue;
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                searched.Add(new QueueSearch(queue, "error: " + BrokerErrors.ToMcp(ex).Message, 0, null));
+                continue;
+            }
 
             if (info is null)
             {
@@ -66,27 +73,29 @@ public sealed class SearchTools(
                 searched.Add(new QueueSearch(queue, "skipped: has consumers", 0, info.MessageCount));
                 continue;
             }
-            if (info.MessageCount == 0)
-            {
-                searched.Add(new QueueSearch(queue, "empty", 0, 0));
-                continue;
-            }
 
             PeekResult peek;
             try
             {
-                peek = await browser.PeekAsync(queue, depth, force: true, cancellationToken);
+                peek = await browser.PeekAsync(queue, depth, force: true, cancellationToken, select: matcher.Matches);
             }
-            catch (Exception ex) when (ex is McpException or OperationInterruptedException)
+            catch (StreamQueueException)
+            {
+                searched.Add(new QueueSearch(queue, "skipped: a stream; read it with read_stream", 0, null));
+                continue;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // E.g. the queue was deleted after it was listed, or access to it is refused.
                 searched.Add(new QueueSearch(queue, "error: " + BrokerErrors.ToMcp(ex).Message, 0, info.MessageCount));
                 continue;
             }
-            matches.AddRange(peek.Messages.Where(matcher.Matches).Select(m => new FoundMessage(queue, m)));
-            searched.Add(new QueueSearch(queue,
-                peek.RemainingAfterLast > 0 ? $"searched the first {peek.Returned} of {peek.Returned + peek.RemainingAfterLast}" : "searched",
-                peek.Returned, peek.Returned + peek.RemainingAfterLast));
+            matches.AddRange(peek.Messages.Select(m => new FoundMessage(queue, m)));
+            searched.Add(peek.Scanned == 0
+                ? new QueueSearch(queue, "empty", 0, 0)
+                : new QueueSearch(queue,
+                    peek.RemainingAfterLast > 0 ? $"searched the first {peek.Scanned} of {peek.Scanned + peek.RemainingAfterLast}" : "searched",
+                    peek.Scanned, peek.Scanned + peek.RemainingAfterLast));
         }
 
         return new FindMessageResult(matches, searched, note);
@@ -136,12 +145,17 @@ public sealed class MessageMatcher
             throw new McpException("Pass messageId, correlationId or contains.");
     }
 
-    public bool Matches(PeekedMessage m) =>
+    public bool Matches(PeekedMessage m) => Matches(m, default);
+
+    /// <param name="m">The message as shown.</param>
+    /// <param name="body">Its whole body: a message over MaxPayloadChars is shown shortened, but searched in full.</param>
+    public bool Matches(PeekedMessage m, ReadOnlyMemory<byte> body) =>
         (_messageId is null || string.Equals(m.MessageId, _messageId, StringComparison.OrdinalIgnoreCase)) &&
         (_correlationId is null || string.Equals(m.CorrelationId, _correlationId, StringComparison.OrdinalIgnoreCase)) &&
-        (_contains is null || Text(m).Contains(_contains, StringComparison.OrdinalIgnoreCase));
+        (_contains is null || Text(m, body).Contains(_contains, StringComparison.OrdinalIgnoreCase));
 
-    private static string Text(PeekedMessage m) => m.Payload?.GetRawText() ?? m.RawBody ?? "";
+    private static string Text(PeekedMessage m, ReadOnlyMemory<byte> body) =>
+        m.Payload?.GetRawText() ?? (m.Truncated && !body.IsEmpty ? Encoding.UTF8.GetString(body.Span) : m.RawBody) ?? "";
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

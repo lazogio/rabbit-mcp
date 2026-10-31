@@ -62,7 +62,9 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   `UseStructuredContent = true` with a record return type; honest annotations
   (`ReadOnly`/`Destructive`/`Idempotent`/`OpenWorld`); expected failures throw `McpException`
   (→ `isError: true` with a message the model can act on); anything that sends or removes messages is
-  off by default behind `EnablePublish` / `EnableRepublish`.
+  off by default behind `EnablePublish` / `EnableRepublish`. `ToolJson` writes nulls on purpose: outputSchema lists nullable
+  record parameters as required, and clients that validate reject a call that has already sent messages when one is missing
+  (`scripts/mcp_schema.py` checks results in the smoke test and sample e2e).
 - **stdout is the MCP transport**: all logging goes to stderr. Never `Console.WriteLine`.
 - **Secrets**: the AMQP URI contains credentials — only ever log/return `BrokerAddress.Describe(uri)`.
   The same applies to `ManagementUri` and the Basic auth header.
@@ -70,7 +72,8 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   change it only for a breaking change to `[MessageContract]`.
 - License: MIT for the whole repository. Every `.cs` file (and scripts/Dockerfile) starts with
   `// Copyright (c) 2026 lazogio` + `// SPDX-License-Identifier: MIT` (IDE0073 warns otherwise).
-- Startup configuration errors: throw `StartupException` → one line on stderr, exit code 1 (never a stack trace on stdout).
+- Startup configuration errors: throw `StartupException` → one line on stderr, exit code 1 (never a stack trace). Option values
+  are checked in `ServerComposition.Validate`, not with `ValidateOnStart`, and `Program.RunAsync` reports a host that cannot start.
 - Two hosts share `ServerComposition.Compose`: stdio (`Program.cs`) and HTTP (`HttpHosting.Build`, testable with
   TestServer). HTTP must never run unauthenticated unless `HttpAllowAnonymous`; keep the Origin check.
 - **Every operation that sends or moves messages is audited** (`AuditLog`, action + outcome + ids + client),
@@ -79,7 +82,19 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   (`reply_*`) or rejects (`Fault<T>`). Replies go to `responseAddress`, faults to `faultAddress ?? responseAddress`;
   a reply that fails validation is not sent and the request stays pending. The responder queue name is
   deterministic and exclusive (`{ClientName}-responder`): one active instance, others stand by (405 RESOURCE_LOCKED).
-- **Topology** (`EnableTopology`, `TopologyPolicy`, `TopologyManager`): `declare_exchange` / `declare_queue` only create —
+- **Connections** (`RabbitConnection`): three, opened lazily. General (queries, reply and responder consumers), browsing
+  (every `basic.get` of a peek: on a stream it closes the whole connection with 540, and AMQP cannot tell a stream beforehand;
+  a passive declare's count proves nothing) and publishing (a broker alarm blocks a publishing connection whole). Sends and
+  moves go through `PublishChannel`: refused at once while publishers are blocked, and never waiting past
+  `PublishTimeoutSeconds`. An unconfirmed publish may still arrive later, and its error says so.
+- **Message content cannot break a call**: `MessageInspector.Inspect` never throws for one message, and `CanShow` decides what
+  a tool result can carry as JSON (lone surrogates, invalid UTF-8 and deep nesting pass a JSON reader but fail when written). Anything else
+  from a message that reaches a result goes through `Showable`.
+- **Parked messages have no TTL**: the expiration moves to `X-Original-Expiration` and a republish restores it. `user_id` moves to
+  `X-Original-User-Id` on every move: the broker accepts it only from that user.
+- **Moves refuse live queues**: republish (unless force), dead-letter and corrections refuse a source queue with consumers.
+- **Topology** (`EnableTopology`, `TopologyPolicy`, `TopologyManager`): queues are always durable (RabbitMQ 4 answers a transient
+  one by closing the whole connection); `declare_exchange` / `declare_queue` only create —
   an existing entity is re-declared with the requested settings on a throwaway channel (no-op or 406 →
   `existed-different`, left unchanged); previews use passive declares only. Exchanges of MassTransit contracts and their
   responses, and exchanges named like an existing queue (MassTransit endpoints), are created only fanout/durable/

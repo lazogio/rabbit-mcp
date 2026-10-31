@@ -21,6 +21,15 @@ public static class ContractsCommand
         "       rabbit-mcp contracts asyncapi <contracts> [--title NAME]\n" +
         "         Writes the contracts as an AsyncAPI 3.0 document (JSON) to stdout.";
 
+    /// <summary>rabbit-mcp --help: without it the bare binary only starts the server, which waits silently for a client.</summary>
+    public static string ServerUsage { get; } =
+        "rabbit-mcp: MCP server for RabbitMQ, built on message contracts.\n\n" +
+        "usage: rabbit-mcp\n" +
+        "         Runs the MCP server, normally started by an MCP client (stdio; RabbitMcp__Transport=http serves HTTP).\n" +
+        "         Options are RabbitMcp__* environment variables: https://github.com/lazogio/rabbit-mcp#configuration\n" +
+        "       rabbit-mcp --version\n" +
+        "       " + Usage["usage: ".Length..];
+
     public static int Run(string[] args, TextWriter output, TextWriter error)
     {
         if (args is ["asyncapi", .. var rest])

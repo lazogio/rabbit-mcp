@@ -188,8 +188,10 @@ public sealed class TopologyPolicy
         if (!QueueTypes.Contains(kind))
             throw new McpException($"Unknown queue type '{queueType ?? t?.Type}'. Use {string.Join(", ", QueueTypes)}.");
         var isDurable = durable ?? t?.Durable ?? true;
-        if (kind != "classic" && !isDurable)
-            throw new McpException($"{kind} queues are always durable: call again with durable=true.");
+        if (!isDurable)
+            throw new McpException(
+                $"{kind} queues are always durable: a transient queue loses its messages on restart, and RabbitMQ 4 refuses " +
+                "it by closing the whole connection. Call again with durable=true.");
 
         var args = Merge(t, arguments);
         // Always explicit: RabbitMQ accepts a declare without x-queue-type for a queue of any type, so only an explicit
@@ -281,6 +283,8 @@ public sealed class TopologyPolicy
             throw new StartupException($"RabbitMcp:TopologyTemplates:{name}: unknown {kind} type '{type}'.");
         if (kind == "queue" && autoDelete is not null)
             throw new StartupException($"RabbitMcp:TopologyTemplates:{name}: queues are never auto-delete.");
+        if (kind == "queue" && durable == false)
+            throw new StartupException($"RabbitMcp:TopologyTemplates:{name}: queues are always durable.");
         return new TopologyTemplate(name, kind, type, durable, autoDelete, arguments, bind, routingKey);
     }
 

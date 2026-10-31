@@ -38,7 +38,7 @@ public sealed class MassTransitEnvelope
             var envelope = JsonSerializer.Deserialize<MassTransitEnvelope>(body, MassTransitJson.Options);
             return envelope is { MessageType.Length: > 0, Message: not null } ? envelope : null;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
             return null;
         }
@@ -128,6 +128,9 @@ public static class HeaderNames
     public const string DeadLetteredFrom = "X-Dead-Lettered-From";
     public const string DeadLetteredAt = "X-Dead-Lettered-At";
     public const string DeadLetterReason = "X-Dead-Letter-Reason";
+
+    public const string OriginalExpiration = "X-Original-Expiration"; // a parked message's TTL; a republish restores it
+    public const string OriginalUserId = "X-Original-User-Id";        // user_id of a moved message: only its sender may publish it
 
     public const string CorrectedFrom = "X-Corrected-From"; // on the corrected copy: the original's messageId
     public const string CorrectedTo = "X-Corrected-To";     // on the parked original: the corrected copy's messageId

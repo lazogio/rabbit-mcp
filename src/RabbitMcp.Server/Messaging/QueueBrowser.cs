@@ -10,6 +10,10 @@ using RabbitMQ.Client.Exceptions;
 
 namespace RabbitMcp.Server.Messaging;
 
+/// <summary>The queue is a stream: its messages are read with read_stream, and never moved.</summary>
+public sealed class StreamQueueException(string queue)
+    : McpException($"'{queue}' is a stream: read it with read_stream. Stream messages stay in place, so they cannot be peeked or moved. Nothing was changed.");
+
 /// <summary>Non-destructive peeking and at-least-once republishing of queued messages.</summary>
 public sealed class QueueBrowser(
     RabbitConnection connection,
@@ -27,8 +31,10 @@ public sealed class QueueBrowser(
     /// redelivered and possibly out of order.
     /// </summary>
     /// <param name="targetExchangeOverride">Shown as each message's RepublishTarget (republish preview): an exchange or "queue:name".</param>
+    /// <param name="select">Which of the messages read are returned; it also sees the whole body, which a long message's result does not carry.</param>
     public async Task<PeekResult> PeekAsync(
-        string queue, int count, bool force, CancellationToken ct, string? targetExchangeOverride = null)
+        string queue, int count, bool force, CancellationToken ct, string? targetExchangeOverride = null,
+        Func<PeekedMessage, ReadOnlyMemory<byte>, bool>? select = null)
     {
         CheckCount(count);
         var info = await EnsureQueueExistsAsync(queue, ct);
@@ -38,22 +44,24 @@ public sealed class QueueBrowser(
                 "returns them redelivered, possibly out of order. Nothing was read. Pass force=true to peek anyway.");
 
         var messages = new List<PeekedMessage>(count);
+        var scanned = 0;
         ulong lastTag = 0;
         uint remaining = 0;
 
-        await using var channel = await connection.CreateChannelAsync(publisherConfirms: false, ct);
+        await using var channel = await connection.CreateBrowsingChannelAsync(ct);
         try
         {
-            while (messages.Count < count)
+            while (scanned < count)
             {
-                var delivery = await channel.BasicGetAsync(queue, autoAck: false, ct);
+                var delivery = await GetAsync(channel, queue, ct);
                 if (delivery is null)
                     break;
 
                 lastTag = delivery.DeliveryTag;
                 remaining = delivery.MessageCount;
-                var peeked = inspector.Inspect(messages.Count, queue, delivery);
-                messages.Add(targetExchangeOverride is null ? peeked : peeked with { RepublishTarget = targetExchangeOverride, RepublishWarning = null });
+                var peeked = inspector.Inspect(scanned++, queue, delivery);
+                if (select is null || select(peeked, delivery.Body))
+                    messages.Add(targetExchangeOverride is null ? peeked : peeked with { RepublishTarget = targetExchangeOverride, RepublishWarning = null });
             }
         }
         finally
@@ -63,7 +71,16 @@ public sealed class QueueBrowser(
                 await channel.BasicNackAsync(lastTag, multiple: true, requeue: true, CancellationToken.None);
         }
 
-        return new PeekResult(queue, messages.Count, remaining, messages);
+        return new PeekResult(queue, messages.Count, remaining, messages) { Scanned = scanned };
+    }
+
+    /// <summary>A preview naming messageIds shows those messages, as the confirmed call selects them. Null: no selection.</summary>
+    public static Func<PeekedMessage, ReadOnlyMemory<byte>, bool>? HavingIds(IReadOnlyCollection<string>? messageIds)
+    {
+        if (messageIds is not { Count: > 0 })
+            return null;
+        var wanted = new HashSet<string>(messageIds, StringComparer.OrdinalIgnoreCase);
+        return (message, _) => message.MessageId is { } id && wanted.Contains(id);
     }
 
     /// <summary>The explicit destination of a republish: <paramref name="targetQueue"/> wins over <paramref name="targetExchange"/>.</summary>
@@ -93,7 +110,8 @@ public sealed class QueueBrowser(
         CancellationToken ct,
         string? client = null,
         string? targetQueueOverride = null,
-        MessageFilter? selection = null)
+        MessageFilter? selection = null,
+        bool force = false)
     {
         // Every per-message outcome is audited, including those reached before a failure.
         var outcomes = new List<RepublishOutcome>();
@@ -107,7 +125,7 @@ public sealed class QueueBrowser(
         try
         {
             var target = Override(targetExchangeOverride, targetQueueOverride);
-            var result = await RepublishCoreAsync(errorQueue, count, onlyMessageIds, target, outcomes, selection, ct);
+            var result = await RepublishCoreAsync(errorQueue, count, onlyMessageIds, target, outcomes, selection, force, ct);
             AuditOutcomes();
             return result.Outcomes.Count <= MaxListedOutcomes
                 ? result
@@ -137,10 +155,16 @@ public sealed class QueueBrowser(
         RepublishTarget? targetOverride,
         List<RepublishOutcome> outcomes,
         MessageFilter? selection,
+        bool force,
         CancellationToken ct)
     {
         CheckCount(count, bulk: selection is not null);
-        await EnsureQueueExistsAsync(errorQueue, ct);
+        var source = await EnsureQueueExistsAsync(errorQueue, ct);
+        if (source.ConsumerCount > 0 && !force)
+            throw new McpException(
+                $"'{errorQueue}' has {source.ConsumerCount} active consumer(s), so it is not a parked error queue. Nothing was moved. " +
+                "Pass force=true to move messages anyway.");
+        await RefuseStreamAsync(errorQueue, ct);
 
         var filter = onlyMessageIds is { Count: > 0 }
             ? new HashSet<string>(onlyMessageIds, StringComparer.OrdinalIgnoreCase)
@@ -151,7 +175,8 @@ public sealed class QueueBrowser(
         var scanned = 0;
         var clientName = options.Value.ClientName;
 
-        await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
+        await using var publisher = await connection.CreatePublishChannelAsync(ct);
+        var channel = publisher.Channel;
         try
         {
             while (scanned < count)
@@ -227,17 +252,10 @@ public sealed class QueueBrowser(
                 activity?.SetTag("rabbitmcp.source_queue", errorQueue);
                 Telemetry.Inject(activity, headers);
 
-                var newProps = new BasicProperties(props)
-                {
-                    DeliveryMode = DeliveryModes.Persistent,
-                    Headers = headers,
-                };
-
                 try
                 {
                     // Original body bytes, never re-serialized or truncated.
-                    await channel.BasicPublishAsync(destination.Exchange, destination.RoutingKey, mandatory: true, newProps,
-                        delivery.Body, ct);
+                    await publisher.PublishAsync(destination.Exchange, destination.RoutingKey, Live(props, headers), delivery.Body, ct);
                 }
                 catch (OperationInterruptedException ex) when (RabbitConnection.IsNotFound(ex))
                 {
@@ -281,7 +299,7 @@ public sealed class QueueBrowser(
         if (filter is not null)
         {
             foreach (var missing in filter.Except(outcomes.Select(o => o.MessageId ?? ""), StringComparer.OrdinalIgnoreCase))
-                outcomes.Add(new RepublishOutcome(missing, "skipped", null, $"Not found in the first {scanned} message(s) of {errorQueue}."));
+                outcomes.Add(new RepublishOutcome(missing, "skipped", null, NotFound(scanned, errorQueue)));
         }
 
         return new RepublishResult(errorQueue, Executed: true, Preview: null, outcomes, republished, toRequeue.Count)
@@ -349,10 +367,12 @@ public sealed class QueueBrowser(
         CancellationToken ct)
     {
         CheckCount(count, bulk: selection is not null);
+        CheckReason(reason);
         var source = await EnsureQueueExistsAsync(errorQueue, ct);
         if (source.ConsumerCount > 0)
             throw new McpException(
                 $"'{errorQueue}' has {source.ConsumerCount} active consumer(s), so it is not a parked error queue. Nothing was moved.");
+        await RefuseStreamAsync(errorQueue, ct);
 
         // Created on first use like MassTransit creates _error queues: durable, so parked messages survive restarts.
         if (await CheckDeadLetterTargetAsync(errorQueue, target, ct) is null)
@@ -369,7 +389,8 @@ public sealed class QueueBrowser(
         var moved = 0;
         var scanned = 0;
 
-        await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
+        await using var publisher = await connection.CreatePublishChannelAsync(ct);
+        var channel = publisher.Channel;
         try
         {
             while (scanned < count)
@@ -398,11 +419,10 @@ public sealed class QueueBrowser(
                 if (!string.IsNullOrWhiteSpace(reason))
                     headers[HeaderNames.DeadLetterReason] = reason.Trim();
 
-                var newProps = new BasicProperties(props) { DeliveryMode = DeliveryModes.Persistent, Headers = headers };
                 try
                 {
                     // Default exchange, routing key = queue name: straight into the dead-letter queue. Body bytes unchanged.
-                    await channel.BasicPublishAsync("", target, mandatory: true, newProps, delivery.Body, ct);
+                    await publisher.PublishAsync("", target, Parked(props, headers), delivery.Body, ct);
                 }
                 catch (PublishException ex)
                 {
@@ -431,7 +451,7 @@ public sealed class QueueBrowser(
         if (filter is not null)
         {
             foreach (var missing in filter.Except(outcomes.Select(o => o.MessageId ?? ""), StringComparer.OrdinalIgnoreCase))
-                outcomes.Add(new DeadLetterOutcome(missing, "skipped", $"Not found in the first {scanned} message(s) of {errorQueue}."));
+                outcomes.Add(new DeadLetterOutcome(missing, "skipped", NotFound(scanned, errorQueue)));
         }
 
         return new DeadLetterResult(errorQueue, target, Executed: true, Preview: null, outcomes, moved, toRequeue.Count)
@@ -486,10 +506,12 @@ public sealed class QueueBrowser(
         if (source.ConsumerCount > 0)
             throw new McpException(
                 $"'{errorQueue}' has {source.ConsumerCount} active consumer(s), so it is not a parked error queue. Nothing was changed.");
+        await RefuseStreamAsync(errorQueue, ct);
 
         var deadLetterQueue = DeadLetterNaming.For(errorQueue, options.Value.DeadLetterQueue);
         var toRequeue = new List<ulong>();
-        await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
+        await using var publisher = await connection.CreatePublishChannelAsync(ct);
+        var channel = publisher.Channel;
         try
         {
             BasicGetResult? found = null;
@@ -506,7 +528,8 @@ public sealed class QueueBrowser(
             }
             if (found is null)
                 throw new McpException(
-                    $"Message {messageId} is not among the first {options.Value.MaxMessagesPerCall} messages of {errorQueue}. Nothing was changed.");
+                    $"Message {messageId} is not among the first {options.Value.MaxMessagesPerCall} messages of {errorQueue}: it may be " +
+                    "further back, or held for a moment by another reader. Nothing was changed.");
             toRequeue.Add(found.DeliveryTag); // until everything is confirmed
 
             var props = found.BasicProperties;
@@ -518,6 +541,7 @@ public sealed class QueueBrowser(
             if (authorize(contract) is { } denied)
                 throw new McpException(denied);
 
+            corrected = MessageInspector.WithEnumNumbers(contract, corrected);
             var errors = MessageInspector.Validate(contract, corrected, MassTransitJson.Options);
             if (errors.Count > 0)
                 throw new McpException($"The correction violates {contract.Name} v{contract.Version}; nothing was changed. " + string.Join("; ", errors));
@@ -530,9 +554,13 @@ public sealed class QueueBrowser(
                 try { original = System.Text.Json.JsonDocument.Parse(found.Body).RootElement.Clone(); }
                 catch (System.Text.Json.JsonException) { throw new McpException("The original message is not JSON; it cannot be corrected here."); }
             }
+            if (!MessageInspector.CanShow(original))
+                throw new McpException("The original message has broken text or is nested too deeply; it cannot be corrected here.");
             var changes = JsonDiff.Compare(original, corrected);
             if (changes.Count == 0)
                 throw new McpException("The correction is identical to the original. Use republish_from_error to retry it unchanged.");
+            if (FieldsOutsideContract(contract, original, corrected) is { Count: > 0 } outside)
+                throw new McpException($"The correction adds {string.Join(", ", outside)}, which {contract.Name} does not define; nothing was changed.");
 
             var target = RepublishTargetResolver.Resolve(errorQueue, props.Headers)
                 ?? throw new McpException("Cannot determine the original queue (no MT-Fault-InputAddress or x-death header, no _error/_skipped/_dead suffix).");
@@ -562,13 +590,14 @@ public sealed class QueueBrowser(
             headers[HeaderNames.CorrectedAt] = now;
             using var activity = Telemetry.StartSend("correct", target.Display, linkTo: Telemetry.Extract(props.Headers));
             Telemetry.Inject(activity, headers);
-            var copyProps = new BasicProperties(props) { MessageId = newId, DeliveryMode = DeliveryModes.Persistent, Headers = headers };
+            var copyProps = Live(props, headers);
+            copyProps.MessageId = newId;
             var copyBody = envelope is not null
                 ? CorrectedEnvelope(found.Body.Span, newId, corrected)
                 : System.Text.Encoding.UTF8.GetBytes(corrected.GetRawText());
             try
             {
-                await channel.BasicPublishAsync(target.Exchange, target.RoutingKey, mandatory: true, copyProps, copyBody, ct);
+                await publisher.PublishAsync(target.Exchange, target.RoutingKey, copyProps, copyBody, ct);
             }
             catch (PublishException ex)
             {
@@ -598,8 +627,7 @@ public sealed class QueueBrowser(
                 originalHeaders[HeaderNames.DeadLetteredFrom] = errorQueue;
                 originalHeaders[HeaderNames.DeadLetteredAt] = now;
                 originalHeaders[HeaderNames.DeadLetterReason] = $"corrected and resent as {newId}";
-                await channel.BasicPublishAsync("", deadLetterQueue, mandatory: true,
-                    new BasicProperties(props) { DeliveryMode = DeliveryModes.Persistent, Headers = originalHeaders }, found.Body, ct);
+                await publisher.PublishAsync("", deadLetterQueue, Parked(props, originalHeaders), found.Body, ct);
                 await channel.BasicAckAsync(found.DeliveryTag, multiple: false, ct);
                 toRequeue.Remove(found.DeliveryTag);
                 parked = true;
@@ -623,6 +651,27 @@ public sealed class QueueBrowser(
                     await channel.BasicNackAsync(tag, multiple: false, requeue: true, CancellationToken.None);
             }
         }
+    }
+
+    /// <summary>
+    /// Fields a correction adds that its C# contract does not define. A correction goes out as the JSON it was given, not
+    /// through the typed binding that drops them in publish_*. Fields the original already had stay allowed (a newer
+    /// producer may send them); for AsyncAPI contracts the schema's additionalProperties decides during validation.
+    /// </summary>
+    public static IReadOnlyList<string> FieldsOutsideContract(
+        Contracts.ContractDescriptor contract, System.Text.Json.JsonElement original, System.Text.Json.JsonElement corrected)
+    {
+        if (contract.IsSchemaBased || corrected.ValueKind != System.Text.Json.JsonValueKind.Object)
+            return [];
+
+        var message = System.Text.Json.JsonSerializer.Deserialize(corrected, contract.Type, MassTransitJson.Options);
+        var known = System.Text.Json.JsonSerializer.SerializeToElement(message, contract.Type, MassTransitJson.Options);
+        return [.. Added(known, corrected).Except(Added(known, original))];
+
+        static IEnumerable<string> Added(System.Text.Json.JsonElement known, System.Text.Json.JsonElement json) =>
+            JsonDiff.Compare(known, json)
+                .Where(c => c.Before is null && c.After is { ValueKind: not System.Text.Json.JsonValueKind.Null })
+                .Select(c => c.Path);
     }
 
     /// <summary>The original envelope with a new messageId and the corrected message; every other field kept.</summary>
@@ -655,10 +704,75 @@ public sealed class QueueBrowser(
         return existing;
     }
 
+    /// <summary>A message another reader holds for a moment (a parallel peek) cannot be told from one that is gone.</summary>
+    private static string NotFound(int scanned, string queue) =>
+        $"Not seen in the first {scanned} message(s) of {queue}: it may be further back, held for a moment by another reader " +
+        "(a parallel peek), or already gone. Nothing was changed for it.";
+
+    /// <summary>
+    /// Properties of a message going back to work: as sent, its TTL restored if parking took it away. user_id goes:
+    /// RabbitMQ refuses a publish naming a user other than the connection's (406), and this server is not the sender.
+    /// </summary>
+    private static BasicProperties Live(IReadOnlyBasicProperties props, Dictionary<string, object?> headers)
+    {
+        var live = Moved(props, headers);
+        if (string.IsNullOrEmpty(props.Expiration)
+            && FaultHeaders.GetString(props.Headers, HeaderNames.OriginalExpiration) is { } ttl
+            && long.TryParse(ttl, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _))
+            live.Expiration = ttl;
+        return live;
+    }
+
+    /// <summary>
+    /// Properties of a parked message. Its TTL would restart in the dead-letter queue and the broker would drop it, so
+    /// the TTL moves to a header, which a republish reads back.
+    /// </summary>
+    private static BasicProperties Parked(IReadOnlyBasicProperties props, Dictionary<string, object?> headers)
+    {
+        var parked = Moved(props, headers);
+        if (!string.IsNullOrEmpty(props.Expiration))
+            headers[HeaderNames.OriginalExpiration] = props.Expiration;
+        parked.Expiration = null;
+        return parked;
+    }
+
+    private static BasicProperties Moved(IReadOnlyBasicProperties props, Dictionary<string, object?> headers)
+    {
+        if (!string.IsNullOrEmpty(props.UserId))
+            headers[HeaderNames.OriginalUserId] = props.UserId;
+        return new BasicProperties(props) { UserId = null, DeliveryMode = DeliveryModes.Persistent, Headers = headers };
+    }
+
+    /// <summary>The reason goes into an AMQP header, and headers must fit one frame or the broker closes the connection.</summary>
+    public static void CheckReason(string? reason)
+    {
+        if (reason is { Length: > MaxReasonChars })
+            throw new McpException($"reason must be at most {MaxReasonChars} characters, not {reason.Length}. Nothing was moved.");
+    }
+
+    /// <summary>Moves fetch on the publishing connection, which a stream would close: the first message is tried on the browsing one.</summary>
+    private async Task RefuseStreamAsync(string queue, CancellationToken ct)
+    {
+        await using var channel = await connection.CreateBrowsingChannelAsync(ct);
+        if (await GetAsync(channel, queue, ct) is { } first)
+            await channel.BasicNackAsync(first.DeliveryTag, multiple: false, requeue: true, ct);
+    }
+
+    /// <exception cref="StreamQueueException">The queue is a stream, which has just closed the browsing connection.</exception>
+    private static async Task<BasicGetResult?> GetAsync(IChannel channel, string queue, CancellationToken ct)
+    {
+        try
+        {
+            return await channel.BasicGetAsync(queue, autoAck: false, ct);
+        }
+        catch (OperationInterruptedException ex) when (RabbitConnection.IsStreamRefusal(ex, queue))
+        {
+            throw new StreamQueueException(queue);
+        }
+    }
+
     private async Task<QueueDeclareOk> EnsureQueueExistsAsync(string queue, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(queue))
-            throw new McpException("Queue name is required.");
         return await connection.GetQueueAsync(queue, ct)
             ?? throw new McpException($"Queue '{queue}' does not exist.");
     }
@@ -674,6 +788,7 @@ public sealed class QueueBrowser(
     }
 
     public const int MaxListedOutcomes = 100;
+    public const int MaxReasonChars = 1000;
     public const int SampleIdsPerGroup = 5;
 
     /// <summary>
@@ -681,8 +796,10 @@ public sealed class QueueBrowser(
     /// one nack at the end, like peek) and groups those matching <paramref name="selection"/> by fault.
     /// </summary>
     public async Task<SelectionSummary> SummarizeAsync(
-        string queue, MessageFilter selection, int limit, bool force, CancellationToken ct)
+        string queue, MessageFilter selection, int limit, bool force, CancellationToken ct,
+        IReadOnlyCollection<string>? onlyMessageIds = null)
     {
+        var selected = HavingIds(onlyMessageIds);
         var info = await EnsureQueueExistsAsync(queue, ct);
         if (info.ConsumerCount > 0 && !force)
             throw new McpException(
@@ -693,12 +810,12 @@ public sealed class QueueBrowser(
         var matched = 0;
         ulong lastTag = 0;
         var more = false;
-        await using var channel = await connection.CreateChannelAsync(publisherConfirms: false, ct);
+        await using var channel = await connection.CreateBrowsingChannelAsync(ct);
         try
         {
             while (scanned < limit)
             {
-                var delivery = await channel.BasicGetAsync(queue, autoAck: false, ct);
+                var delivery = await GetAsync(channel, queue, ct);
                 if (delivery is null)
                     break;
                 lastTag = delivery.DeliveryTag;
@@ -706,7 +823,7 @@ public sealed class QueueBrowser(
                 more = delivery.MessageCount > 0;
 
                 var m = inspector.Inspect(0, queue, delivery);
-                if (!selection.Matches(m))
+                if (!selection.Matches(m) || selected?.Invoke(m, delivery.Body) == false)
                     continue;
                 matched++;
                 var text = m.Fault?.ExceptionMessage ?? m.DeadLettered?.FirstOrDefault()?.Reason ?? m.Fault?.Reason;
@@ -747,7 +864,7 @@ public sealed class QueueBrowser(
             throw new McpException($"'{queue}' is not a stream. Use peek_messages.");
         if (isStream is null && info.ConsumerCount > 0 && !force)
             throw new McpException(
-                $"'{queue}' has consumers and without RabbitMcp:ManagementUri it cannot be confirmed to be a stream. " +
+                $"'{queue}' has consumers and without the Management API it cannot be confirmed to be a stream. " +
                 "If it is a stream, pass force=true (reading a stream changes nothing). Nothing was read.");
 
         var (offset, shown) = StreamOffset(from, time.GetUtcNow());
@@ -853,7 +970,8 @@ public sealed class QueueBrowser(
         }
         if (long.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var offset))
             return (offset, $"offset {offset}");
-        var at = AuditReader.ParseSince(text, now)!.Value;
+        if (!AuditReader.TryParseTime(text, now, out var at))
+            throw new McpException($"from must be first, last, next, an offset, or a time like 30m, 2h, 7d or ISO 8601, not '{from}'.");
         return (new AmqpTimestamp(Math.Max(0, at.ToUnixTimeSeconds())), at.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
     }
 }

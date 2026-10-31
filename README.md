@@ -111,7 +111,7 @@ rabbit-mcp contracts diff old/Billing.Contracts.dll new/Billing.Contracts.dll
 `RabbitMcp__Transport=http` serves `/mcp` (and `/healthz`). It refuses to start without authentication:
 
 - **API keys:** `RabbitMcp__ApiKeys="alice:KEY1;ci:KEY2"` (≥ 32 characters); clients send `X-Api-Key`.
-- **JWT / OIDC:** `RabbitMcp__JwtAuthority` + `RabbitMcp__JwtAudience`.
+- **JWT / OIDC:** `RabbitMcp__JwtAuthority` (https) + `RabbitMcp__JwtAudience`.
 
 ```bash
 docker run -d -p 5080:5080 \
@@ -152,6 +152,7 @@ Environment variable `RabbitMcp__<Option>` or `appsettings.json`. Lists are `;`-
 | `HumanConfirmation` / `ConfirmTools` | `auto` / the recovery and declare tools | The person confirms changes in the client's dialog (`required` refuses when it cannot ask, `off` trusts `confirm`) |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | Audit file (JSON Lines) / include message bodies |
 | `MaxMessagesPerCall` / `MaxBulkMessages` / `MaxPayloadChars` | `50` / `1000` / `16000` | Limits |
+| `PublishTimeoutSeconds` | `30` | How long a send or move waits for the broker's confirm (1-300) |
 | `RateLimits` | — | Changes per caller, e.g. `publish:100/h;*:1000/d` |
 | `Transport` / `HttpUrls` / `HttpPath` | `stdio` / `http://localhost:5080` / `/mcp` | Transport |
 | `ApiKeys`, `JwtAuthority`, `JwtAudience`, `JwtScopes` | — | HTTP authentication |
@@ -164,7 +165,7 @@ OpenTelemetry: set `OTEL_EXPORTER_OTLP_ENDPOINT`; traces join the MassTransit co
 
 - **No silent loss:** invalid messages are not sent; publisher confirms and `mandatory` turn an undeliverable message into an error.
 - **Safe moves:** a message leaves the error queue only after the broker confirmed its new copy; the body never changes.
-- **Nothing is deleted:** poison messages are parked with every header, and can be brought back; exchanges and queues are only ever created.
+- **Nothing is deleted:** poison messages are parked with every header, and can be brought back; exchanges and queues are only ever created. Use RabbitMQ 4: on 3.x quorum queues with a delivery limit, peeking counts towards the limit and can drop a message.
 - **A person confirms:** clients with MCP elicitation (e.g. Claude Code) show a dialog before anything moves; stateless HTTP falls back to `confirm=true`.
 - **Audited:** every send, move and answer — including refused ones — with the user.
 - **Untrusted content:** message headers never redirect where messages go; passwords never appear in logs or errors.

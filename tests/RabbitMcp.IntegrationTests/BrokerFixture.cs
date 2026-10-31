@@ -64,6 +64,13 @@ public sealed class BrokerFixture : IAsyncLifetime
     /// <summary>Options of the rabbit-mcp components (for creating more of them in a test).</summary>
     public Microsoft.Extensions.Options.IOptions<RabbitMcpOptions> Options => _options;
 
+    /// <summary>Runs rabbitmqctl in the broker's container.</summary>
+    public async Task RabbitmqctlAsync(params string[] arguments)
+    {
+        var result = await _container.ExecAsync(["rabbitmqctl", .. arguments]);
+        Assert.Equal(0, result.ExitCode);
+    }
+
     /// <summary>Force-closes every broker connection with this client name, like a network failure or an operator would.</summary>
     public async Task CloseConnectionsAsync(string clientName)
     {

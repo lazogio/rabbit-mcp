@@ -14,6 +14,7 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using RabbitMQ.Client;
 using RabbitMcp.Samples.Orders;
 using RabbitMcp.Server.Contracts;
 using ModelContextProtocol.Server;
@@ -29,8 +30,49 @@ public sealed class StartupException(string message, Exception? inner = null) : 
 /// <summary>Everything both transports share: options, contracts, services, telemetry and tools.</summary>
 public static class ServerComposition
 {
-    public static RabbitMcpOptions ReadOptions(IConfiguration configuration) =>
-        configuration.GetSection(RabbitMcpOptions.Section).Get<RabbitMcpOptions>() ?? new();
+    /// <exception cref="StartupException">A value that does not fit its option, e.g. text for a number.</exception>
+    public static RabbitMcpOptions ReadOptions(IConfiguration configuration)
+    {
+        try
+        {
+            return configuration.GetSection(RabbitMcpOptions.Section).Get<RabbitMcpOptions>() ?? new();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new StartupException(ex.Message, ex); // names the option and the value
+        }
+    }
+
+    /// <summary>Reply queues add the machine name (at most 63) and a GUID, and a queue name has at most 255 bytes.</summary>
+    private const int MaxClientNameChars = 150;
+
+    /// <exception cref="StartupException">A value the server cannot work with.</exception>
+    private static void Validate(RabbitMcpOptions options)
+    {
+        if (!Uri.TryCreate(options.Uri, UriKind.Absolute, out var broker) || broker.Scheme is not ("amqp" or "amqps"))
+            throw new StartupException("RabbitMcp:Uri must be an amqp:// or amqps:// URI.");
+        try
+        {
+            _ = new ConnectionFactory { Uri = broker };
+        }
+        catch (ArgumentException)
+        {
+            throw new StartupException("RabbitMcp:Uri is not a usable AMQP URI (a vhost is one path segment: write a '/' in it as %2F).");
+        }
+        if (options.ClientName.Length > MaxClientNameChars)
+            throw new StartupException($"RabbitMcp:ClientName must be at most {MaxClientNameChars} characters: queue names are built from it.");
+        if (options.MaxMessagesPerCall is < 1 or > 1000)
+            throw new StartupException("RabbitMcp:MaxMessagesPerCall must be 1-1000.");
+        if (options.MaxBulkMessages is < 1 or > 100_000)
+            throw new StartupException("RabbitMcp:MaxBulkMessages must be 1-100000.");
+        if (options.MaxPayloadChars < 1)
+            throw new StartupException("RabbitMcp:MaxPayloadChars must be at least 1.");
+        if (options.PublishTimeoutSeconds is < 1 or > 300)
+            throw new StartupException("RabbitMcp:PublishTimeoutSeconds must be 1-300.");
+        if (!string.IsNullOrWhiteSpace(options.ManagementUri)
+            && !(Uri.TryCreate(options.ManagementUri, UriKind.Absolute, out var management) && management.Scheme is "http" or "https"))
+            throw new StartupException("RabbitMcp:ManagementUri must be an http:// or https:// URL.");
+    }
 
     /// <summary>Registers everything except the MCP transport and returns the MCP builder.</summary>
     /// <exception cref="StartupException">Invalid configuration.</exception>
@@ -39,19 +81,14 @@ public static class ServerComposition
         // Logs always go to stderr: stdout carries MCP in stdio mode, and HTTP mode keeps the same habit.
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        // A host that cannot start is reported as one line by Program.RunAsync; this logger would add its stack trace.
+        builder.Logging.AddFilter("Microsoft.Extensions.Hosting.Internal.Host", LogLevel.None);
 
         builder.Services.AddOptions<RabbitMcpOptions>()
-            .Bind(builder.Configuration.GetSection(RabbitMcpOptions.Section))
-            .Validate(o => Uri.TryCreate(o.Uri, UriKind.Absolute, out var u) && u.Scheme is "amqp" or "amqps",
-                "RabbitMcp:Uri must be an amqp:// or amqps:// URI.")
-            .Validate(o => o.MaxMessagesPerCall is >= 1 and <= 1000, "RabbitMcp:MaxMessagesPerCall must be 1-1000.")
-            .Validate(o => o.MaxBulkMessages is >= 1 and <= 100_000, "RabbitMcp:MaxBulkMessages must be 1-100000.")
-            .Validate(o => string.IsNullOrWhiteSpace(o.ManagementUri)
-                           || (Uri.TryCreate(o.ManagementUri, UriKind.Absolute, out var m) && m.Scheme is "http" or "https"),
-                "RabbitMcp:ManagementUri must be an http:// or https:// URL.")
-            .ValidateOnStart();
+            .Bind(builder.Configuration.GetSection(RabbitMcpOptions.Section));
 
         var settings = ReadOptions(builder.Configuration);
+        Validate(settings);
         var policy = new PublishPolicy(settings.PublishAllow, settings.PublishDeny);
         var contracts = LoadContracts(settings);
 
@@ -147,8 +184,19 @@ public static class ServerComposition
                     {
                         var audit = services.GetRequiredService<AuditLog>();
                         var client = AuditLog.ClientOf(request.Server, request.User);
-                        var decision = await human.DecideAsync(name, request.Params?.Arguments, client,
-                            new ElicitationPrompt(request.Server), cancellationToken);
+                        ConfirmationDecision decision;
+                        try
+                        {
+                            decision = await human.DecideAsync(name, request.Params?.Arguments, client,
+                                new ElicitationPrompt(request.Server), cancellationToken);
+                        }
+                        catch (Exception ex)
+                        {
+                            audit.Write(audit.Event(AuditActions.Confirm, "refused-failed", client, detail: $"{name}: {ex.Message}"));
+                            if (ex is OperationCanceledException)
+                                throw;
+                            throw new McpException($"The question to the person failed ({ex.Message}). Nothing was changed.", ex);
+                        }
                         audit.Write(audit.Event(AuditActions.Confirm,
                             decision.Proceed ? $"allowed-{decision.How}" : $"refused-{decision.How}", client, detail: name));
                         if (!decision.Proceed)
@@ -161,10 +209,13 @@ public static class ServerComposition
                     {
                         return await next(request, cancellationToken);
                     }
-                    catch (Exception ex) when (ex is not McpException and not OperationCanceledException
-                                               && BrokerErrors.TryDescribe(ex, out var message))
+                    catch (Exception ex) when (ex is not McpException
+                                               && !(ex is OperationCanceledException && cancellationToken.IsCancellationRequested))
                     {
-                        throw new McpException(message, ex);
+                        if (BrokerErrors.TryDescribe(ex, out var message) || BrokerErrors.TryDescribeArguments(name, ex, out message))
+                            throw new McpException(message, ex);
+                        services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(ServerComposition)).LogError(ex, "{Tool} failed", name);
+                        throw new McpException($"{name} failed unexpectedly ({ex.GetType().Name}); the server log has the details.", ex);
                     }
                 });
             })

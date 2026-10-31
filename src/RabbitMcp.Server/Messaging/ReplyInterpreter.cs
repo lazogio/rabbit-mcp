@@ -91,7 +91,7 @@ public static class ReplyInterpreter
 
     public static RequestFault? ParseFault(JsonElement? fault)
     {
-        if (fault is not { ValueKind: JsonValueKind.Object } f)
+        if (fault is not { ValueKind: JsonValueKind.Object } f || !MessageInspector.CanShow(f))
             return null;
 
         var exceptions = new List<ExceptionSummary>();

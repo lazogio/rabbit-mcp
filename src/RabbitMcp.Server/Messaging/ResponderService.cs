@@ -197,6 +197,15 @@ public sealed class ResponderService(
                 return;
             }
 
+            // pending_requests shows every request: one that a tool result cannot carry would hide the others.
+            if (envelope.Message is { } message && !MessageInspector.CanShow(message))
+            {
+                logger.LogWarning("Responder refused {Contract} {RequestId}: its message cannot be shown", contract.Name, requestId);
+                await SendFaultAsync(request, "The request has broken text or is nested too deeply to be answered.",
+                    null, keepOnFailure: false, CancellationToken.None);
+                return;
+            }
+
             switch (inbox.TryAdd(request))
             {
                 case InboxAddResult.Duplicate:
@@ -330,9 +339,8 @@ public sealed class ResponderService(
 
         try
         {
-            await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
-            await channel.BasicPublishAsync(exchange, routingKey: "", mandatory: true, props,
-                EnvelopeFactory.Serialize(envelope), ct);
+            await using var channel = await connection.CreatePublishChannelAsync(ct);
+            await channel.PublishAsync(exchange, routingKey: "", props, EnvelopeFactory.Serialize(envelope), ct);
         }
         catch (Exception ex) when (ex is PublishException { IsReturn: true }
                                    || (ex is OperationInterruptedException oie && RabbitConnection.IsNotFound(oie)))

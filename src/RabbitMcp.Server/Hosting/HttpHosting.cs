@@ -95,12 +95,17 @@ public static class HttpHosting
                     $"RabbitMcp:HttpAllowAnonymous=true is only allowed on loopback addresses, but HttpUrls contains '{exposed}'. " +
                     "Configure RabbitMcp:ApiKeys or RabbitMcp:JwtAuthority instead.");
             Console.Error.WriteLine("rabbit-mcp: warning: HTTP transport WITHOUT authentication (HttpAllowAnonymous=true).");
+            // UseAuthentication/UseAuthorization need their services even without a scheme.
+            builder.Services.AddAuthentication();
             builder.Services.AddAuthorization();
             return [];
         }
 
         if (useJwt && string.IsNullOrWhiteSpace(settings.JwtAudience))
             throw new StartupException("RabbitMcp:JwtAudience is required when RabbitMcp:JwtAuthority is set.");
+        // JwtBearer refuses a plain-http authority only when a request arrives, as an empty 500 for every caller.
+        if (useJwt && !(Uri.TryCreate(settings.JwtAuthority, UriKind.Absolute, out var issuer) && issuer.Scheme == Uri.UriSchemeHttps))
+            throw new StartupException("RabbitMcp:JwtAuthority must be an https:// URL: token signing keys are fetched from it.");
 
         var schemes = new List<string>();
         var auth = builder.Services.AddAuthentication();

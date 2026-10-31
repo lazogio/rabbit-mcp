@@ -43,9 +43,10 @@ public static class ToolJson
         {
             // Non-nullable reference properties reject null and `required` members must be present,
             // and both are reflected in the generated input schema.
+            // Nulls are written on purpose: outputSchema lists a nullable record parameter as required, and clients that
+            // validate results reject a tool call (after it has already sent or moved messages) when one is left out.
             RespectNullableAnnotations = true,
             RespectRequiredConstructorParameters = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
         };
         o.Converters.Add(new JsonStringEnumConverter());

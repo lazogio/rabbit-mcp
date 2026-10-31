@@ -1,5 +1,22 @@
 # Changes and decisions (newest first)
 
+### 2026-10-31 Fixes from the second QA round (BUG-048..064)
+- Decision: three connections instead of one. Publishing is separate so an alarm leaves reads and replies alone; browsing is separate so a
+  stream's 540 cannot close consumers or sends. Each opens on first use, so a read-only server has at most two.
+- Decision: a publish without a confirm is reported as "may still be delivered", never as failed. Only a refusal before sending says nothing was sent.
+- Decision: `find_message` reports a stream instead of reading it: a stream's head is its oldest data, so maxPerQueue would say little.
+- Decision: parked messages lose their TTL and republish restores it, like RabbitMQ's own `original-expiration` on dead-lettering.
+- Decision: `user_id` is never restored: only its original user may publish it.
+- Rejected: asking "is it a stream?" with a consumer without prefetch, only for queues counting 0. A stream's count settles above 0 after a few seconds.
+
+### 2026-10-31 Fixes from the black-box QA run (BUG-031..047)
+- Decision: tool results carry explicit nulls. Longer results, but the schema stays honest and no result depends on a client ignoring it.
+- Decision: republish with force=true may still move from a queue with consumers: today's behaviour stays reachable on purpose.
+- Decision: a correction that adds a field outside the contract is refused rather than silently dropped; fields the original already had
+  stay, so a correction of a newer producer's message loses nothing.
+- Decision: declare_queue keeps its durable argument so existing callers read a clear refusal for false.
+- RabbitMQ 3.x is not a tested target. Peeking a 3.x quorum queue with a delivery limit can drop messages: documented, not prevented.
+
 ### 2026-10-28 declare_exchange / declare_queue (feat/topology-tools, PR #15, b27fcd2 + review fixes)
 - Off by default (`EnableTopology`); configurable `TopologyAllow`/`TopologyDeny` (case-sensitive names) and
   `TopologyArguments` (default only DLX/DLX routing key/alternate-exchange/single-active-consumer: TTL, max-length and

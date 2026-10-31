@@ -192,7 +192,7 @@ public sealed class ContractPublisher(
                 new RequestTarget(requestId, pending, time.GetUtcNow().UtcDateTime + timeout, timeout));
 
             var started = time.GetTimestamp();
-            await SendAsync(contract, outgoing, cancellationToken);
+            await SendAsync(contract, outgoing, cancellationToken, timeout);
             logger.LogInformation("Sent request {Contract} {RequestId} to {Destination}", contract.Name, requestId, contract.Destination);
 
             ReceivedReply reply;
@@ -218,7 +218,7 @@ public sealed class ContractPublisher(
 
             return new RequestResult(
                 requestId.ToString(), messageId.ToString(), contract.Name, r.Status,
-                r.ResponseType, reply.MessageTypes, r.Response, r.ResponseCheck, r.Fault, r.RespondedBy, elapsed,
+                r.ResponseType, reply.MessageTypes, MessageInspector.Showable(r.Response), r.ResponseCheck, r.Fault, r.RespondedBy, elapsed,
                 r.ResponseCheck is { Valid: false }
                     ? $"The consumer replied with a {r.ResponseType} that violates its contract."
                     : r.Note
@@ -313,16 +313,15 @@ public sealed class ContractPublisher(
     }
 
     /// <summary>Publisher confirms + mandatory: an unroutable message is an error, not a silent drop.</summary>
-    private async Task SendAsync(ContractDescriptor contract, Outgoing outgoing, CancellationToken ct)
+    private async Task SendAsync(ContractDescriptor contract, Outgoing outgoing, CancellationToken ct, TimeSpan? limit = null)
     {
         // The consumer's span becomes a child of ours (traceparent + MassTransit's MT-Activity-Id).
         Telemetry.Inject(Activity.Current, outgoing.Properties.Headers!);
 
-        await using var channel = await connection.CreateChannelAsync(publisherConfirms: true, ct);
+        await using var channel = await connection.CreatePublishChannelAsync(ct, limit);
         try
         {
-            await channel.BasicPublishAsync(
-                contract.Exchange, contract.RoutingKey, mandatory: true, outgoing.Properties, outgoing.Body, ct);
+            await channel.PublishAsync(contract.Exchange, contract.RoutingKey, outgoing.Properties, outgoing.Body, ct, limit);
         }
         catch (PublishException ex) when (ex.IsReturn)
         {

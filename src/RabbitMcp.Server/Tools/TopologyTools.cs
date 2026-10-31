@@ -53,15 +53,15 @@ public sealed class TopologyTools(TopologyManager topology)
     [Description(
         "Creates a queue if it does not exist, optionally bound to an existing exchange so it receives its messages. " +
         "Never changes, purges or deletes an existing queue: if it exists, the outcome is existed (same settings) or " +
-        "existed-different (left as it is), and a binding is refused (unless RabbitMcp:TopologyRules has bind-existing). Queues are never exclusive or auto-delete. " +
+        "existed-different (left as it is), and a binding is refused (unless RabbitMcp:TopologyRules has bind-existing). Queues are always durable, never exclusive or auto-delete. " +
         "Quorum queues need x-dead-letter-exchange (an existing exchange): RabbitMQ drops their messages after 20 " +
         "failed deliveries otherwise. " +
         "Two steps: call without confirm to preview, then with confirm=true.")]
     public Task<DeclareResult> DeclareQueueAsync(
         [Description("Queue name, e.g. billing-audit. Names starting with amq. are reserved.")] string name,
         [Description(TemplateHelp)] string? template = null,
-        [Description("classic (default), quorum or stream. Quorum and stream queues are always durable.")] string? queueType = null,
-        [Description("Survives a broker restart (default true).")] bool? durable = null,
+        [Description("classic (default), quorum or stream.")] string? queueType = null,
+        [Description("Must stay true (the default): transient queues lose their messages on restart and RabbitMQ 4 refuses them.")] bool? durable = null,
         [Description(ArgumentsHelp)] Dictionary<string, JsonElement>? arguments = null,
         [Description("Bind the queue to this existing exchange, e.g. a contract's Namespace:Type exchange.")] string? bindExchange = null,
         [Description(RoutingKeyHelp)] string? routingKey = null,

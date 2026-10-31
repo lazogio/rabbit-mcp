@@ -294,6 +294,81 @@ public class HttpHostingTests
     }
 
     [Fact]
+    public async Task Anonymous_access_works_on_loopback()
+    {
+        await using var app = await StartAsync(Config(("HttpAllowAnonymous", "true")));
+
+        var response = await app.GetTestClient().SendAsync(Mcp(Initialize));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("Uri", "http://broker")]
+    [InlineData("MaxMessagesPerCall", "0")]
+    [InlineData("PublishTimeoutSeconds", "0")]
+    [InlineData("MaxBulkMessages", "0")]
+    [InlineData("MaxPayloadChars", "0")]
+    [InlineData("ManagementUri", "ftp://broker")]
+    [InlineData("MaxMessagesPerCall", "many")]
+    [InlineData("EnablePublish", "maybe")]
+    public void Invalid_option_values_are_startup_errors(string option, string value)
+    {
+        var ex = Assert.Throws<StartupException>(() => HttpHosting.Build([], b =>
+        {
+            b.WebHost.UseTestServer();
+            b.Configuration.AddInMemoryCollection(Config(("ApiKeys", $"alice:{AliceKey}"), (option, value)));
+        }));
+        Assert.Contains(option, ex.Message);
+    }
+
+    [Theory]
+    [InlineData("ClientName")]
+    [InlineData("Uri")]
+    public void Values_that_only_fail_at_the_broker_are_refused_at_startup(string option)
+    {
+        var value = option == "Uri" ? "amqp://guest:Secret1@localhost:5672/a/b" : new string('c', 151);
+
+        var ex = Assert.Throws<StartupException>(() => HttpHosting.Build([], b =>
+        {
+            b.WebHost.UseTestServer();
+            b.Configuration.AddInMemoryCollection(Config((option, value)));
+        }));
+
+        Assert.Contains(option, ex.Message);
+        Assert.DoesNotContain("Secret1", ex.Message);
+    }
+
+    [Fact]
+    public void Jwt_authority_must_use_https()
+    {
+        var ex = Assert.Throws<StartupException>(() => HttpHosting.Build([], b =>
+        {
+            b.WebHost.UseTestServer();
+            b.Configuration.AddInMemoryCollection(Config(("JwtAuthority", "http://login.example.test"), ("JwtAudience", "rabbit-mcp")));
+        }));
+        Assert.Contains("https://", ex.Message);
+    }
+
+    [Fact]
+    public async Task Arguments_that_cannot_be_bound_are_explained()
+    {
+        await using var app = await StartAsync(Config(("ApiKeys", $"alice:{AliceKey}"), ("EnablePublish", "true")));
+        var client = app.GetTestClient();
+
+        async Task<string> ErrorOf(string tool, object arguments)
+        {
+            var rpc = await Rpc(await client.SendAsync(Mcp(Call(tool, arguments), r => r.Headers.Add("X-Api-Key", AliceKey))));
+            Assert.True(rpc.GetProperty("result").GetProperty("isError").GetBoolean());
+            return Text(rpc);
+        }
+
+        Assert.Contains("reason", await ErrorOf("publish_order_cancelled", new { message = new { orderId = Guid.NewGuid() } }));
+        Assert.Contains("queues", await ErrorOf("queue_stats", new { }));
+        Assert.Contains("Invalid arguments", await ErrorOf("queue_stats", new { queues = "not a list" }));
+    }
+
+    [Fact]
     public void Audit_log_lines_cannot_be_forged_with_control_characters()
     {
         Assert.Equal("evil  AUDIT publish sent", AuditLog.OneLine("evil\r\nAUDIT publish sent"));

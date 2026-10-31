@@ -118,7 +118,8 @@ public sealed class BrokerTools(
         "MassTransit fault details (exception, consumer, retry count) for _error/_skipped queues, and RabbitMQ dead-lettering " +
         "history (x-death) for dead-letter queues. " +
         "Messages are fetched unacknowledged and immediately requeued, so they get the redelivered flag and may change order; " +
-        "on quorum queues each peek counts towards the delivery limit. Queues with active consumers are refused unless force=true.")]
+        "on RabbitMQ 3.x quorum queues each peek counts towards the delivery limit, so a queue with one can drop the message " +
+        "(RabbitMQ 4 does not count peeks). Queues with active consumers are refused unless force=true. For a stream use read_stream.")]
     public Task<PeekResult> PeekMessagesAsync(
         [Description("Queue name, e.g. submit-order_error.")] string queue,
         [Description("How many messages to show (default 5).")] int count = 5,

@@ -76,6 +76,12 @@ public sealed class RabbitMcpOptions
     /// </summary>
     public string? RateLimits { get; set; }
 
+    /// <summary>
+    /// How long a send or move waits for the broker's confirm, 1-300. A broker that blocks publishers (memory or disk
+    /// alarm) is reported at once; this covers one that just stops answering.
+    /// </summary>
+    public int PublishTimeoutSeconds { get; set; } = 30;
+
     /// <summary>Message bodies longer than this are shown truncated (display only, never when republishing).</summary>
     public int MaxPayloadChars { get; set; } = 16_000;
 

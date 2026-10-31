@@ -66,4 +66,20 @@ public sealed class SearchTests(BrokerFixture broker)
         await broker.WaitForCancelled(orderId);
         await broker.WaitForQueueCount(ErrorQueue, 0);
     }
+
+    [Fact]
+    public async Task Text_past_the_display_limit_is_found()
+    {
+        const string queue = "it-long_error";
+        await using var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
+        await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false);
+        var body = System.Text.Encoding.UTF8.GetBytes(new string('x', broker.Options.Value.MaxPayloadChars + 1000) + "needle-at-the-end");
+        await channel.BasicPublishAsync("", queue, mandatory: false, new RabbitMQ.Client.BasicProperties { MessageId = "long-1" }, body);
+        await broker.WaitForQueueCount(queue, 1);
+
+        var found = await Search().FindMessageAsync(contains: "NEEDLE-AT-THE-END", queues: [queue]);
+
+        Assert.True(Assert.Single(found.Matches).Message.Truncated);
+        await channel.QueueDeleteAsync(queue, ifUnused: false, ifEmpty: false);
+    }
 }

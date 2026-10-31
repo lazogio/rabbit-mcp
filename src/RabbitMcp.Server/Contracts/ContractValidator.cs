@@ -73,8 +73,15 @@ public static class ContractValidator
                     var i = 0;
                     foreach (var item in items)
                     {
-                        if (item is not null && !IsSimple(item.GetType()))
+                        if (item is null)
+                        {
+                            if (!AllowsNullItems(prop))
+                                errors.Add($"{propPath}[{i}]: must not be null.");
+                        }
+                        else if (!IsSimple(item.GetType()))
+                        {
                             ValidateObject(item, $"{propPath}[{i}]", errors, visited);
+                        }
                         i++;
                     }
                     break;
@@ -83,6 +90,14 @@ public static class ContractValidator
                     break;
             }
         }
+    }
+
+    /// <summary>List&lt;Line?&gt; or Line?[] allow nulls; a contract compiled without nullable annotations says nothing.</summary>
+    private static bool AllowsNullItems(PropertyInfo list)
+    {
+        var info = new NullabilityInfoContext().Create(list);
+        var item = info.ElementType ?? info.GenericTypeArguments.LastOrDefault();
+        return item?.ReadState != NullabilityState.NotNull;
     }
 
     private static bool IsSimple(Type type)

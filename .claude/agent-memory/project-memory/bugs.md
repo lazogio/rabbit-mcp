@@ -1,6 +1,48 @@
 # Bugs (newest first)
 
-Next ID: BUG-031
+Next ID: BUG-065
+
+### BUG-031..047 Black-box QA run (2026-10-31) — fixed (2026-10-31, on main)
+Found by driving the published binary over real MCP against RabbitMQ 4.4 and the official TypeScript client. Guards: `QaRegressionTests`,
+`HttpHostingTests`, integration `ErrorQueueTests`/`SearchTests`, and `scripts/mcp_schema.py` in the smoke test and sample e2e.
+- BUG-031 (critical) 14 tools broke their own outputSchema: `ToolJson` omitted nulls that the schema lists as required. The TypeScript SDK threw
+  -32602 after the tool had already sent or moved messages, so a retry duplicated them. Fix: `ToolJson` writes nulls.
+  Lesson: CI checked that outputSchema exists, never that results satisfy it.
+- BUG-032 (high) `HttpAllowAnonymous=true` always crashed: `UseAuthentication` without `AddAuthentication`.
+- BUG-033 (medium) Invalid option values ended in an unhandled exception and SIGABRT. Fix: `ServerComposition.Validate`/`ReadOptions` throw
+  `StartupException`; `Program.RunAsync` reports a host that cannot start the same way.
+- BUG-034 (medium) Arguments that could not be bound returned "An error occurred invoking 'x'." Fix: `BrokerErrors.TryDescribeArguments`.
+  Over-long queue/exchange names now read as "does not exist" (`RabbitConnection.TooLong`).
+- BUG-035 (medium) `republish_from_error confirm=true` ignored active consumers. Fix: refused unless force=true.
+- BUG-036 (medium) `find_message` missed text past MaxPayloadChars yet reported `searched`. Fix: `PeekAsync(select:)` sees the whole body.
+- BUG-037 (medium) A 403 on publish read "connection lost, try again". Fix: refusal codes are matched before `AlreadyClosedException`.
+- BUG-038 (medium) `JwtAuthority=http://...` started, then every request was an empty 500. Fix: startup error.
+- BUG-039 (low) `resend_corrected` sent fields outside the contract. Fix: refused (`FieldsOutsideContract`); fields the original had stay.
+- BUG-040 (low) Previews ignored messageIds. Fix: `HavingIds`, `PeekResult.Scanned`.
+- BUG-041 (low) Invalid until/from were reported as `since`. Fix: `ParseSince(argument)`, `TryParseTime`.
+- BUG-042 (low) Revived messages kept X-Dead-Letter-*/X-Corrected-To. Fix: `WithoutFaultHeaders`.
+- BUG-043 (low) Truncation cut bytes (U+FFFD at the end; about 5,300 Georgian characters shown). Fix: `MessageInspector.Shortened` counts characters.
+- BUG-044 (low) The quorum note in peek_messages was true only for 3.x. 3.13 really drops the message: README and description now say so.
+- BUG-045 (low) `durable=false` previewed would-create, then 541 closed the shared connection. Fix: refused in `TopologyPolicy`.
+- BUG-046 (low) `--help`/`--version` started the server. Fix: handled in `Program.cs`.
+- BUG-047 (test) `Every_audit_event_is_counted` failed about 40% of runs: a plain List filled by a process-wide listener. Fix: ConcurrentQueue.
+- BUG-048 (data loss) Parked messages with a TTL were deleted: dead-letter and correction copied `expiration`, so the clock restarted in `_dead`. Fix: `QueueBrowser.Parked` moves it to `X-Original-Expiration`; `Live` restores it on republish.
+- BUG-049 (poison) One message could fail peek, search and filtered previews for a whole queue (date past year 9999, lone surrogate, deep JSON, invalid UTF-8). Fix: `Inspect` never throws; `CanShow` turns what a result cannot carry into RawBody plus `Problem`; `find_message` survives any queue failing.
+- BUG-050 (stall) Sends never ended during a broker alarm, and reads on the shared connection failed too. Fix: publishing connection of its own, `PublishChannel` with `PublishTimeoutSeconds`, `connection.blocked` ends the wait at once and refuses later sends.
+- BUG-051 (moves) Messages with `user_id` could not be moved (406). Fix: moved to `X-Original-User-Id`.
+- BUG-052 (display) Text starting like JSON was cut to its first value. Fix: `TryParseJson` needs the whole body to be one value; also used by `RawReply`.
+- BUG-053 (validation) `lines:[null]` passed validation and was sent. Fix: `ContractValidator` refuses null items unless the element type is nullable.
+- BUG-054 (errors) Broker timeouts had no reason. Fix: `TimeoutException` in `BrokerErrors`, and a cancellation no caller asked for reads the same.
+- BUG-055 (regression of BUG-034) Faults inside a tool read "Invalid arguments". Fix: `ThrownWhileBinding` looks at the stack; anything else unexpected is logged and named.
+- BUG-056 (search) `find_message` called a stream `empty`. Fix: searches every queue it can and reports streams as skipped.
+- BUG-057 (connection) A 1 MB `reason` killed the shared connection (FRAME_ERROR). Fix: `MaxReasonChars`; 501 no longer says "Try again".
+- BUG-058 (startup) Long ClientName failed only at the first reply or responder queue, and a URI with two path segments only at the first call. Fix: both refused in `Validate`.
+- BUG-059 (regression of BUG-033) A corrupt appsettings.json crashed with a stack trace. Fix: read inside the `try` in `Program.cs`.
+- BUG-060 (streams) `read_stream` failed when Management was down. Fix: type is optional, the first delivery tells.
+- BUG-061 (audit) A failed confirmation question was not audited. Fix: audited as `refused-failed` in the call-tool filter.
+- BUG-062 (corrections) `resend_corrected` refused enum names. Fix: `MessageInspector.WithEnumNumbers`.
+- BUG-063 (text) A message held by a parallel peek read "Not found". Fix: text says it may be further back, held, or gone.
+- BUG-064 (streams) `basic.get` on a stream closed the whole connection (540, reported at first as a missing hint). Fix: browsing connection, `StreamQueueException`, moves try the first message there first. A null queue name is refused plainly.
 
 ### BUG-030 messageIds and filters only saw the first message without count — fixed (2026-10-30, branch fix/message-ids-scan-and-warning)
 - Symptom (local live run): `dead_letter_from_error` with messageIds skipped a message at position 2: "Not found in the first 1 message(s)".
@@ -9,6 +51,7 @@ Next ID: BUG-031
 - Fix: `count` is optional; `RepublishTools.ScanDepth` uses MaxMessagesPerCall with messageIds, MaxBulkMessages with a filter, an explicit
   count still wins. Previews stay at 1. Guard: `Selected_messages_are_found_behind_the_head_without_count`.
 - Lesson: in these tools count limits the scan, not the number of messages moved.
+- Update (BUG-040): previews with messageIds now scan like the confirmed call.
 
 ### BUG-029 Decimal [Range] limits were strings in tool schemas — fixed (2026-10-30, branch fix/schema-bounds-macos-smoke)
 - Symptom (local run, tools/list): `unitPrice` had `"minimum": "0.01"`, `"maximum": "1000000"`; invalid JSON Schema (limits must be numbers).

@@ -106,20 +106,29 @@ public static class FaultHeaders
                 ? last
                 : GetString(headers, HeaderNames.FirstDeathPrefix + "queue") is { Length: > 0 } first ? first : null;
 
-    /// <summary>Copy of the headers without fault information, for republishing.</summary>
+    /// <summary>
+    /// Copy of the headers without fault information, for republishing. A message leaving a dead-letter queue also
+    /// loses what parked it (X-Dead-Letter*, and the link of a corrected original): it is live again, not parked.
+    /// </summary>
     public static Dictionary<string, object?> WithoutFaultHeaders(IDictionary<string, object?>? headers)
     {
         var result = new Dictionary<string, object?>(StringComparer.Ordinal);
         if (headers is null)
             return result;
 
+        var correctedOriginal = headers.ContainsKey(HeaderNames.CorrectedTo);
         foreach (var (key, value) in headers)
         {
-            if (!IsFaultHeader(key))
+            if (!IsFaultHeader(key) && !IsParkingHeader(key)
+                && !(correctedOriginal && key is HeaderNames.CorrectedBy or HeaderNames.CorrectedAt))
                 result[key] = value;
         }
         return result;
     }
+
+    private static bool IsParkingHeader(string key) =>
+        key is HeaderNames.DeadLetteredBy or HeaderNames.DeadLetteredFrom or HeaderNames.DeadLetteredAt
+            or HeaderNames.DeadLetterReason or HeaderNames.CorrectedTo or HeaderNames.OriginalExpiration;
 
     /// <summary>Non-fault headers as strings, for display.</summary>
     public static Dictionary<string, string?> OtherHeadersForDisplay(IDictionary<string, object?>? headers)
@@ -164,11 +173,17 @@ public static class FaultHeaders
         null => null,
         byte[] bytes => Encoding.UTF8.GetString(bytes),
         string s => s,
-        AmqpTimestamp ts => DateTimeOffset.FromUnixTimeSeconds(ts.UnixTime).ToString("O", CultureInfo.InvariantCulture),
+        AmqpTimestamp ts => TimeOf(ts.UnixTime)?.ToString("O", CultureInfo.InvariantCulture) ?? ts.UnixTime.ToString(CultureInfo.InvariantCulture),
         IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
         IEnumerable<object?> list => "[" + string.Join(", ", list.Select(ToDisplayString)) + "]",
         _ => value.ToString(),
     };
+
+    /// <summary>An AMQP timestamp; null when it is outside the range of a date (it is whatever the publisher wrote).</summary>
+    public static DateTimeOffset? TimeOf(long unixSeconds) =>
+        unixSeconds >= DateTimeOffset.MinValue.ToUnixTimeSeconds() && unixSeconds <= DateTimeOffset.MaxValue.ToUnixTimeSeconds()
+            ? DateTimeOffset.FromUnixTimeSeconds(unixSeconds)
+            : null;
 
     public static string? TrimStackTrace(string? stackTrace)
     {

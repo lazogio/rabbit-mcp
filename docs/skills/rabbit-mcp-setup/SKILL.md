@@ -93,7 +93,7 @@ docker run -d -p 5080:5080 \
   ghcr.io/lazogio/rabbit-mcp:1.0
 ```
 
-- OIDC instead of keys: `RabbitMcp__JwtAuthority` + `RabbitMcp__JwtAudience`.
+- OIDC instead of keys: `RabbitMcp__JwtAuthority` (must be https) + `RabbitMcp__JwtAudience`.
 - Roles (HTTP only): `RabbitMcp__Roles__viewer=read`, `RabbitMcp__Roles__operator="read;publish:Order*;republish:*_error"`,
   `RabbitMcp__UserRoles="alice=operator"`, `RabbitMcp__DefaultRoles=viewer`. Permissions: read, publish, request,
   republish, respond, topology, `*`.

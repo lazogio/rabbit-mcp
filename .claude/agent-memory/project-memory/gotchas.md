@@ -5,7 +5,8 @@
 - AMQP header string values arrive as `byte[]`, not `string` → decode with `FaultHeaders.ToDisplayString`.
 - `CreateChannelOptions(publisherConfirmationsEnabled: true, publisherConfirmationTrackingEnabled: true)` makes
   `BasicPublishAsync` await the confirm; with `mandatory: true` an unroutable message throws `PublishException { IsReturn: true }`.
-- `basic.get` + nack(requeue) sets `redelivered` and may reorder; on quorum queues each peek counts toward the delivery-limit.
+- `basic.get` + nack(requeue) sets `redelivered` and may reorder. Quorum queues: RabbitMQ 3.13 counts each peek toward the delivery-limit
+  and drops the message (8 peeks, limit 2: gone); RabbitMQ 4.4 does not (measured 2026-10-31).
 - `BasicDeliverEventArgs.Body` is only valid inside the handler → parse/copy before returning.
 - Passive declare of a queue exclusive to another connection fails with 405 RESOURCE_LOCKED (closes the channel), yet
   publishing to it works → `QueueExistsAsync` treats 405 as "exists"; tools iterating queues must not abort on it.
@@ -66,6 +67,9 @@
 - MCP SDK ActivitySource/Meter name: "Experimental.ModelContextProtocol".
 
 ## MCP C# SDK (ModelContextProtocol 2.2)
+- outputSchema lists nullable record parameters without a default as `required`: a serializer that omits nulls breaks the
+  TypeScript SDK's `Client.callTool` (-32602), even though the tool has already run. `scripts/mcp_schema.py` is the same check.
+- Argument binding failures reach the call-tool filter as `JsonException`/`ArgumentException`, not as `McpException`.
 - Parameters of type `McpServer`, `RequestContext<CallToolRequestParams>`, `IProgress<ProgressNotificationValue>`,
   `ClaimsPrincipal` (and DI services) are injected and excluded from the input schema; give them `= null` defaults
   so direct callers (tests) can omit them. `McpServer.ClientInfo` = the client's initialize name/version.
@@ -107,8 +111,11 @@
   → `WithRequestFilters(f => f.AddCallToolFilter(...))` to translate. The MCP auth scheme forwards authenticate to "Bearer".
 - Testing JWT offline: PostConfigure `JwtBearerOptions.Configuration = new OpenIdConnectConfiguration { Issuer, SigningKeys }`
   before `AddJwtBearer` runs; tokens from `JsonWebTokenHandler.CreateToken`.
-- RabbitMQ.Client 7: `AlreadyClosedException : OperationInterruptedException : RabbitMQClientException` — match the
-  most derived first; `BrokerUnreachableException : IOException`.
+- RabbitMQ.Client 7: `AlreadyClosedException : OperationInterruptedException : RabbitMQClientException`;
+  `BrokerUnreachableException : IOException`. A 403 on a confirmed publish arrives as `AlreadyClosedException` with
+  ReplyCode 403: check refusal codes before treating it as a lost connection. Names over 255 bytes throw in the client.
+- JwtBearer with an http:// Authority starts fine and fails each request with an empty 500: check the scheme at startup.
+- `UseAuthentication()` needs `AddAuthentication()` even with no scheme registered.
 
 - MassTransit (System.Text.Json) writes `decimal` as a JSON **string** ("1800") and reads number or string.
 - MassTransit creates `<queue>_error` only on the first fault — poll for it, "does not exist" is "not yet".
@@ -127,3 +134,8 @@
   a scope (also a scoped request client) only goes out after that scope's DbContext.SaveChanges. Send requests that must
   leave now from `IBus` (`bus.CreateRequestClient<T>()`).
 - GitHub artifact storage quota full → `upload-artifact` fails the job; uploads of test results are continue-on-error.
+- `basic.get` on a stream is a connection error (540), not a channel error. A stream's passive declare count starts at 0 and settles above it
+  seconds later, so a test on a fresh stream passes where a production stream fails: wait for the count.
+- `connection.blocked` arrives only after that connection tried to publish, and channel.open on a blocked connection hangs for the continuation
+  timeout. `channel.DisposeAsync` hangs the same way, which is why `PublishChannel` closes a stalled channel in the background.
+- `JsonElement` accepts a lone surrogate and invalid UTF-8 inside strings: `GetRawText` or writing fails later. Check with `MessageInspector.CanShow`.
