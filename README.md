@@ -80,7 +80,7 @@ public sealed record GetOrderStatus
 
 - `required`, nullability, `[Description]` and DataAnnotations go into the schema and are enforced.
 - Names follow MassTransit (`urn:message:Namespace:Type`, exchange `Namespace:Type`); `Urn` and `Exchange` override them.
-- Your contracts: a class library referencing the `RabbitMcp.Contracts` package, loaded with `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`.
+- Your contracts: a class library referencing the [`RabbitMcp.Contracts`](https://www.nuget.org/packages/RabbitMcp.Contracts/) package, loaded with `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`.
 
 **Services without MassTransit** — `Format = MessageFormat.Raw`: the body is plain JSON, metadata goes into AMQP properties, and you set `Exchange` and/or `RoutingKey`. Requests use RabbitMQ RPC (`reply_to` + `correlation_id`; the reply type in the AMQP `type`).
 

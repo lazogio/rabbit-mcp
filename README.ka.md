@@ -80,7 +80,7 @@ public sealed record GetOrderStatus
 
 - `required`, nullability, `[Description]` და DataAnnotations schema-ში ხვდება და სერვერი მათ ამოწმებს.
 - სახელები MassTransit-ს მიჰყვება (`urn:message:Namespace:Type`, exchange `Namespace:Type`); `Urn` და `Exchange` მათ ცვლის.
-- საკუთარი კონტრაქტები: class library, რომელიც `RabbitMcp.Contracts` პაკეტს იყენებს და `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`-ით იტვირთება.
+- საკუთარი კონტრაქტები: class library, რომელიც [`RabbitMcp.Contracts`](https://www.nuget.org/packages/RabbitMcp.Contracts/) პაკეტს იყენებს და `RabbitMcp__ContractAssemblies=/path/Billing.Contracts.dll`-ით იტვირთება.
 
 **სერვისები MassTransit-ის გარეშე** — `Format = MessageFormat.Raw`: სხეული უბრალო JSON-ია, მეტამონაცემები AMQP property-ებშია, `Exchange` და/ან `RoutingKey` კი თქვენ მიუთითებთ. request-ები RabbitMQ RPC-ს იყენებს (`reply_to` + `correlation_id`; პასუხის ტიპი AMQP `type`-შია).
 
