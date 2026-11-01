@@ -2,7 +2,7 @@
 
 <!-- mcp-name: io.github.lazogio/rabbit-mcp -->
 
-[![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![NuGet](https://img.shields.io/nuget/v/RabbitMcp.Server.svg)](https://www.nuget.org/packages/RabbitMcp.Server/)
 
 **English** · [ქართული](README.ka.md)
 
@@ -19,7 +19,7 @@ An MCP server for RabbitMQ built on **message contracts** (.NET 10). Each contra
 | Way | How |
 |---|---|
 | Binary | [Releases](https://github.com/lazogio/rabbit-mcp/releases): self-contained for Linux, Windows and macOS. macOS: `xattr -d com.apple.quarantine rabbit-mcp` |
-| .NET tool | `dotnet tool install -g RabbitMcp.Server`, or without installing: `dnx RabbitMcp.Server --yes` (from the first release) |
+| .NET tool | [NuGet](https://www.nuget.org/packages/RabbitMcp.Server/): `dotnet tool install -g RabbitMcp.Server`, or without installing: `dnx RabbitMcp.Server --yes` (from the first release) |
 | Docker | `ghcr.io/lazogio/rabbit-mcp` — HTTP mode, see [For teams](#for-teams-http) |
 | Source | `dotnet publish src/RabbitMcp.Server -c Release -o out` (never `dotnet run`: it writes to stdout) |
 

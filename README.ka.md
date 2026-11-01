@@ -2,7 +2,7 @@
 
 <!-- mcp-name: io.github.lazogio/rabbit-mcp -->
 
-[![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lazogio/rabbit-mcp/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![NuGet](https://img.shields.io/nuget/v/RabbitMcp.Server.svg)](https://www.nuget.org/packages/RabbitMcp.Server/)
 
 [English](README.md) · **ქართული**
 
@@ -19,7 +19,7 @@ MCP სერვერი RabbitMQ-სთვის, აგებული **შ�
 | გზა | როგორ |
 |---|---|
 | ბინარი | [Releases](https://github.com/lazogio/rabbit-mcp/releases): self-contained Linux-ის, Windows-ის და macOS-ისთვის. macOS: `xattr -d com.apple.quarantine rabbit-mcp` |
-| .NET tool | `dotnet tool install -g RabbitMcp.Server`, ან დაყენების გარეშე: `dnx RabbitMcp.Server --yes` (პირველი რელიზიდან) |
+| .NET tool | [NuGet](https://www.nuget.org/packages/RabbitMcp.Server/): `dotnet tool install -g RabbitMcp.Server`, ან დაყენების გარეშე: `dnx RabbitMcp.Server --yes` (პირველი რელიზიდან) |
 | Docker | `ghcr.io/lazogio/rabbit-mcp` — HTTP რეჟიმი, იხ. [გუნდებისთვის](#გუნდებისთვის-http) |
 | კოდიდან | `dotnet publish src/RabbitMcp.Server -c Release -o out` (არასოდეს `dotnet run`: ის stdout-ზე წერს) |
 
