@@ -19,7 +19,13 @@
     <PackageProjectUrl>https://github.com/lazogio/rabbit-mcp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/lazogio/rabbit-mcp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageIcon>icon.png</PackageIcon>
     <!-- Report source files without the license header (IDE0073, template in .editorconfig). -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
+
+  <!-- Package icon shown on nuget.org for every package (docs/icon.png). -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)docs/icon.png" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
 </Project>
