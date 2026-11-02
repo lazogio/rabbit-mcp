@@ -51,5 +51,7 @@ RabbitMQ UI: http://localhost:15672 (`shop`/`shop`). ბაზა: `psql postgre
   მოთხოვნას გააგზავნის და ვერც მაღაზიის event-ებს გააყალბებს.
 - **ტოპოლოგია:** `TopologyAllow=shop-audit-*` ზღუდავს, რისი შექმნა შეუძლია მოდელს; `order-copy` შაბლონი binding-ს
   აფიქსირებს, ამიტომ მოდელი მხოლოდ სახელს ირჩევს.
+- **`HumanConfirmation=auto`:** stateless HTTP-ზე აღდგენის დადასტურებას ვერ გთხოვთ, ამიტომ rabbit-mcp იქ ნაგულისხმევად
+  უარს ამბობს. ეს ლოკალური დემო მოდელის `confirm=true`-ს ენდობა; საერთო სერვერზე ეს პარამეტრი არ დააყენოთ.
 
 იგივე სცენარს CI გადის: `scripts/sample-e2e.py`.

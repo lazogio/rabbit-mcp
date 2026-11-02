@@ -86,6 +86,43 @@ public class HumanConfirmationTests
     public void Unknown_mode_stops_the_server() =>
         Assert.Throws<StartupException>(() => Create("sometimes"));
 
+    [Theory]
+    [InlineData(null, false, "auto")]
+    [InlineData("", false, "auto")]
+    [InlineData(null, true, "required")]
+    [InlineData(" ", true, "required")]
+    [InlineData("auto", true, "auto")]
+    [InlineData("OFF", true, "off")]
+    [InlineData("required", false, "required")]
+    public void Unset_mode_is_required_over_http_and_auto_over_stdio(string? mode, bool http, string expected) =>
+        Assert.Equal(expected, new HumanConfirmation(new RabbitMcpOptions { HumanConfirmation = mode }, http).Mode);
+
+    [Fact]
+    public async Task Over_http_a_confirm_the_model_wrote_itself_is_not_enough_by_default()
+    {
+        // Stateless HTTP cannot reach the person. A message body the model read may have asked it to set confirm=true.
+        var prompt = new FakePrompt(PersonAnswer.Unavailable);
+        var decision = await new HumanConfirmation(new RabbitMcpOptions(), http: true).DecideAsync("republish_from_error",
+            Args(new { errorQueue = "orders_error", confirm = true }), "alice", prompt, CancellationToken.None);
+
+        Assert.False(decision.Proceed);
+        Assert.Equal("unavailable", decision.How);
+        Assert.Contains("required by default over HTTP", decision.Refusal);
+        Assert.Contains("Nothing was changed", decision.Refusal);
+    }
+
+    [Fact]
+    public void Trusting_confirm_over_http_is_an_explicit_choice_with_a_warning()
+    {
+        Assert.Null(new HumanConfirmation(new RabbitMcpOptions(), http: true).StartupWarning);
+        Assert.Null(new HumanConfirmation(new RabbitMcpOptions { HumanConfirmation = "auto" }).StartupWarning); // stdio asks
+        Assert.Null(new HumanConfirmation(new RabbitMcpOptions { HumanConfirmation = "auto", ConfirmTools = "" }, http: true).StartupWarning);
+        Assert.Contains("HumanConfirmation=auto over HTTP",
+            new HumanConfirmation(new RabbitMcpOptions { HumanConfirmation = "auto" }, http: true).StartupWarning);
+        Assert.Contains("HumanConfirmation=off over HTTP",
+            new HumanConfirmation(new RabbitMcpOptions { HumanConfirmation = "off" }, http: true).StartupWarning);
+    }
+
     [Fact]
     public async Task Elicitation_is_unavailable_without_a_client_that_supports_it()
     {
