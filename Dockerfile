@@ -20,7 +20,7 @@ COPY src/ src/
 RUN dotnet publish src/RabbitMcp.Server -c Release -r "$(cat /rid)" --self-contained false --no-restore \
       -p:Version="$VERSION" -p:DebugType=none -o /app
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:d247d17dd429d96580eeb96cfce220c1089d860dbbf9f94d599ca64cf3604fe4
+FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:de0ee358cdd672f7017a003bed21e9ac9ed48a27c922a59b18175b6e82fa7fee
 WORKDIR /app
 COPY --from=build /app .
 COPY LICENSE /app/LICENSE
