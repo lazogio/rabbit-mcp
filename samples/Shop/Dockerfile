@@ -3,7 +3,7 @@
 # Builds the sample's two containers from source (build context: the repository root):
 #   target "service" — the MassTransit shop service
 #   target "mcp"     — rabbit-mcp (HTTP) with the shop's contracts DLL
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:afd0ccff9d306812a69ef0f47458376b6acb544ae866cfc4b8d28ff0eef35ea7 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props ./
 COPY src/ src/
