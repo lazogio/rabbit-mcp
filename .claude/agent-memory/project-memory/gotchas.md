@@ -76,6 +76,11 @@
 - Only `McpException` messages reach the client; other exceptions become a generic "An error occurred invoking '<tool>'".
 - `UseStructuredContent = true` + record return type → `outputSchema` + `structuredContent`.
 - DataAnnotations (`Range`, `StringLength`, `RegularExpression`, `EmailAddress`, `MinLength`) are mapped into the input schema by MEAI.
+- A call-tool filter may call `next` twice: inside it `next` is `tool.InvokeAsync` (exceptions propagate, nothing is
+  sent yet), and `CallToolRequestParams.Arguments` is settable — the confirmation filter swaps in confirm=false to run the
+  preview, then restores the arguments. Tool arguments bind by exact name (AIFunctionArguments is ordinal): "Confirm" or
+  "confirm":"true" never execute.
+- `McpServerOptions.ServerInstructions` reaches the client in the initialize result (clients add it to the model's context).
 
 ## Environment / tooling
 - `IHeaderDictionary.Append(key, value)` is an extension in `Microsoft.AspNetCore.Http` — add the using in auth handlers.

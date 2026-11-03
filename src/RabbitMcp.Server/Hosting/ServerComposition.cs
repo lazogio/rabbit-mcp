@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -130,7 +131,12 @@ public static class ServerComposition
         AddTelemetry(builder);
 
         var mcp = builder.Services
-            .AddMcpServer(o => o.ServerInfo = new Implementation { Name = "rabbit-mcp", Version = ServerVersion.Current })
+            .AddMcpServer(o =>
+            {
+                o.ServerInfo = new Implementation { Name = "rabbit-mcp", Version = ServerVersion.Current };
+                // Clients put these in the model's context: the first line of defence against instructions hidden in messages.
+                o.ServerInstructions = ToolText.ServerInstructions;
+            })
             .WithRequestFilters(f =>
             {
                 // Roles: callers only see the tools they may use ...
@@ -186,19 +192,43 @@ public static class ServerComposition
                         throw new McpException(limited);
                     }
 
-                    // The person confirms changes through the client (elicitation); the model's confirm=true is the
-                    // fallback only in auto/off mode where the person cannot be asked (never by default over HTTP).
-                    // Every question and answer is audited.
+                    // The person confirms changes through the client (elicitation); the model's own call counts only in
+                    // auto/off mode where the person cannot be asked (never by default). Every question and answer is audited.
                     var human = services.GetRequiredService<HumanConfirmation>();
                     if (human.Applies(name, request.Params?.Arguments))
                     {
                         var audit = services.GetRequiredService<AuditLog>();
                         var client = AuditLog.ClientOf(request.Server, request.User);
+                        var prompt = new ElicitationPrompt(request.Server);
+                        string? details = null;
+                        if (prompt.CanAsk && HumanConfirmation.PreviewTools.Contains(name)
+                            && request.Params is { Arguments: { } executing } call)
+                        {
+                            // The person judges what the server would do, not the model's arguments: run the tool's own
+                            // preview (confirm=false changes nothing) and put its summary in the question.
+                            call.Arguments = new Dictionary<string, JsonElement>(executing) { ["confirm"] = NotConfirmed };
+                            CallToolResult preview;
+                            try
+                            {
+                                preview = await RunAsync(request, cancellationToken);
+                            }
+                            finally
+                            {
+                                call.Arguments = executing;
+                            }
+                            if (preview.IsError == true)
+                                return preview; // it could not happen as asked, and nothing was changed: no question
+                            details = preview.StructuredContent is { } result ? HumanConfirmation.DescribePreview(name, result) : null;
+                        }
+                        else if (prompt.CanAsk && HumanConfirmation.AnswersRequest(name))
+                        {
+                            details = DescribePending(services, request.Params?.Arguments);
+                        }
+
                         ConfirmationDecision decision;
                         try
                         {
-                            decision = await human.DecideAsync(name, request.Params?.Arguments, client,
-                                new ElicitationPrompt(request.Server), cancellationToken);
+                            decision = await human.DecideAsync(name, request.Params?.Arguments, client, prompt, cancellationToken, details);
                         }
                         catch (Exception ex)
                         {
@@ -213,19 +243,24 @@ public static class ServerComposition
                             throw new McpException(decision.Refusal!);
                     }
 
+                    return await RunAsync(request, cancellationToken);
+
                     // RabbitMQ errors (403 ACCESS_REFUSED, lost connection ...) become readable tool errors instead of
                     // the SDK's reason-less "An error occurred invoking 'tool'".
-                    try
+                    async ValueTask<CallToolResult> RunAsync(RequestContext<CallToolRequestParams> toolCall, CancellationToken ct)
                     {
-                        return await next(request, cancellationToken);
-                    }
-                    catch (Exception ex) when (ex is not McpException
-                                               && !(ex is OperationCanceledException && cancellationToken.IsCancellationRequested))
-                    {
-                        if (BrokerErrors.TryDescribe(ex, out var message) || BrokerErrors.TryDescribeArguments(name, ex, out message))
-                            throw new McpException(message, ex);
-                        services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(ServerComposition)).LogError(ex, "{Tool} failed", name);
-                        throw new McpException($"{name} failed unexpectedly ({ex.GetType().Name}); the server log has the details.", ex);
+                        try
+                        {
+                            return await next(toolCall, ct);
+                        }
+                        catch (Exception ex) when (ex is not McpException
+                                                   && !(ex is OperationCanceledException && ct.IsCancellationRequested))
+                        {
+                            if (BrokerErrors.TryDescribe(ex, out var message) || BrokerErrors.TryDescribeArguments(name, ex, out message))
+                                throw new McpException(message, ex);
+                            services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(ServerComposition)).LogError(ex, "{Tool} failed", name);
+                            throw new McpException($"{name} failed unexpectedly ({ex.GetType().Name}); the server log has the details.", ex);
+                        }
                     }
                 });
             })
@@ -289,6 +324,28 @@ public static class ServerComposition
     private static IServiceProvider ServicesOf(MessageContext request) =>
         request.Services ?? request.Server.Services
         ?? throw new InvalidOperationException("The MCP server has no service provider.");
+
+    /// <summary>confirm=false: the arguments of the preview the server runs before asking the person.</summary>
+    private static readonly JsonElement NotConfirmed = ParseJson("false");
+
+    private static JsonElement ParseJson(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    /// <summary>For the person's question: the pending request that a reply_* or reject_request call answers.</summary>
+    private static string DescribePending(IServiceProvider services, IDictionary<string, JsonElement>? arguments)
+    {
+        Guid? requestId = arguments is not null && arguments.TryGetValue("requestId", out var value)
+                          && value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var parsed)
+            ? parsed
+            : null;
+        var pending = requestId is { } id ? services.GetService<RequestInbox>()?.List().FirstOrDefault(r => r.RequestId == id) : null;
+        return pending is null
+            ? "It answers a request that is not pending (unknown or expired), so the answer will be refused."
+            : HumanConfirmation.DescribeRequest(pending.Contract.Name, pending.Envelope.SourceAddress, pending.Envelope.Message);
+    }
 
     /// <summary>
     /// Every [MessageContract] type in the configured assemblies becomes a contract

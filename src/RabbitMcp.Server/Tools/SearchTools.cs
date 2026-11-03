@@ -27,7 +27,7 @@ public sealed class SearchTools(
         "_skipped and _dead queue (needs ManagementUri); scope='all' searches every non-empty queue; or pass queues. " +
         "Each queue is read from the head like peek_messages (nothing is removed; peeked messages become 'redelivered'), " +
         "at most maxPerQueue messages deep. Queues with active consumers are skipped unless force=true. Streams are " +
-        "reported in the result but not searched: read them with read_stream.")]
+        "reported in the result but not searched: read them with read_stream. " + ToolText.Untrusted)]
     public async Task<FindMessageResult> FindMessageAsync(
         [Description("MessageId to look for.")] string? messageId = null,
         [Description("CorrelationId to look for.")] string? correlationId = null,

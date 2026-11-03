@@ -119,7 +119,7 @@ public sealed class BrokerTools(
         "history (x-death) for dead-letter queues. " +
         "Messages are fetched unacknowledged and immediately requeued, so they get the redelivered flag and may change order; " +
         "on RabbitMQ 3.x quorum queues each peek counts towards the delivery limit, so a queue with one can drop the message " +
-        "(RabbitMQ 4 does not count peeks). Queues with active consumers are refused unless force=true. For a stream use read_stream.")]
+        "(RabbitMQ 4 does not count peeks). Queues with active consumers are refused unless force=true. For a stream use read_stream. " + ToolText.Untrusted)]
     public Task<PeekResult> PeekMessagesAsync(
         [Description("Queue name, e.g. submit-order_error.")] string queue,
         [Description("How many messages to show (default 5).")] int count = 5,

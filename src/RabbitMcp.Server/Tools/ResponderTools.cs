@@ -23,7 +23,8 @@ public sealed class ResponderTools(ResponderService responder, AccessControl acc
         "Requests other services sent to this server (responder mode) that are waiting for an answer, oldest first. " +
         "Answer each with one of its replyTools (reply_*) or with reject_request before expiresAt: after that the " +
         "requester has given up and the request disappears. The message is checked against its contract. " +
-        "To wait for the next request instead of polling, pass waitSeconds: the call returns as soon as one arrives.")]
+        "To wait for the next request instead of polling, pass waitSeconds: the call returns as soon as one arrives. " +
+        ToolText.Untrusted)]
     public async Task<PendingRequestList> PendingRequestsAsync(
         [Description("Only requests of this contract (name, e.g. GetOrderStatus).")] string? contract = null,
         [Description("Maximum requests to return, 1-100 (default 20).")] int limit = 20,

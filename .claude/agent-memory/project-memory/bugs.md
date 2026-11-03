@@ -1,6 +1,25 @@
 # Bugs (newest first)
 
-Next ID: BUG-069
+Next ID: BUG-073
+
+### BUG-069..072 The model could still approve its own changes, or steer the question — fixed (2026-11-03, fix/confirmation-hardening)
+Follow-up audit of BUG-068 ("find similar problems"). Guards: `HumanConfirmationTests` (defaults, reply tools, question
+lines, previews, requests, escapes), `HttpHostingTests.Over_http_the_models_confirm_moves_nothing_unless_the_operator_trusts_it`,
+integration `HumanInTheLoopTests` (the question carries the preview).
+- BUG-069 (high) stdio still defaulted to `auto`: a client without elicitation trusted the model's confirm=true silently.
+  Fix: unset `HumanConfirmation` = `required` on every transport; `off` over stdio warns at startup too.
+- BUG-070 (high) `reply_*` / `reject_request` were not in `ConfirmTools`: the model alone approved the Shop's large orders
+  (and wrote `approvedBy`), while the request's own fields (a customer e-mail) could talk it into that.
+  Fix: both in the `ConfirmTools` default; the question shows the pending request being answered (`DescribeRequest`).
+- BUG-071 (medium) The question could be steered by the model: string values kept their line breaks (an argument could
+  imitate a `targetQueue:` line), the 1500-character cut could hide later arguments behind a long first one, and the
+  person saw the model's arguments, not what the server would do. Fix: `Shown` (one line, escapes control/format/tag
+  characters, per-value cap), redirecting arguments first, at most 20 listed; the filter runs the tool's own preview first.
+- BUG-072 (low) Only the MCP prompts said message content is data, not instructions. Fix: `ToolText` sentences in the
+  descriptions of peek_messages, find_message, read_stream, pending_requests and every confirm parameter, plus
+  `ServerInstructions` at initialize.
+- Lesson: a human-confirmation gate is only as good as its default where nobody can be asked, and as the question's text:
+  everything in it except the server's own words comes from the party being checked.
 
 ### BUG-068 (high) Over HTTP the model could approve its own changes — fixed (2026-11-02, fix/http-confirmation-required)
 - Symptom (reported by Mehdi Mohseni on LinkedIn): `HumanConfirmation=auto` fell back to `confirm=true` on stateless HTTP.

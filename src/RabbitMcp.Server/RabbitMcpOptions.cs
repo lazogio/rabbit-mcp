@@ -132,18 +132,20 @@ public sealed class RabbitMcpOptions
     public int MaxPendingRequests { get; set; } = 100;
 
     /// <summary>
-    /// Who confirms changes: "auto" — the server asks the person through the MCP client (elicitation) when
-    /// the client can, otherwise the tool's confirm argument counts; "required" — refuse the change when the person
-    /// cannot be asked; "off" — only the confirm argument. Unset: "required" over HTTP (stateless HTTP can never ask, and
-    /// the model writes confirm itself), "auto" over stdio.
+    /// Who confirms changes: "required" (default, also when unset) — the server asks the person through the MCP client
+    /// (elicitation) and refuses the change when it cannot (a client without elicitation, stateless HTTP); "auto" — ask
+    /// when possible, otherwise the model's own call counts; "off" — never ask, only the confirm argument. The model writes
+    /// confirm=true and its replies itself, and message content can talk it into them.
     /// </summary>
     public string? HumanConfirmation { get; set; }
 
     /// <summary>
-    /// Tools whose changes the person confirms (";"-separated "*" patterns). Tools with a preview (confirm argument)
-    /// are asked only when executing. Add e.g. "publish_*;request_*;reply_*;reject_request" to confirm every send.
+    /// Tools whose changes the person confirms (";"-separated "*" patterns): by default recovery, declares and answers to
+    /// other services' requests. Tools with a preview (confirm argument) are asked only when executing. Add e.g.
+    /// "publish_*;request_*" to confirm every send.
     /// </summary>
-    public string ConfirmTools { get; set; } = "republish_from_error;dead_letter_from_error;resend_corrected;declare_exchange;declare_queue";
+    public string ConfirmTools { get; set; } =
+        "republish_from_error;dead_letter_from_error;resend_corrected;declare_exchange;declare_queue;reply_*;reject_request";
 
     /// <summary>"stdio" (default: one client, started by it) or "http" (shared server, Streamable HTTP + authorization).</summary>
     public string Transport { get; set; } = "stdio";

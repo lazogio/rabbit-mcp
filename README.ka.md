@@ -104,7 +104,7 @@ rabbit-mcp contracts diff old/Billing.Contracts.dll new/Billing.Contracts.dll
 
 `request_<contract>` პასუხს ელოდება (timeout 1–120 წმ) და აბრუნებს `responded`-ს, `faulted`-ს ან `timeout`-ს, პასუხი კი კონტრაქტით მოწმდება.
 
-**Responder:** `RabbitMcp__RespondTo=ApproveLargeOrder`-ით თქვენი სერვისი კითხულობს და მოდელი პასუხობს. request-ები `pending_requests`-ში ჩანს; მოდელი პასუხობს `reply_<response>`-ით ან `reject_request`-ით (მომთხოვნი `RequestFaultException`-ს იღებს). request-ები მეხსიერებაში ინახება; ერთ `ClientName`-ზე ერთი ინსტანსი პასუხობს, დანარჩენები ელოდება.
+**Responder:** `RabbitMcp__RespondTo=ApproveLargeOrder`-ით თქვენი სერვისი კითხულობს და მოდელი პასუხობს. request-ები `pending_requests`-ში ჩანს; მოდელი პასუხობს `reply_<response>`-ით ან `reject_request`-ით (მომთხოვნი `RequestFaultException`-ს იღებს), ყოველ პასუხს კი ადამიანი ადასტურებს (`HumanConfirmation`). request-ები მეხსიერებაში ინახება; ერთ `ClientName`-ზე ერთი ინსტანსი პასუხობს, დანარჩენები ელოდება.
 
 ## გუნდებისთვის (HTTP)
 
@@ -149,7 +149,7 @@ RabbitMcp__DefaultRoles="viewer"
 | `PublishAllow` / `PublishDeny` | — | კონტრაქტები, რომელთა გაგზავნა შეიძლება / არასოდეს შეიძლება |
 | `DeadLetterQueue` | `{queue}_dead` | სად იდება poison შეტყობინებები |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | responder-ის კონტრაქტები / მომლოდინე request-ების ლიმიტი |
-| `HumanConfirmation` / `ConfirmTools` | HTTP-ზე `required`, stdio-ზე `auto` / აღდგენისა და declare ხელსაწყოები | ცვლილებას ადამიანი ადასტურებს კლიენტის დიალოგში (`required` უარს ამბობს, თუ კითხვა ვერ ხერხდება; `auto` მაშინ მოდელის `confirm`-ს ენდობა, `off` — ყოველთვის) |
+| `HumanConfirmation` / `ConfirmTools` | `required` / აღდგენის, declare და პასუხის ხელსაწყოები | ცვლილებებსა და პასუხებს ადამიანი ადასტურებს კლიენტის დიალოგში (`required` უარს ამბობს, თუ კითხვა ვერ ხერხდება; `auto` მაშინ მოდელს ენდობა, `off` — ყოველთვის) |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | Audit ფაილი (JSON Lines) / შეტყობინებების სხეულიც |
 | `MaxMessagesPerCall` / `MaxBulkMessages` / `MaxPayloadChars` | `50` / `1000` / `16000` | ლიმიტები |
 | `PublishTimeoutSeconds` | `30` | რამდენ ხანს ელოდება გაგზავნა ან გადატანა ბროკერის დადასტურებას (1-300) |
@@ -166,7 +166,7 @@ OpenTelemetry: მიუთითეთ `OTEL_EXPORTER_OTLP_ENDPOINT`; trace-ე
 - **ჩუმი დაკარგვა არ ხდება:** არასწორი შეტყობინება არ იგზავნება; publisher confirms და `mandatory` მიუწვდომელ შეტყობინებას შეცდომად აქცევს.
 - **უსაფრთხო გადატანა:** შეტყობინება error რიგიდან მხოლოდ მაშინ გადის, როცა broker-მა ახალი ასლი დაადასტურა; სხეული არ იცვლება.
 - **არაფერი იშლება:** poison შეტყობინებები ყველა header-ით იდება და შეიძლება დაბრუნდეს; exchange-ები და რიგები მხოლოდ იქმნება. გამოიყენეთ RabbitMQ 4: 3.x-ის quorum რიგებში delivery limit-ით peek ლიმიტში ითვლება და შეტყობინება შეიძლება დაიკარგოს.
-- **ადამიანი ადასტურებს:** MCP elicitation-ის მქონე კლიენტები (მაგ. Claude Code) ყოველ ცვლილებამდე დიალოგს აჩვენებს. stateless HTTP-ზე კითხვა ვერ ხერხდება, ამიტომ იქ ეს ცვლილებები უარყოფილია, თუ `HumanConfirmation=auto` არ დააყენეთ (მაშინ მოდელის საკუთარი `confirm=true` მოქმედებს და შეტყობინებამ, რომელსაც კითხულობს, შეიძლება ამაში დაარწმუნოს).
+- **ადამიანი ადასტურებს:** MCP elicitation-ის მქონე კლიენტები (მაგ. Claude Code stdio-ზე) ყოველი გადატანისა და სერვისის request-ზე პასუხის წინ დიალოგს აჩვენებს სერვერის საკუთარი preview-თი. ამ შესაძლებლობის არმქონე კლიენტებსა და stateless HTTP-ზე ეს ცვლილებები უარყოფილია, თუ `HumanConfirmation=auto` არ დააყენეთ (მაშინ მოდელის საკუთარი `confirm=true` და პასუხები მოქმედებს, და შეტყობინებამ, რომელსაც კითხულობს, შეიძლება ამაში დაარწმუნოს).
 - **Audit:** ყოველი გაგზავნა, გადატანა და პასუხი — უარყოფილებიც — მომხმარებლით.
 - **შინაარსს არ ენდობა:** header-ები შეტყობინების მიმართულებას ვერ ცვლის; პაროლები არც log-ებში ჩანს, არც შეცდომებში.
 

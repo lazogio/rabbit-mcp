@@ -104,7 +104,7 @@ rabbit-mcp contracts diff old/Billing.Contracts.dll new/Billing.Contracts.dll
 
 `request_<contract>` waits for the reply (timeout 1–120 s) and returns `responded`, `faulted` or `timeout`, with the reply checked against its contract.
 
-**Responder:** `RabbitMcp__RespondTo=ApproveLargeOrder` lets your service ask and the model answer. Requests appear in `pending_requests`; the model answers with `reply_<response>` or `reject_request` (the requester gets a `RequestFaultException`). Requests are kept in memory; one instance per `ClientName` answers, others stand by.
+**Responder:** `RabbitMcp__RespondTo=ApproveLargeOrder` lets your service ask and the model answer. Requests appear in `pending_requests`; the model answers with `reply_<response>` or `reject_request` (the requester gets a `RequestFaultException`), and the person confirms each answer (`HumanConfirmation`). Requests are kept in memory; one instance per `ClientName` answers, others stand by.
 
 ## For teams (HTTP)
 
@@ -149,7 +149,7 @@ Environment variable `RabbitMcp__<Option>` or `appsettings.json`. Lists are `;`-
 | `PublishAllow` / `PublishDeny` | — | Contracts that may / may never be sent |
 | `DeadLetterQueue` | `{queue}_dead` | Where poison messages are parked |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | Responder contracts / waiting-request limit |
-| `HumanConfirmation` / `ConfirmTools` | `required` over HTTP, `auto` over stdio / the recovery and declare tools | The person confirms changes in the client's dialog (`required` refuses when it cannot ask; `auto` then trusts the model's `confirm`, `off` always does) |
+| `HumanConfirmation` / `ConfirmTools` | `required` / recovery, declare and reply tools | The person confirms changes and replies in the client's dialog (`required` refuses when it cannot ask; `auto` then trusts the model, `off` always does) |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | Audit file (JSON Lines) / include message bodies |
 | `MaxMessagesPerCall` / `MaxBulkMessages` / `MaxPayloadChars` | `50` / `1000` / `16000` | Limits |
 | `PublishTimeoutSeconds` | `30` | How long a send or move waits for the broker's confirm (1-300) |
@@ -166,7 +166,7 @@ OpenTelemetry: set `OTEL_EXPORTER_OTLP_ENDPOINT`; traces join the MassTransit co
 - **No silent loss:** invalid messages are not sent; publisher confirms and `mandatory` turn an undeliverable message into an error.
 - **Safe moves:** a message leaves the error queue only after the broker confirmed its new copy; the body never changes.
 - **Nothing is deleted:** poison messages are parked with every header, and can be brought back; exchanges and queues are only ever created. Use RabbitMQ 4: on 3.x quorum queues with a delivery limit, peeking counts towards the limit and can drop a message.
-- **A person confirms:** clients with MCP elicitation (e.g. Claude Code) show a dialog before anything moves. Stateless HTTP cannot ask, so there these changes are refused unless you set `HumanConfirmation=auto` (the model's own `confirm=true` then counts, and a message it reads could talk it into one).
+- **A person confirms:** clients with MCP elicitation (e.g. Claude Code over stdio) show a dialog with the server's own preview before anything moves or a service's request is answered. Clients without it, and stateless HTTP, are refused unless you set `HumanConfirmation=auto` (the model's own `confirm=true` and replies then count, and a message it reads could talk it into one).
 - **Audited:** every send, move and answer — including refused ones — with the user.
 - **Untrusted content:** message headers never redirect where messages go; passwords never appear in logs or errors.
 

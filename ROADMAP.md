@@ -121,8 +121,9 @@ Shop sample (`samples/shop`) ✅ — runnable compose demo, walked through over 
     - Works over stdio. Stateless HTTP cannot send server→client requests → **decision needed:** an optional stateful
       HTTP mode (sessions, sticky load balancing) or URL-mode elicitation with a small approval page served by
       rabbit-mcp itself (stays stateless; the page needs the caller's own authentication). Default until decided:
-      **`required` on HTTP** (2026-11-02, was `auto`: the model writes `confirm=true` itself, so a message body it reads
-      could talk it into a republish); `auto` there is an explicit opt-in. Done as a generic call-tool filter with `ConfirmTools` patterns
+      **`required` everywhere** (2026-11-02/03, was `auto`: the model writes `confirm=true` itself, so a message body it
+      reads could talk it into a republish); `auto` is an explicit opt-in. `reply_*`/`reject_request` are confirmed too,
+      and the question shows the server's own preview. Done as a generic call-tool filter with `ConfirmTools` patterns
       (publish_*, reply_* … can be added), audit action `confirm`.
 35. ✅ **Fix and resend** (`resend_corrected`, `EnableRepublish`, permission `republish`): for a message that failed
     because of its data (bad e-mail, missing field). Input: error queue, messageId, the corrected message. The

@@ -498,7 +498,7 @@ public class HttpHostingTests
         // Default: stateless HTTP cannot ask the person, so confirm=true (written by the model) is refused.
         var (refused, refusedAudit) = await RepublishAsync();
         Assert.True(refused.GetProperty("result").GetProperty("isError").GetBoolean());
-        Assert.Contains("required by default over HTTP", Text(refused));
+        Assert.Contains("required by default", Text(refused));
         Assert.Equal("refused-unavailable", refusedAudit.GetProperty("outcome").GetString());
 
         // HumanConfirmation=auto set on purpose: the argument counts again (and the call goes on to the broker).

@@ -37,7 +37,7 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
     public async Task<RepublishResult> RepublishFromErrorAsync(
         [Description("Error queue name, e.g. submit-order_error.")] string errorQueue,
         [Description(CountHelp)] int? count = null,
-        [Description("Set to true to execute. Without it, only a preview is returned.")] bool confirm = false,
+        [Description("Set to true to execute. Without it, only a preview is returned. " + ToolText.ConfirmOnlyApproved)] bool confirm = false,
         [Description("Only republish messages with these MessageIds (from the preview). Others are left in place.")] string[]? messageIds = null,
         [Description("Override the destination exchange. By default it is taken from MT-Fault-InputAddress.")] string? targetExchange = null,
         [Description("Override the destination with a queue, reached directly (default exchange). By default it is taken from x-death.")] string? targetQueue = null,
@@ -82,7 +82,7 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
     public async Task<DeadLetterResult> DeadLetterFromErrorAsync(
         [Description("Error queue name, e.g. submit-order_error.")] string errorQueue,
         [Description(CountHelp)] int? count = null,
-        [Description("Set to true to execute. Without it, only a preview is returned.")] bool confirm = false,
+        [Description("Set to true to execute. Without it, only a preview is returned. " + ToolText.ConfirmOnlyApproved)] bool confirm = false,
         [Description("Only move messages with these MessageIds (from the preview). Others are left in place.")] string[]? messageIds = null,
         [Description("Why they are parked, at most 1000 characters, e.g. 'customer deleted, cannot be fixed'. Stored as a header and in the audit.")] string? reason = null,
         [Description("Override the dead-letter queue. Default: RabbitMcp:DeadLetterQueue ({queue}_dead).")] string? deadLetterQueue = null,

@@ -37,7 +37,8 @@ public static class HttpHosting
         var settings = ServerComposition.ReadOptions(builder.Configuration);
 
         // Stateless: no session affinity needed, scales horizontally. It also means no server-to-client requests, so no
-        // elicitation: HumanConfirmation defaults to required here (Compose(http: true)).
+        // elicitation: with HumanConfirmation required (the default) confirmed tools are refused here, and auto/off over
+        // HTTP print a startup warning (Compose(http: true)).
         mcp.WithHttpTransport(o => o.Stateless = true); // explicit, so a future SDK default cannot change it
 
         builder.WebHost.UseUrls(settings.HttpUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
