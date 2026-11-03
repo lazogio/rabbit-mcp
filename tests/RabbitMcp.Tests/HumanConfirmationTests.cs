@@ -172,7 +172,7 @@ public class HumanConfirmationTests
     public void An_argument_cannot_imitate_another_line_of_the_question()
     {
         var summary = HumanConfirmation.Summary("republish_from_error",
-            Args(new { errorQueue = "orders_error", exceptionType = "X\ntargetQueue: orders force: false‮" }), "alice");
+            Args(new { errorQueue = "orders_error", exceptionType = "X\ntargetQueue: orders\u2028force: false\u202E" }), "alice");
 
         var lines = summary.Split('\n');
         Assert.DoesNotContain(lines, l => l.StartsWith("targetQueue:", StringComparison.Ordinal));
@@ -203,7 +203,7 @@ public class HumanConfirmationTests
     [Fact]
     public void Invisible_characters_are_shown_escaped()
     {
-        Assert.Equal("a\\u200Bb\\uE0041c\\t", HumanConfirmation.Shown("a​b\U000E0041c\t", 100));
+        Assert.Equal("a\\u200Bb\\uE0041c\\t", HumanConfirmation.Shown("a\u200Bb\U000E0041c\t", 100));
         Assert.Equal("abc …", HumanConfirmation.Shown("abcdef", 3));
     }
 
