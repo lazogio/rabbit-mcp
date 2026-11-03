@@ -1,6 +1,16 @@
 # Bugs (newest first)
 
-Next ID: BUG-076
+Next ID: BUG-077
+
+### BUG-076 The confirmation question and a held move's result misread the queue — fixed (2026-11-03, fix/confirmation-binding-no-id)
+Same black-box probe as BUG-075. Guards: `HumanConfirmationTests.The_question_shows_what_the_preview_found`,
+integration `HumanInTheLoopTests.A_filtered_move_is_held_to_the_scanned_depth` and the moreMayRemain / `count: 1`
+asserts in the approve / late-arrival / no-id tests.
+- BUG-076 (low) Four slips: (1) "1 message … match the filter"; (2) a filter question did not say where messages would be
+  republished (a filter preview lists no messages): now the targetQueue/targetExchange override, else "the queue each one
+  faulted on (from its fault headers)"; (3) the argument lines showed the model's count while the held one ran (person read
+  `count: 5`, 1 moved): `DecideAsync` now gets the held arguments; (4) `moreMayRemain` was `scanned == count`, so a move
+  held to its preview always said "call again": now also the last basic.get's MessageCount > 0 (the queue really holds more).
 
 ### BUG-075 An approved move of messages without a messageId was not held to its preview — fixed (2026-11-03, fix/confirmation-binding-no-id)
 Found by a black-box broker probe after BUG-073. Guards: `HumanConfirmationTests.A_confirmed_move_is_held_to_what_its_preview_showed`,

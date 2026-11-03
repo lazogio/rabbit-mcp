@@ -102,11 +102,16 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         await broker.WaitForQueueCount(queue, 1);
     }
 
-    private async Task PublishAsync(string queue, bool withId = true)
+    private async Task PublishAsync(string queue, bool withId = true, string? exceptionType = null)
     {
         await using var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
         await channel.BasicPublishAsync("", queue, mandatory: false,
-            new BasicProperties { MessageId = withId ? Guid.NewGuid().ToString() : null }, """{"x":1}"""u8.ToArray());
+            new BasicProperties
+            {
+                MessageId = withId ? Guid.NewGuid().ToString() : null,
+                Headers = exceptionType is null ? null
+                    : new Dictionary<string, object?> { ["MT-Reason"] = "fault", ["MT-Fault-ExceptionType"] = exceptionType },
+            }, """{"x":1}"""u8.ToArray());
     }
 
     private static Dictionary<string, object?> Republish(string queue, string target) => new()
@@ -116,6 +121,9 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
 
     private static string Text(CallToolResult result) =>
         string.Join("\n", result.Content.OfType<TextContentBlock>().Select(c => c.Text));
+
+    private static bool? MoreMayRemain(CallToolResult result) =>
+        result.StructuredContent?.GetProperty("moreMayRemain").GetBoolean();
 
     [Fact]
     public async Task A_declining_person_stops_the_republish_even_with_confirm_true()
@@ -147,6 +155,8 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         var question = Assert.Single(session.Asked);
         Assert.Contains("Preview just now: would republish 1 message from it-human-approved", question);
         Assert.Contains("targetQueue: it-human-approved-target", question);
+        Assert.Contains("\ncount: 1\n", question); // what runs (held to the preview), not the model's 5
+        Assert.False(MoreMayRemain(result)); // the queue is empty: nothing to call again for
     }
 
     [Fact]
@@ -166,6 +176,7 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         await broker.WaitForQueueCount("it-human-late-target", 1);
         await broker.WaitForQueueCount("it-human-late", 1); // the newcomer, which the person never saw, stays
         Assert.Contains("Only these previewed messages are moved", Assert.Single(session.Asked));
+        Assert.True(MoreMayRemain(result)); // the newcomer needs a call (and a question) of its own
     }
 
     [Fact]
@@ -183,7 +194,35 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         Assert.NotEqual(true, result.IsError);
         await broker.WaitForQueueCount("it-human-noid-target", 1);
         await broker.WaitForQueueCount("it-human-noid", 1); // nothing to hold it by but its place: the newcomer behind it stays
-        Assert.Contains("the first 1 message of the queue", Assert.Single(session.Asked));
+        var question = Assert.Single(session.Asked);
+        Assert.Contains("the first 1 message of the queue", question);
+        Assert.Contains("\ncount: 1\n", question);
+    }
+
+    [Fact]
+    public async Task A_filtered_move_is_held_to_the_scanned_depth()
+    {
+        await QueueWithMessageAsync("it-human-filter", "it-human-filter-target");
+        await PublishAsync("it-human-filter", exceptionType: "System.TimeoutException");
+        await broker.WaitForQueueCount("it-human-filter", 2);
+        await using var session = await StartAsync(answer: true, whileAsked: async () =>
+        {
+            await PublishAsync("it-human-filter", exceptionType: "System.TimeoutException");
+            await broker.WaitForQueueCount("it-human-filter", 3);
+        });
+
+        var result = await session.Client.CallToolAsync("republish_from_error", new Dictionary<string, object?>
+        {
+            ["errorQueue"] = "it-human-filter", ["exceptionType"] = "Timeout", ["confirm"] = true, ["targetQueue"] = "it-human-filter-target",
+        });
+
+        Assert.NotEqual(true, result.IsError);
+        await broker.WaitForQueueCount("it-human-filter-target", 1);
+        await broker.WaitForQueueCount("it-human-filter", 2); // the non-matching message and the late match stay
+        var question = Assert.Single(session.Asked);
+        Assert.Contains("1 message in it-human-filter matches the filter and would be republished to queue:it-human-filter-target", question);
+        Assert.Contains("Only the first 2 messages of the queue", question);
+        Assert.True(MoreMayRemain(result));
     }
 
     [Fact]

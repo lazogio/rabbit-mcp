@@ -121,7 +121,7 @@ public sealed record RepublishResult(
     [Description("Outcomes not listed (the first 100 are); every one is in the audit.")]
     public int OutcomesOmitted { get; init; }
 
-    [Description("True when count was reached: more matching messages may be left; call again.")]
+    [Description("True when count was reached and the queue holds more: more matching messages may be left; call again.")]
     public bool MoreMayRemain { get; init; }
 }
 
@@ -162,7 +162,7 @@ public sealed record DeadLetterResult(
     [Description("Outcomes not listed (the first 100 are); every one is in the audit.")]
     public int OutcomesOmitted { get; init; }
 
-    [Description("True when count was reached: more matching messages may be left; call again.")]
+    [Description("True when count was reached and the queue holds more: more matching messages may be left; call again.")]
     public bool MoreMayRemain { get; init; }
 }
 

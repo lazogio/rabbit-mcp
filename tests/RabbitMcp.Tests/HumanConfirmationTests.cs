@@ -228,6 +228,17 @@ public class HumanConfirmationTests
                      "The scan stopped at its limit: more may match.",
             HumanConfirmation.DescribePreview("dead_letter_from_error", bulk.RootElement));
 
+        // A filter preview lists no messages: the destination comes from the arguments, else from each message.
+        using var one = JsonDocument.Parse(
+            """{"errorQueue":"q_error","selection":{"scanned":2,"matched":1,"moreMayRemain":false,"groups":[]}}""");
+        Assert.Equal("Preview just now: 1 message in q_error matches the filter and would be republished to the queue each " +
+                     "one faulted on (from its fault headers).",
+            HumanConfirmation.DescribePreview("republish_from_error", one.RootElement, Args(new { errorQueue = "q_error", exceptionType = "Timeout" })));
+        Assert.EndsWith("would be republished to queue:orders.",
+            HumanConfirmation.DescribePreview("republish_from_error", one.RootElement, Args(new { targetQueue = " orders " })));
+        Assert.EndsWith("would be republished to Shop.Contracts:OrderPlaced.",
+            HumanConfirmation.DescribePreview("republish_from_error", one.RootElement, Args(new { targetExchange = "Shop.Contracts:OrderPlaced" })));
+
         using var correction = JsonDocument.Parse(
             """{"errorQueue":"q_error","originalMessageId":"m-1","contract":"OrderPlaced","executed":false,"changes":[{"path":"customerEmail","before":"a@","after":"a@b.ge"}],"target":"Shop.Contracts:OrderPlaced","deadLetterQueue":"q_dead","newMessageId":null,"originalParked":false,"note":null}""");
         Assert.Equal("Preview just now: would send a corrected OrderPlaced (of message m-1) to Shop.Contracts:OrderPlaced, " +

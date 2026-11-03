@@ -216,13 +216,14 @@ public sealed class HumanConfirmation
     /// One line on what the tool's own preview (run by the server just before asking) says the call would do, so the
     /// person judges the effect rather than the model's arguments. Null for a result this does not know.
     /// </summary>
-    public static string? DescribePreview(string tool, JsonElement preview)
+    /// <param name="arguments">The call's arguments: a filter preview lists no messages, so the destination comes from them.</param>
+    public static string? DescribePreview(string tool, JsonElement preview, IDictionary<string, JsonElement>? arguments = null)
     {
         if (preview.ValueKind != JsonValueKind.Object)
             return null;
         return tool switch
         {
-            "republish_from_error" => Moves(preview, "republish", "republished", RepublishTargets(preview)),
+            "republish_from_error" => Moves(preview, "republish", "republished", RepublishTargets(preview) ?? SelectionTarget(preview, arguments)),
             "dead_letter_from_error" => Moves(preview, "move", "moved", Str(preview, "deadLetterQueue")),
             "resend_corrected" => Correction(preview),
             "declare_exchange" or "declare_queue" => Declaration(preview),
@@ -311,7 +312,8 @@ public sealed class HumanConfirmation
         {
             var matched = Int(selection, "matched") ?? 0;
             var text = new StringBuilder();
-            text.Append(CultureInfo.InvariantCulture, $"Preview just now: {Messages(matched)} in {from} match the filter and would be {done}");
+            text.Append(CultureInfo.InvariantCulture,
+                $"Preview just now: {Messages(matched)} in {from} {(matched == 1 ? "matches" : "match")} the filter and would be {done}");
             if (to is not null)
                 text.Append(" to ").Append(to);
             text.Append('.');
@@ -342,6 +344,23 @@ public sealed class HumanConfirmation
         return string.Join(", ", targets) +
                (warned == 0 ? "" : $"; {Messages(warned)} with a warning (see republishWarning in the preview)");
     }
+
+    /// <summary>Where a filtered republish goes: the override from the arguments, else each message's own fault headers.</summary>
+    private static string? SelectionTarget(JsonElement result, IDictionary<string, JsonElement>? arguments)
+    {
+        if (Obj(result, "selection") is null)
+            return null;
+        if (Argument(arguments, "targetQueue") is { } queue)
+            return $"queue:{queue}";
+        return Argument(arguments, "targetExchange")
+               ?? "the queue each one faulted on (from its fault headers)";
+    }
+
+    private static string? Argument(IDictionary<string, JsonElement>? arguments, string name) =>
+        arguments is not null && arguments.TryGetValue(name, out var value) && value.ValueKind == JsonValueKind.String
+        && !string.IsNullOrWhiteSpace(value.GetString())
+            ? value.GetString()!.Trim()
+            : null;
 
     private static string Correction(JsonElement result)
     {
