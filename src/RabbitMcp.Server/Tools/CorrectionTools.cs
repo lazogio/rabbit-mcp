@@ -27,7 +27,7 @@ public sealed class CorrectionTools(QueueBrowser browser, PublishPolicy policy, 
         [Description("Error queue the message is in, e.g. order-placed_error (or a _dead queue).")] string errorQueue,
         [Description("MessageId of the failed message (from peek_messages).")] string messageId,
         [Description("The whole corrected message (the payload, not an envelope).")] JsonElement corrected,
-        [Description("Set to true to send the correction. Without it, only the changes are shown.")] bool confirm = false,
+        [Description("Set to true to send the correction. Without it, only the changes are shown. " + ToolText.ConfirmOnlyApproved)] bool confirm = false,
         McpServer? server = null,
         ClaimsPrincipal? user = null,
         CancellationToken cancellationToken = default)

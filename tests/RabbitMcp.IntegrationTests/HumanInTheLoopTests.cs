@@ -28,6 +28,9 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         public required IHost Host { get; init; }
         public required McpClient Client { get; init; }
 
+        /// <summary>The questions the person was shown, in order.</summary>
+        public required List<string> Asked { get; init; }
+
         public async ValueTask DisposeAsync()
         {
             await Client.DisposeAsync();
@@ -57,6 +60,7 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         var host = builder.Build();
         await host.StartAsync();
 
+        var asked = new List<string>();
         var options = new McpClientOptions();
         if (answer is { } approve)
         {
@@ -67,16 +71,21 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
             options.Handlers = new McpClientHandlers
             {
                 // Like a person ticking (or not ticking) the box in the client's dialog.
-                ElicitationHandler = (_, _) => ValueTask.FromResult(new ElicitResult
+                ElicitationHandler = (question, _) =>
                 {
-                    Action = "accept",
-                    Content = new Dictionary<string, JsonElement> { [ElicitationPrompt.Field] = JsonSerializer.SerializeToElement(approve) },
-                }),
+                    lock (asked)
+                        asked.Add(question?.Message ?? "");
+                    return ValueTask.FromResult(new ElicitResult
+                    {
+                        Action = "accept",
+                        Content = new Dictionary<string, JsonElement> { [ElicitationPrompt.Field] = JsonSerializer.SerializeToElement(approve) },
+                    });
+                },
             };
         }
 
         var client = await McpClient.CreateAsync(new StreamClientTransport(clientToServer, clientIn), options);
-        return new Session { Host = host, Client = client };
+        return new Session { Host = host, Client = client, Asked = asked };
     }
 
     private async Task QueueWithMessageAsync(string queue, string target)
@@ -122,6 +131,11 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         Assert.NotEqual(true, result.IsError);
         await broker.WaitForQueueCount("it-human-approved", 0);
         await broker.WaitForQueueCount("it-human-approved-target", 1);
+
+        // The person saw what the server's own preview found, not only the model's arguments.
+        var question = Assert.Single(session.Asked);
+        Assert.Contains("Preview just now: would republish 1 message from it-human-approved", question);
+        Assert.Contains("targetQueue: it-human-approved-target", question);
     }
 
     [Fact]
@@ -163,6 +177,7 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         arguments["confirm"] = true;
         var result = await session.Client.CallToolAsync("resend_corrected", arguments);
         Assert.NotEqual(true, result.IsError);
+        Assert.Contains(session.Asked, q => q.Contains("would send a corrected", StringComparison.Ordinal) && q.Contains("reason", StringComparison.Ordinal));
 
         var processed = await broker.WaitForCancelled(orderId);
         Assert.Equal("Customer changed their mind", processed.Message.Reason);

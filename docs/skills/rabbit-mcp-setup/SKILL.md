@@ -52,8 +52,9 @@ Every option is an environment variable `RabbitMcp__<Option>`. Start **read-only
 | Answer the services' requests | `RabbitMcp__RespondTo=ContractName` |
 | Audit trail / `recent_activity` | `RabbitMcp__AuditLogPath=/abs/path/audit.jsonl` |
 
-Use absolute paths. Mention that changes ask the person for confirmation in Claude Code (elicitation) and that
-nothing is ever deleted.
+Use absolute paths. Mention that changes and answers to services' requests ask the person for confirmation in a client
+with elicitation (e.g. Claude Code); a client without it gets them refused unless `RabbitMcp__HumanConfirmation=auto`
+(which lets the model's own call count). Nothing is ever deleted.
 
 **Claude Code** (scope `local` keeps the password out of the repository; never put it in a committed `.mcp.json`):
 
@@ -97,10 +98,10 @@ docker run -d -p 5080:5080 \
 - Roles (HTTP only): `RabbitMcp__Roles__viewer=read`, `RabbitMcp__Roles__operator="read;publish:Order*;republish:*_error"`,
   `RabbitMcp__UserRoles="alice=operator"`, `RabbitMcp__DefaultRoles=viewer`. Permissions: read, publish, request,
   republish, respond, topology, `*`.
-- Confirmations: stateless HTTP cannot show the person a confirmation dialog, so `HumanConfirmation` defaults to
-  `required` there and the recovery and declare tools (`ConfirmTools`) refuse to execute; previews still work. Run
-  recovery from a stdio client, or set `RabbitMcp__HumanConfirmation=auto` only when every caller and every message is
-  trusted: the model's own `confirm=true` then approves the change (the server warns about it at startup).
+- Confirmations: stateless HTTP cannot show the person a confirmation dialog, and `HumanConfirmation` is `required` by
+  default, so the recovery, declare and reply tools (`ConfirmTools`) refuse to execute over HTTP; previews still work.
+  Run them from a stdio client, or set `RabbitMcp__HumanConfirmation=auto` only when every caller and every message is
+  trusted: the model's own `confirm=true` and replies then approve the change (the server warns about it at startup).
 - Health: `curl http://HOST:5080/healthz` → `ok`.
 - Client: `claude mcp add --transport http rabbit-mcp http://HOST:5080/mcp --header "X-Api-Key: KEY"`.
 
@@ -126,7 +127,7 @@ Start a new session (the client loads MCP servers at start), then:
 | `publish_*` / `request_*` missing | `EnablePublish` not set, or `PublishDeny` / roles hide them |
 | `list_queues` missing | `ManagementUri` not set |
 | HTTP 401 | missing or wrong `X-Api-Key` / token |
-| "needs a person's confirmation … required by default over HTTP" | expected over HTTP (step 4, Confirmations): recover from a stdio client, or opt in with `HumanConfirmation=auto` |
+| "needs a person's confirmation … required by default" | the client cannot show a confirmation dialog (no elicitation, or HTTP; step 4, Confirmations): use a client with elicitation over stdio, or opt in with `HumanConfirmation=auto` |
 | macOS: "cannot be opened" | `xattr -d com.apple.quarantine rabbit-mcp` |
 
 Never print the AMQP URI with its password back to the user; describe it as `host:port/vhost`.

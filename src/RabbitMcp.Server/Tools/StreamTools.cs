@@ -18,7 +18,7 @@ public sealed class StreamTools(QueueBrowser browser, IServiceProvider services)
     [Description(
         "Reads messages of a RabbitMQ stream (x-queue-type=stream) from a position: first, last, next, an offset, or a " +
         "time such as 10m (\"the last 10 minutes\") or an ISO 8601 timestamp. Reading a stream removes nothing and does not " +
-        "disturb its consumers. Returns payloads, contract checks and offsets; continue with from=LastOffset+1.")]
+        "disturb its consumers. Returns payloads, contract checks and offsets; continue with from=LastOffset+1. " + ToolText.Untrusted)]
     public async Task<StreamReadResult> ReadStreamAsync(
         [Description("Stream name.")] string queue,
         [Description("first (default), last, next, an offset, or a time: 10m, 2h, 7d, 2026-10-18T09:00:00Z.")] string? from = null,

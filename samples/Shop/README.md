@@ -51,7 +51,8 @@ Stop: `docker compose -f samples/Shop/docker-compose.yml down -v`.
   or fake the shop's events.
 - **Topology:** `TopologyAllow=shop-audit-*` limits what the model may create; the `order-copy` template fixes the
   binding, so the model only picks a name.
-- **`HumanConfirmation=auto`:** stateless HTTP cannot ask you to confirm a recovery, so by default rabbit-mcp refuses
-  it there. This local demo lets the model's `confirm=true` approve it; leave the option unset on a shared server.
+- **`HumanConfirmation=auto`:** stateless HTTP cannot ask you to confirm a recovery or an approval, so by default
+  rabbit-mcp refuses them there. This local demo lets the model's `confirm=true` and replies count instead, so the model
+  can approve a large order on your word alone; leave the option unset on a shared server.
 
 CI walks through the same scenario: `scripts/sample-e2e.py`.

@@ -134,12 +134,18 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   .IsApiKeyCaller`), never by a claim — tokens can carry any claim. UserRoles match an API-key caller by key name only,
   a token caller by sub / preferred_username / e-mail (only with `email_verified=true`), and token names equal to an
   API key name are ignored (`AccessControl.NamesOf`).
-- **Human confirmation** (`Security/HumanConfirmation`, call-tool filter): tools in `ConfirmTools` ask the person via
-  MCP elicitation before executing (preview tools only with confirm=true); `auto` falls back to the model's confirm when
-  the client cannot be asked, `required` refuses. Unset = `required` over HTTP (stateless, can never ask; `Compose(http:
-  true)`) and `auto` over stdio — the model writes confirm itself and message content can talk it into one, so trusting
-  it over HTTP is an explicit opt-in with a startup warning. Audited as action `confirm`. New changing tools with
-  a preview go into `HumanConfirmation.PreviewTools` and the `ConfirmTools` default.
+- **Human confirmation** (`Security/HumanConfirmation`, call-tool filter): tools in `ConfirmTools` (default: recovery,
+  declares, `reply_*`, `reject_request`) ask the person via MCP elicitation before executing (preview tools only with
+  confirm=true). Unset = `required` on every transport: a client without elicitation, or stateless HTTP, is refused —
+  the model writes confirm and replies itself and message content can talk it into them, so `auto` (fall back to the
+  model) and `off` are explicit opt-ins (startup warning over HTTP, and for `off`). The question is built so the model
+  cannot steer it: before asking, the filter runs the tool's own preview (confirm=false; an error preview is returned,
+  nobody is asked) and `DescribePreview` puts what it found first; replies show the pending request they answer
+  (`DescribeRequest`); every value goes through `HumanConfirmation.Shown` (one line, escapes, capped), redirecting
+  arguments first. Audited as action `confirm`. New changing tools with a preview go into
+  `HumanConfirmation.PreviewTools`, the `ConfirmTools` default and `DescribePreview`.
+- **Untrusted content in tool text**: tools that return message content end their description with `ToolText.Untrusted`,
+  confirm parameters with `ToolText.ConfirmOnlyApproved`; `ToolText.ServerInstructions` goes to clients at initialize.
 - **Corrections** (`resend_corrected`): validated against the original's contract, sent as a new message
   (X-Corrected-From), original parked unchanged (X-Corrected-To) — needs EnableRepublish + EnablePublish and the
   contract's publish permission; requests are refused.

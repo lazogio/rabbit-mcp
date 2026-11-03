@@ -13,7 +13,8 @@ namespace RabbitMcp.Server.Tools;
 [McpServerToolType]
 public sealed class TopologyTools(TopologyManager topology)
 {
-    private const string ConfirmHelp = "Set to true to execute. Without it, only a preview is returned (nothing changes).";
+    private const string ConfirmHelp = "Set to true to execute. Without it, only a preview is returned (nothing changes). " +
+        ToolText.ConfirmOnlyApproved;
     private const string ArgumentsHelp =
         "Optional x-arguments, e.g. {\"x-dead-letter-exchange\":\"billing.dlx\"}. Only those allowed by " +
         "RabbitMcp:TopologyArguments; values are strings, whole numbers or true/false.";

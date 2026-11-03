@@ -43,6 +43,13 @@
           "isSecret": false
         },
         {
+          "name": "RabbitMcp__HumanConfirmation",
+          "description": "required (default): changes and replies need the person's OK in the client's dialog, refused when it cannot ask. auto: then the model's own call counts.",
+          "default": "required",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
           "name": "RabbitMcp__ManagementUri",
           "description": "RabbitMQ Management API, e.g. http://localhost:15672 (list_queues, contract_consumers).",
           "isRequired": false,

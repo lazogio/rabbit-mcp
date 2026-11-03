@@ -67,8 +67,8 @@ services:
       RabbitMcp__TopologyAllow: shop-audit-*
       RabbitMcp__TopologyTemplates__order-copy: kind=queue;bind=Shop.Contracts:OrderPlaced
       RabbitMcp__ApiKeys: "demo:${SHOP_MCP_KEY:-shop-demo-key-change-me-0123456789abcdef}"
-      # Local demo only: stateless HTTP cannot ask you to confirm, so recovery and declare tools are refused by default
-      # (HumanConfirmation=required over HTTP). Here the model's confirm=true approves them; never on a shared server.
+      # Local demo only: stateless HTTP cannot ask you to confirm, so recovery, declare and reply tools are refused by
+      # default (HumanConfirmation=required). Here the model's confirm=true and replies count; never on a shared server.
       RabbitMcp__HumanConfirmation: auto
       # Audit as JSON Lines: recent_activity answers "who did what".
       RabbitMcp__AuditLogPath: /tmp/rabbit-mcp/audit.jsonl
