@@ -242,9 +242,9 @@ public sealed class HumanConfirmation
 
     /// <summary>
     /// Holds a confirmed move to what its preview showed, because the queue can change while the person reads the
-    /// question. Without messageIds the call takes the previewed messages by id and reads no deeper than the preview did;
-    /// with a filter it reads no deeper than the preview did. Returns the arguments to run with (null: as asked) and a
-    /// line for the question.
+    /// question. Without messageIds the call takes the previewed messages by id and reads no deeper than the preview did
+    /// (only the depth when a previewed message has no id); with a filter it reads no deeper than the preview did.
+    /// Returns the arguments to run with (null: as asked) and a line for the question.
     /// </summary>
     public static (Dictionary<string, JsonElement>? Arguments, string? Note) BindToPreview(
         string tool, IDictionary<string, JsonElement> arguments, JsonElement preview)
@@ -271,9 +271,11 @@ public sealed class HumanConfirmation
         var ids = messages.EnumerateArray().Select(m => Str(m, "messageId")).ToList();
         if (ids.Count == 0)
             return (null, null);
-        if (ids.Any(string.IsNullOrEmpty))
-            return (null, "Some previewed messages have no messageId, so the call takes whatever is at the head of the queue when it runs.");
         var depth = Math.Max(Int(peek, "scanned") ?? ids.Count, 1);
+        var reach = Math.Min(asked ?? depth, depth);
+        if (ids.Any(string.IsNullOrEmpty))
+            return (new Dictionary<string, JsonElement>(arguments) { ["count"] = Json(w => w.WriteNumberValue(reach)) },
+                $"Some previewed messages have no messageId, so they are held by position only: the call takes the first {Messages(reach)} of the queue when it runs, later arrivals stay.");
         var held = new Dictionary<string, JsonElement>(arguments)
         {
             ["messageIds"] = Json(w =>
@@ -283,7 +285,7 @@ public sealed class HumanConfirmation
                     w.WriteStringValue(id);
                 w.WriteEndArray();
             }),
-            ["count"] = Json(w => w.WriteNumberValue(Math.Min(asked ?? depth, depth))),
+            ["count"] = Json(w => w.WriteNumberValue(reach)),
         };
         return (held, "Only these previewed messages are moved (by messageId).");
     }

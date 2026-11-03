@@ -1,6 +1,15 @@
 # Bugs (newest first)
 
-Next ID: BUG-075
+Next ID: BUG-076
+
+### BUG-075 An approved move of messages without a messageId was not held to its preview — fixed (2026-11-03, fix/confirmation-binding-no-id)
+Found by a black-box broker probe after BUG-073. Guards: `HumanConfirmationTests.A_confirmed_move_is_held_to_what_its_preview_showed`,
+integration `HumanInTheLoopTests.A_message_without_an_id_is_held_to_the_previewed_depth`.
+- BUG-075 (medium) When any previewed message had no messageId, `BindToPreview` returned the model's arguments unchanged
+  (only a note in the question), so the confirmed call read up to the model's `count` again: the person saw 1 message,
+  2 moved. Anyone who can publish to the error queue can send a message without an id. Fix: such a move is still held to
+  the preview's depth (`count`, no messageIds: an id filter would skip the message without one); the question says it is
+  held by position only. Lesson: when one guard (ids) is unavailable, keep the others (depth) instead of dropping all.
 
 ### BUG-073..074 The approval did not bind the move; message content unlabelled in more tools — fixed (2026-11-03, fix/confirmation-binding)
 Second "same type" audit. Guards: `HumanConfirmationTests.A_confirmed_move_is_held_to_what_its_preview_showed`,

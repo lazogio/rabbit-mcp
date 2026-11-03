@@ -8,6 +8,7 @@ Last updated: 2026-10-24 · Bugs: 28 (0 open) · Next ID: BUG-029
 - `gotchas.md` — non-obvious stack facts and anti-patterns
 
 ## Latest
+- 2026-11-03 fix/confirmation-binding-no-id: BUG-075 approved moves of messages without a messageId held to the preview's depth
 - 2026-11-03 fix/confirmation-binding: BUG-073..074 approved moves held to their preview, untrusted label on all content tools
 - 2026-11-03 fix/confirmation-hardening: BUG-069..072 required everywhere, replies confirmed, preview in the question, untrusted-content text
 - 2026-11-02 fix/http-confirmation-required: BUG-068 HumanConfirmation defaults to required over HTTP (model-written confirm=true is no gate)

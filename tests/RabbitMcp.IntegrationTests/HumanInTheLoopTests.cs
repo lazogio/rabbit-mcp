@@ -91,22 +91,22 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         return new Session { Host = host, Client = client, Asked = asked };
     }
 
-    private async Task QueueWithMessageAsync(string queue, string target)
+    private async Task QueueWithMessageAsync(string queue, string target, bool withId = true)
     {
         await using (var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None))
         {
             await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false);
             await channel.QueueDeclareAsync(target, durable: true, exclusive: false, autoDelete: false);
         }
-        await PublishAsync(queue);
+        await PublishAsync(queue, withId);
         await broker.WaitForQueueCount(queue, 1);
     }
 
-    private async Task PublishAsync(string queue)
+    private async Task PublishAsync(string queue, bool withId = true)
     {
         await using var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
         await channel.BasicPublishAsync("", queue, mandatory: false,
-            new BasicProperties { MessageId = Guid.NewGuid().ToString() }, """{"x":1}"""u8.ToArray());
+            new BasicProperties { MessageId = withId ? Guid.NewGuid().ToString() : null }, """{"x":1}"""u8.ToArray());
     }
 
     private static Dictionary<string, object?> Republish(string queue, string target) => new()
@@ -166,6 +166,24 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         await broker.WaitForQueueCount("it-human-late-target", 1);
         await broker.WaitForQueueCount("it-human-late", 1); // the newcomer, which the person never saw, stays
         Assert.Contains("Only these previewed messages are moved", Assert.Single(session.Asked));
+    }
+
+    [Fact]
+    public async Task A_message_without_an_id_is_held_to_the_previewed_depth()
+    {
+        await QueueWithMessageAsync("it-human-noid", "it-human-noid-target", withId: false);
+        await using var session = await StartAsync(answer: true, whileAsked: async () =>
+        {
+            await PublishAsync("it-human-noid", withId: false);
+            await broker.WaitForQueueCount("it-human-noid", 2);
+        });
+
+        var result = await session.Client.CallToolAsync("republish_from_error", Republish("it-human-noid", "it-human-noid-target"));
+
+        Assert.NotEqual(true, result.IsError);
+        await broker.WaitForQueueCount("it-human-noid-target", 1);
+        await broker.WaitForQueueCount("it-human-noid", 1); // nothing to hold it by but its place: the newcomer behind it stays
+        Assert.Contains("the first 1 message of the queue", Assert.Single(session.Asked));
     }
 
     [Fact]
