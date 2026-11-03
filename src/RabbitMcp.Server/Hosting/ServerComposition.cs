@@ -223,7 +223,7 @@ public static class ServerComposition
                             {
                                 if (HumanConfirmation.MovesNothing(name, found))
                                     return preview; // nothing to move: the preview is the answer, nobody is asked
-                                details = HumanConfirmation.DescribePreview(name, found);
+                                details = HumanConfirmation.DescribePreview(name, found, executing);
                                 // The queue can change while the person reads: what runs is what they saw.
                                 (approvedArguments, var held) = HumanConfirmation.BindToPreview(name, executing, found);
                                 if (held is not null)
@@ -238,7 +238,9 @@ public static class ServerComposition
                         ConfirmationDecision decision;
                         try
                         {
-                            decision = await human.DecideAsync(name, request.Params?.Arguments, client, prompt, cancellationToken, details);
+                            // The question lists the arguments that will run: held ones (count, messageIds) included.
+                            decision = await human.DecideAsync(name, approvedArguments ?? request.Params?.Arguments, client, prompt,
+                                cancellationToken, details);
                         }
                         catch (Exception ex)
                         {

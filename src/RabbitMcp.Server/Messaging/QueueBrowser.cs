@@ -173,6 +173,7 @@ public sealed class QueueBrowser(
         var toRequeue = new List<ulong>();
         var republished = 0;
         var scanned = 0;
+        var more = false;
         var clientName = options.Value.ClientName;
 
         await using var publisher = await connection.CreatePublishChannelAsync(ct);
@@ -185,6 +186,7 @@ public sealed class QueueBrowser(
                 if (delivery is null)
                     break;
                 scanned++;
+                more = delivery.MessageCount > 0;
 
                 var props = delivery.BasicProperties;
                 var messageId = props.MessageId
@@ -304,7 +306,7 @@ public sealed class QueueBrowser(
 
         return new RepublishResult(errorQueue, Executed: true, Preview: null, outcomes, republished, toRequeue.Count)
         {
-            MoreMayRemain = scanned == count,
+            MoreMayRemain = scanned == count && more,
         };
     }
 
@@ -388,6 +390,7 @@ public sealed class QueueBrowser(
         var toRequeue = new List<ulong>();
         var moved = 0;
         var scanned = 0;
+        var more = false;
 
         await using var publisher = await connection.CreatePublishChannelAsync(ct);
         var channel = publisher.Channel;
@@ -399,6 +402,7 @@ public sealed class QueueBrowser(
                 if (delivery is null)
                     break;
                 scanned++;
+                more = delivery.MessageCount > 0;
 
                 var props = delivery.BasicProperties;
                 var messageId = props.MessageId ?? MassTransitEnvelope.TryParse(delivery.Body.Span)?.MessageId;
@@ -456,7 +460,7 @@ public sealed class QueueBrowser(
 
         return new DeadLetterResult(errorQueue, target, Executed: true, Preview: null, outcomes, moved, toRequeue.Count)
         {
-            MoreMayRemain = scanned == count,
+            MoreMayRemain = scanned == count && more,
         };
     }
 

@@ -228,6 +228,17 @@ public class HumanConfirmationTests
                      "The scan stopped at its limit: more may match.",
             HumanConfirmation.DescribePreview("dead_letter_from_error", bulk.RootElement));
 
+        // A filter preview lists no messages: the destination comes from the arguments, else from each message.
+        using var one = JsonDocument.Parse(
+            """{"errorQueue":"q_error","selection":{"scanned":2,"matched":1,"moreMayRemain":false,"groups":[]}}""");
+        Assert.Equal("Preview just now: 1 message in q_error matches the filter and would be republished to the queue each " +
+                     "one faulted on (from its fault headers).",
+            HumanConfirmation.DescribePreview("republish_from_error", one.RootElement, Args(new { errorQueue = "q_error", exceptionType = "Timeout" })));
+        Assert.EndsWith("would be republished to queue:orders.",
+            HumanConfirmation.DescribePreview("republish_from_error", one.RootElement, Args(new { targetQueue = " orders " })));
+        Assert.EndsWith("would be republished to Shop.Contracts:OrderPlaced.",
+            HumanConfirmation.DescribePreview("republish_from_error", one.RootElement, Args(new { targetExchange = "Shop.Contracts:OrderPlaced" })));
+
         using var correction = JsonDocument.Parse(
             """{"errorQueue":"q_error","originalMessageId":"m-1","contract":"OrderPlaced","executed":false,"changes":[{"path":"customerEmail","before":"a@","after":"a@b.ge"}],"target":"Shop.Contracts:OrderPlaced","deadLetterQueue":"q_dead","newMessageId":null,"originalParked":false,"note":null}""");
         Assert.Equal("Preview just now: would send a corrected OrderPlaced (of message m-1) to Shop.Contracts:OrderPlaced, " +
@@ -279,12 +290,18 @@ public class HumanConfirmationTests
         Assert.Null(HumanConfirmation.BindToPreview("republish_from_error",
             Args(new { errorQueue = "q_error", messageIds = new[] { "m-1" }, confirm = true }), peek.RootElement).Arguments);
 
-        // A message without an id cannot be held: the person is told.
-        using var anonymous = JsonDocument.Parse("""{"errorQueue":"q_error","preview":{"returned":1,"scanned":1,"messages":[{"messageId":null}]}}""");
-        var unbound = HumanConfirmation.BindToPreview("dead_letter_from_error",
-            Args(new { errorQueue = "q_error", confirm = true }), anonymous.RootElement);
-        Assert.Null(unbound.Arguments);
-        Assert.Contains("no messageId", unbound.Note);
+        // A message without an id cannot be held by id, only by position: no deeper than the preview read, and the person is told.
+        using var anonymous = JsonDocument.Parse(
+            """{"errorQueue":"q_error","preview":{"returned":2,"scanned":2,"messages":[{"messageId":"m-1"},{"messageId":null}]}}""");
+        var (positional, why) = HumanConfirmation.BindToPreview("dead_letter_from_error",
+            Args(new { errorQueue = "q_error", count = 5, confirm = true }), anonymous.RootElement);
+        Assert.NotNull(positional);
+        Assert.Equal(2, positional["count"].GetInt32());
+        Assert.False(positional.ContainsKey("messageIds")); // an id filter would skip the message without one
+        Assert.Contains("no messageId", why);
+        Assert.Contains("first 2 messages", why);
+        Assert.Equal(1, HumanConfirmation.BindToPreview("dead_letter_from_error",
+            Args(new { errorQueue = "q_error", count = 1, confirm = true }), anonymous.RootElement).Arguments!["count"].GetInt32());
 
         // A filter: no deeper than the preview read, unless the model asked for less.
         using var bulk = JsonDocument.Parse("""{"errorQueue":"q_error","selection":{"scanned":40,"matched":12,"moreMayRemain":false,"groups":[]}}""");

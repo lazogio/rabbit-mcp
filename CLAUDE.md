@@ -141,8 +141,9 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   model) and `off` are explicit opt-ins (startup warning over HTTP, and for `off`). The question is built so the model
   cannot steer it: before asking, the filter runs the tool's own preview (confirm=false; an error preview is returned,
   nobody is asked; nothing to move → the preview is returned, nobody is asked) and `DescribePreview` puts what it found
-  first; after approval the move runs held to that preview (`BindToPreview`: the previewed messageIds and depth, or the
-  filter's scanned depth), so messages that arrive while the person reads stay; replies show the pending request they answer
+  first; after approval the move runs held to that preview (`BindToPreview`: the previewed messageIds and depth, only
+  the depth when a previewed message has no id, or the filter's scanned depth), so messages that arrive while the person
+  reads stay, and the question lists those held arguments; replies show the pending request they answer
   (`DescribeRequest`); every value goes through `HumanConfirmation.Shown` (one line, escapes, capped), redirecting
   arguments first. Audited as action `confirm`. New changing tools with a preview go into
   `HumanConfirmation.PreviewTools`, the `ConfirmTools` default and `DescribePreview`.
@@ -153,8 +154,9 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   contract's publish permission; requests are refused.
 - **Bulk recovery** (`MessageFilter`, `QueueBrowser.SummarizeAsync`): republish/dead-letter with a filter scan up to
   `MaxBulkMessages` in one call with the same get → confirm → ack sequence; results list at most 100 outcomes (all are
-  audited). **Streams** (`read_stream`): basic.consume with x-stream-offset and a prefetch; a delivery without
-  x-stream-offset means "not a stream" → nack everything back. **RateLimits** (`Security/RateLimiter`): counted in the
+  audited); `moreMayRemain` = count reached and the last basic.get left messages. **Streams** (`read_stream`):
+  basic.consume with x-stream-offset and a prefetch; a delivery without x-stream-offset means "not a stream" → nack
+  everything back. **RateLimits** (`Security/RateLimiter`): counted in the
   call-tool filter before the person is asked; only changing calls (permission ≠ read, previews excluded).
 - **AsyncAPI contracts** (`ContractFiles`, `Contracts/AsyncApiLoader`, `SchemaValidator`, `YamlJson`): descriptors with
   `Schema` (refs inlined) and `Type = JsonElement`; validation goes through `MessageInspector.Validate(contract|response …)`
