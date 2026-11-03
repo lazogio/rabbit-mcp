@@ -149,7 +149,7 @@ Environment variable `RabbitMcp__<Option>` or `appsettings.json`. Lists are `;`-
 | `PublishAllow` / `PublishDeny` | — | Contracts that may / may never be sent |
 | `DeadLetterQueue` | `{queue}_dead` | Where poison messages are parked |
 | `RespondTo` / `MaxPendingRequests` | — / `100` | Responder contracts / waiting-request limit |
-| `HumanConfirmation` / `ConfirmTools` | `auto` / the recovery and declare tools | The person confirms changes in the client's dialog (`required` refuses when it cannot ask, `off` trusts `confirm`) |
+| `HumanConfirmation` / `ConfirmTools` | `required` over HTTP, `auto` over stdio / the recovery and declare tools | The person confirms changes in the client's dialog (`required` refuses when it cannot ask; `auto` then trusts the model's `confirm`, `off` always does) |
 | `AuditLogPath` / `AuditIncludePayload` | — / `false` | Audit file (JSON Lines) / include message bodies |
 | `MaxMessagesPerCall` / `MaxBulkMessages` / `MaxPayloadChars` | `50` / `1000` / `16000` | Limits |
 | `PublishTimeoutSeconds` | `30` | How long a send or move waits for the broker's confirm (1-300) |
@@ -166,7 +166,7 @@ OpenTelemetry: set `OTEL_EXPORTER_OTLP_ENDPOINT`; traces join the MassTransit co
 - **No silent loss:** invalid messages are not sent; publisher confirms and `mandatory` turn an undeliverable message into an error.
 - **Safe moves:** a message leaves the error queue only after the broker confirmed its new copy; the body never changes.
 - **Nothing is deleted:** poison messages are parked with every header, and can be brought back; exchanges and queues are only ever created. Use RabbitMQ 4: on 3.x quorum queues with a delivery limit, peeking counts towards the limit and can drop a message.
-- **A person confirms:** clients with MCP elicitation (e.g. Claude Code) show a dialog before anything moves; stateless HTTP falls back to `confirm=true`.
+- **A person confirms:** clients with MCP elicitation (e.g. Claude Code) show a dialog before anything moves. Stateless HTTP cannot ask, so there these changes are refused unless you set `HumanConfirmation=auto` (the model's own `confirm=true` then counts, and a message it reads could talk it into one).
 - **Audited:** every send, move and answer — including refused ones — with the user.
 - **Untrusted content:** message headers never redirect where messages go; passwords never appear in logs or errors.
 

@@ -1,6 +1,18 @@
 # Bugs (newest first)
 
-Next ID: BUG-068
+Next ID: BUG-069
+
+### BUG-068 (high) Over HTTP the model could approve its own changes — fixed (2026-11-02, fix/http-confirmation-required)
+- Symptom (reported by Mehdi Mohseni on LinkedIn): `HumanConfirmation=auto` fell back to `confirm=true` on stateless HTTP.
+  The model sets that argument itself, so a message body it read off a queue could talk it into a confirmed republish.
+- Root cause: the default `auto` treated "the person cannot be asked" as "the argument counts" — always the case over HTTP.
+- Fix: unset `HumanConfirmation` = `required` over HTTP (`Compose(http: true)` → `new HumanConfirmation(settings, http)`),
+  `auto` over stdio; explicit `auto`/`off` over HTTP prints a startup warning; the refusal says it is the HTTP default.
+  Shop sample sets `auto` explicitly (local demo, CI e2e).
+- Guards: `HumanConfirmationTests.Unset_mode_is_required_over_http_and_auto_over_stdio`,
+  `Over_http_a_confirm_the_model_wrote_itself_is_not_enough_by_default`, `Trusting_confirm_over_http_is_an_explicit_choice_with_a_warning`,
+  `HttpHostingTests.Over_http_the_models_confirm_moves_nothing_unless_the_operator_trusts_it`.
+- Lesson: a fallback that is always taken on one transport is that transport's real default — design it as one.
 
 ### BUG-031..047 Black-box QA run (2026-10-31) — fixed (2026-10-31, on main)
 Found by driving the published binary over real MCP against RabbitMQ 4.4 and the official TypeScript client. Guards: `QaRegressionTests`,

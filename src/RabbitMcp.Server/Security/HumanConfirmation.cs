@@ -75,6 +75,8 @@ public sealed record ConfirmationDecision(bool Proceed, string? Refusal, string 
 /// <summary>
 /// RabbitMcp:HumanConfirmation and ConfirmTools: before a listed tool changes anything, the person is asked through the
 /// MCP client. A confirm=true written by the model is no longer enough when the person can be asked.
+/// The model writes confirm=true itself, and message content it reads can talk it into one, so where the person cannot be
+/// asked (stateless HTTP) an unset mode is "required": trusting the argument there is the operator's explicit choice.
 /// </summary>
 public sealed class HumanConfirmation
 {
@@ -85,25 +87,37 @@ public sealed class HumanConfirmation
     private const int MaxSummaryChars = 1500;
 
     private readonly Regex[] _tools;
+    private readonly bool _requiredByDefault;
 
+    /// <param name="http">The server runs over stateless HTTP, where the person can never be asked.</param>
     /// <exception cref="StartupException">Unknown mode.</exception>
-    public HumanConfirmation(RabbitMcpOptions options)
+    public HumanConfirmation(RabbitMcpOptions options, bool http = false)
     {
-        Mode = (options.HumanConfirmation ?? "auto").Trim().ToLowerInvariant() switch
+        Mode = options.HumanConfirmation?.Trim().ToLowerInvariant() switch
         {
-            "auto" or "" => "auto",
+            null or "" => http ? "required" : "auto",
+            "auto" => "auto",
             "required" => "required",
             "off" => "off",
             var other => throw new StartupException(
                 $"RabbitMcp:HumanConfirmation must be auto, required or off, not '{other}'."),
         };
+        _requiredByDefault = http && string.IsNullOrWhiteSpace(options.HumanConfirmation);
         _tools = [.. (options.ConfirmTools ?? "")
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(p => Glob.ToRegex(p, ignoreCase: false))];
+
+        if (http && Mode != "required" && _tools.Length > 0)
+            StartupWarning = $"RabbitMcp:HumanConfirmation={Mode} over HTTP: stateless HTTP cannot ask a person, so the " +
+                             "model's own confirm=true approves the ConfirmTools changes, and message content it reads can " +
+                             "talk it into one. Leave it unset (required) unless every caller and every message is trusted.";
     }
 
     /// <summary>auto | required | off</summary>
     public string Mode { get; }
+
+    /// <summary>Printed at startup when the configuration lets the model approve its own changes over HTTP.</summary>
+    public string? StartupWarning { get; }
 
     /// <summary>Whether this call changes something the person has to confirm.</summary>
     public bool Applies(string tool, IDictionary<string, JsonElement>? arguments)
@@ -131,9 +145,12 @@ public sealed class HumanConfirmation
         }
 
         // The person cannot be asked from here.
+        var setting = _requiredByDefault
+            ? "RabbitMcp:HumanConfirmation is required by default over HTTP"
+            : "RabbitMcp:HumanConfirmation=required";
         return Mode == "required"
             ? new ConfirmationDecision(false,
-                $"{tool} needs a person's confirmation (RabbitMcp:HumanConfirmation=required), but this MCP client cannot ask " +
+                $"{tool} needs a person's confirmation ({setting}), but this MCP client cannot ask " +
                 "(no elicitation support, or stateless HTTP). Nothing was changed.", "unavailable")
             : new ConfirmationDecision(true, null, "argument");
     }

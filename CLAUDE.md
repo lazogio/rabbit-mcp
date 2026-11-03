@@ -136,7 +136,9 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   API key name are ignored (`AccessControl.NamesOf`).
 - **Human confirmation** (`Security/HumanConfirmation`, call-tool filter): tools in `ConfirmTools` ask the person via
   MCP elicitation before executing (preview tools only with confirm=true); `auto` falls back to the model's confirm when
-  the client cannot be asked (stateless HTTP), `required` refuses. Audited as action `confirm`. New changing tools with
+  the client cannot be asked, `required` refuses. Unset = `required` over HTTP (stateless, can never ask; `Compose(http:
+  true)`) and `auto` over stdio — the model writes confirm itself and message content can talk it into one, so trusting
+  it over HTTP is an explicit opt-in with a startup warning. Audited as action `confirm`. New changing tools with
   a preview go into `HumanConfirmation.PreviewTools` and the `ConfirmTools` default.
 - **Corrections** (`resend_corrected`): validated against the original's contract, sent as a new message
   (X-Corrected-From), original parked unchanged (X-Corrected-To) — needs EnableRepublish + EnablePublish and the

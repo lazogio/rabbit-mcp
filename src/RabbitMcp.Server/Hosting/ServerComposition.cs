@@ -81,8 +81,9 @@ public static class ServerComposition
     }
 
     /// <summary>Registers everything except the MCP transport and returns the MCP builder.</summary>
+    /// <param name="http">Hosted by <see cref="HttpHosting"/> (stateless): the person can never be asked to confirm.</param>
     /// <exception cref="StartupException">Invalid configuration.</exception>
-    public static IMcpServerBuilder Compose(IHostApplicationBuilder builder)
+    public static IMcpServerBuilder Compose(IHostApplicationBuilder builder, bool http = false)
     {
         // Logs always go to stderr: stdout carries MCP in stdio mode, and HTTP mode keeps the same habit.
         builder.Logging.ClearProviders();
@@ -102,7 +103,9 @@ public static class ServerComposition
             Console.Error.WriteLine($"rabbit-mcp: warning: PublishAllow/PublishDeny pattern '{pattern}' matches no contract.");
 
         var access = new AccessControl(settings);
-        var confirmation = new HumanConfirmation(settings);
+        var confirmation = new HumanConfirmation(settings, http);
+        if (confirmation.StartupWarning is { } trustsModel)
+            Console.Error.WriteLine($"rabbit-mcp: warning: {trustsModel}");
         var limiter = new RateLimiter(settings, TimeProvider.System);
         if (access.Enabled && settings.Transport.Trim().Equals("stdio", StringComparison.OrdinalIgnoreCase))
             Console.Error.WriteLine("rabbit-mcp: note: RabbitMcp:Roles apply to the HTTP transport; over stdio the local " +
@@ -184,7 +187,8 @@ public static class ServerComposition
                     }
 
                     // The person confirms changes through the client (elicitation); the model's confirm=true is the
-                    // fallback only where the person cannot be asked. Every question and answer is audited.
+                    // fallback only in auto/off mode where the person cannot be asked (never by default over HTTP).
+                    // Every question and answer is audited.
                     var human = services.GetRequiredService<HumanConfirmation>();
                     if (human.Applies(name, request.Params?.Arguments))
                     {

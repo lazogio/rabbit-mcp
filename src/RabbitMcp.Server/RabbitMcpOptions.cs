@@ -132,11 +132,12 @@ public sealed class RabbitMcpOptions
     public int MaxPendingRequests { get; set; } = 100;
 
     /// <summary>
-    /// Who confirms changes: "auto" (default) — the server asks the person through the MCP client (elicitation) when
+    /// Who confirms changes: "auto" — the server asks the person through the MCP client (elicitation) when
     /// the client can, otherwise the tool's confirm argument counts; "required" — refuse the change when the person
-    /// cannot be asked; "off" — only the confirm argument.
+    /// cannot be asked; "off" — only the confirm argument. Unset: "required" over HTTP (stateless HTTP can never ask, and
+    /// the model writes confirm itself), "auto" over stdio.
     /// </summary>
-    public string HumanConfirmation { get; set; } = "auto";
+    public string? HumanConfirmation { get; set; }
 
     /// <summary>
     /// Tools whose changes the person confirms (";"-separated "*" patterns). Tools with a preview (confirm argument)

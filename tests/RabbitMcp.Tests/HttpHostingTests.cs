@@ -472,6 +472,40 @@ public class HttpHostingTests
         Assert.Single(limited);
     }
 
+    [Fact]
+    public async Task Over_http_the_models_confirm_moves_nothing_unless_the_operator_trusts_it()
+    {
+        async Task<(JsonElement Result, JsonElement Audit)> RepublishAsync(params (string Key, string? Value)[] extra)
+        {
+            var auditPath = Path.Combine(Path.GetTempPath(), $"rabbit-mcp-confirm-{Guid.NewGuid():N}.jsonl");
+            var settings = new List<(string Key, string? Value)>
+            {
+                ("ApiKeys", $"alice:{AliceKey}"),
+                ("EnableRepublish", "true"),
+                ("AuditLogPath", auditPath),
+                ("Uri", "amqp://guest:guest@127.0.0.1:1/"), // nothing listens: a call that gets through fails at the broker
+            };
+            settings.AddRange(extra);
+            await using var app = await StartAsync(Config(settings.ToArray()));
+            var result = await Rpc(await app.GetTestClient().SendAsync(Mcp(
+                Call("republish_from_error", new { errorQueue = "orders_error", confirm = true }),
+                r => r.Headers.Add("X-Api-Key", AliceKey))));
+            var audit = File.ReadAllLines(auditPath).Select(l => JsonDocument.Parse(l).RootElement)
+                .Single(e => e.GetProperty("action").GetString() == AuditActions.Confirm);
+            return (result, audit);
+        }
+
+        // Default: stateless HTTP cannot ask the person, so confirm=true (written by the model) is refused.
+        var (refused, refusedAudit) = await RepublishAsync();
+        Assert.True(refused.GetProperty("result").GetProperty("isError").GetBoolean());
+        Assert.Contains("required by default over HTTP", Text(refused));
+        Assert.Equal("refused-unavailable", refusedAudit.GetProperty("outcome").GetString());
+
+        // HumanConfirmation=auto set on purpose: the argument counts again (and the call goes on to the broker).
+        var (_, allowedAudit) = await RepublishAsync(("HumanConfirmation", "auto"));
+        Assert.Equal("allowed-argument", allowedAudit.GetProperty("outcome").GetString());
+    }
+
     private const string CarolKey = "carol-key-0123456789abcdefghijklmnopqrstu";
 
     [Fact]
