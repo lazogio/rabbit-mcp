@@ -54,7 +54,8 @@ Every option is an environment variable `RabbitMcp__<Option>`. Start **read-only
 
 Use absolute paths. Mention that changes and answers to services' requests ask the person for confirmation in a client
 with elicitation (e.g. Claude Code); a client without it gets them refused unless `RabbitMcp__HumanConfirmation=auto`
-(which lets the model's own call count). Nothing is ever deleted.
+(which lets the model's own call count). Only a person should answer those dialogs: a client or agent framework that
+answers elicitation automatically (e.g. by asking the model) defeats them. Nothing is ever deleted.
 
 **Claude Code** (scope `local` keeps the password out of the repository; never put it in a committed `.mcp.json`):
 

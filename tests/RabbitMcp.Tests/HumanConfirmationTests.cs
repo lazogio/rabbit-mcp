@@ -261,6 +261,55 @@ public class HumanConfirmationTests
         Assert.Equal("message: {\"approvedBy\":\"Ana\"}", lines[3]);
     }
 
+    [Fact]
+    public void A_confirmed_move_is_held_to_what_its_preview_showed()
+    {
+        using var peek = JsonDocument.Parse(
+            """{"errorQueue":"q_error","preview":{"queue":"q_error","returned":2,"scanned":2,"messages":[{"messageId":"m-1"},{"messageId":"m-2"}]}}""");
+        var (bound, note) = HumanConfirmation.BindToPreview("republish_from_error",
+            Args(new { errorQueue = "q_error", count = 5, confirm = true }), peek.RootElement);
+        Assert.NotNull(bound);
+        Assert.Equal(new[] { "m-1", "m-2" }, bound["messageIds"].EnumerateArray().Select(e => e.GetString()!));
+        Assert.Equal(2, bound["count"].GetInt32()); // no deeper than the preview read: later arrivals are behind
+        Assert.Equal("q_error", bound["errorQueue"].GetString());
+        Assert.True(bound["confirm"].GetBoolean());
+        Assert.Contains("Only these previewed messages", note);
+
+        // The model named the messages itself, and the preview showed exactly those.
+        Assert.Null(HumanConfirmation.BindToPreview("republish_from_error",
+            Args(new { errorQueue = "q_error", messageIds = new[] { "m-1" }, confirm = true }), peek.RootElement).Arguments);
+
+        // A message without an id cannot be held: the person is told.
+        using var anonymous = JsonDocument.Parse("""{"errorQueue":"q_error","preview":{"returned":1,"scanned":1,"messages":[{"messageId":null}]}}""");
+        var unbound = HumanConfirmation.BindToPreview("dead_letter_from_error",
+            Args(new { errorQueue = "q_error", confirm = true }), anonymous.RootElement);
+        Assert.Null(unbound.Arguments);
+        Assert.Contains("no messageId", unbound.Note);
+
+        // A filter: no deeper than the preview read, unless the model asked for less.
+        using var bulk = JsonDocument.Parse("""{"errorQueue":"q_error","selection":{"scanned":40,"matched":12,"moreMayRemain":false,"groups":[]}}""");
+        var (held, line) = HumanConfirmation.BindToPreview("republish_from_error",
+            Args(new { errorQueue = "q_error", exceptionType = "Timeout", confirm = true }), bulk.RootElement);
+        Assert.Equal(40, held!["count"].GetInt32());
+        Assert.Contains("first 40 messages", line);
+        Assert.Null(HumanConfirmation.BindToPreview("republish_from_error",
+            Args(new { errorQueue = "q_error", exceptionType = "Timeout", count = 10, confirm = true }), bulk.RootElement).Arguments);
+
+        Assert.Null(HumanConfirmation.BindToPreview("resend_corrected", Args(new { confirm = true }), peek.RootElement).Arguments);
+    }
+
+    [Fact]
+    public void A_preview_that_moves_nothing_needs_no_question()
+    {
+        using var empty = JsonDocument.Parse("""{"errorQueue":"q_error","preview":{"returned":0,"scanned":0,"messages":[]}}""");
+        using var none = JsonDocument.Parse("""{"errorQueue":"q_error","selection":{"scanned":40,"matched":0,"groups":[]}}""");
+        using var some = JsonDocument.Parse("""{"errorQueue":"q_error","preview":{"returned":1,"scanned":1,"messages":[{"messageId":"m"}]}}""");
+        Assert.True(HumanConfirmation.MovesNothing("republish_from_error", empty.RootElement));
+        Assert.True(HumanConfirmation.MovesNothing("dead_letter_from_error", none.RootElement));
+        Assert.False(HumanConfirmation.MovesNothing("republish_from_error", some.RootElement));
+        Assert.False(HumanConfirmation.MovesNothing("declare_queue", empty.RootElement));
+    }
+
     // --- resend_corrected building blocks
 
     [Fact]

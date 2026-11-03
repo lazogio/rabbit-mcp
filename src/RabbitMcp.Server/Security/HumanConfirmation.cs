@@ -230,6 +230,73 @@ public sealed class HumanConfirmation
         };
     }
 
+    /// <summary>
+    /// True when a move's preview found nothing to move: the confirmed call is answered with the preview instead of a
+    /// question, so it cannot pick up messages that arrive later.
+    /// </summary>
+    public static bool MovesNothing(string tool, JsonElement preview) =>
+        tool is "republish_from_error" or "dead_letter_from_error" && preview.ValueKind == JsonValueKind.Object
+        && (Obj(preview, "selection") is { } selection
+            ? Int(selection, "matched") == 0
+            : Obj(preview, "preview") is { } peek && Int(peek, "returned") == 0);
+
+    /// <summary>
+    /// Holds a confirmed move to what its preview showed, because the queue can change while the person reads the
+    /// question. Without messageIds the call takes the previewed messages by id and reads no deeper than the preview did;
+    /// with a filter it reads no deeper than the preview did. Returns the arguments to run with (null: as asked) and a
+    /// line for the question.
+    /// </summary>
+    public static (Dictionary<string, JsonElement>? Arguments, string? Note) BindToPreview(
+        string tool, IDictionary<string, JsonElement> arguments, JsonElement preview)
+    {
+        if (tool is not ("republish_from_error" or "dead_letter_from_error") || preview.ValueKind != JsonValueKind.Object)
+            return (null, null);
+        int? asked = arguments.TryGetValue("count", out var count) && count.ValueKind == JsonValueKind.Number
+                     && count.TryGetInt32(out var n) ? n : null;
+
+        if (Obj(preview, "selection") is { } selection)
+        {
+            var scanned = Int(selection, "scanned") ?? 0;
+            if (scanned < 1 || asked <= scanned)
+                return (null, null);
+            return (new Dictionary<string, JsonElement>(arguments) { ["count"] = Json(w => w.WriteNumberValue(scanned)) },
+                $"Only the first {Messages(scanned)} of the queue, the ones the preview read, are considered: later arrivals stay.");
+        }
+
+        if (arguments.TryGetValue("messageIds", out var named) && named.ValueKind == JsonValueKind.Array && named.GetArrayLength() > 0)
+            return (null, null); // the model named the messages itself, and the preview showed exactly those
+        if (Obj(preview, "preview") is not { } peek || !peek.TryGetProperty("messages", out var messages)
+            || messages.ValueKind != JsonValueKind.Array)
+            return (null, null);
+        var ids = messages.EnumerateArray().Select(m => Str(m, "messageId")).ToList();
+        if (ids.Count == 0)
+            return (null, null);
+        if (ids.Any(string.IsNullOrEmpty))
+            return (null, "Some previewed messages have no messageId, so the call takes whatever is at the head of the queue when it runs.");
+        var depth = Math.Max(Int(peek, "scanned") ?? ids.Count, 1);
+        var held = new Dictionary<string, JsonElement>(arguments)
+        {
+            ["messageIds"] = Json(w =>
+            {
+                w.WriteStartArray();
+                foreach (var id in ids)
+                    w.WriteStringValue(id);
+                w.WriteEndArray();
+            }),
+            ["count"] = Json(w => w.WriteNumberValue(Math.Min(asked ?? depth, depth))),
+        };
+        return (held, "Only these previewed messages are moved (by messageId).");
+    }
+
+    private static JsonElement Json(Action<Utf8JsonWriter> write)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+            write(writer);
+        using var document = JsonDocument.Parse(buffer.ToArray());
+        return document.RootElement.Clone();
+    }
+
     /// <summary>One line on the pending request that a reply_* or reject_request call answers.</summary>
     public static string DescribeRequest(string contract, string? from, JsonElement? message) =>
         $"It answers the {contract} request" + (from is null ? "" : $" from {from}") + ": " +

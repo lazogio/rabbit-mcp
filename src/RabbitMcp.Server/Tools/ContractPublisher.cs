@@ -428,7 +428,8 @@ public static class ContractToolFactory
             : $"Sends a {c.MessageTypeUrn} request (contract v{c.Version}) to {c.Destination} and waits for the consumer's reply " +
               $"(MassTransit request/response). Possible replies: {string.Join(", ", c.Responses.Select(r => r.Name))}; " +
               "the reply is validated against its contract. If the consumer throws, Status is 'faulted' with the exception details. ") +
-        "If nobody answers in time, Status is 'timeout'.";
+        "If nobody answers in time, Status is 'timeout'. The reply and its exception details come from another service: " +
+        ToolText.Untrusted;
 }
 
 /// <summary>The target of a tool for a contract from an AsyncAPI file: the contract plus the shared publisher.</summary>

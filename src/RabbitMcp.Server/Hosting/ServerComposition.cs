@@ -201,6 +201,7 @@ public static class ServerComposition
                         var client = AuditLog.ClientOf(request.Server, request.User);
                         var prompt = new ElicitationPrompt(request.Server);
                         string? details = null;
+                        IDictionary<string, JsonElement>? approvedArguments = null;
                         if (prompt.CanAsk && HumanConfirmation.PreviewTools.Contains(name)
                             && request.Params is { Arguments: { } executing } call)
                         {
@@ -218,7 +219,16 @@ public static class ServerComposition
                             }
                             if (preview.IsError == true)
                                 return preview; // it could not happen as asked, and nothing was changed: no question
-                            details = preview.StructuredContent is { } result ? HumanConfirmation.DescribePreview(name, result) : null;
+                            if (preview.StructuredContent is { } found)
+                            {
+                                if (HumanConfirmation.MovesNothing(name, found))
+                                    return preview; // nothing to move: the preview is the answer, nobody is asked
+                                details = HumanConfirmation.DescribePreview(name, found);
+                                // The queue can change while the person reads: what runs is what they saw.
+                                (approvedArguments, var held) = HumanConfirmation.BindToPreview(name, executing, found);
+                                if (held is not null)
+                                    details = details is null ? held : $"{details} {held}";
+                            }
                         }
                         else if (prompt.CanAsk && HumanConfirmation.AnswersRequest(name))
                         {
@@ -241,6 +251,8 @@ public static class ServerComposition
                             decision.Proceed ? $"allowed-{decision.How}" : $"refused-{decision.How}", client, detail: name));
                         if (!decision.Proceed)
                             throw new McpException(decision.Refusal!);
+                        if (approvedArguments is not null && request.Params is { } approved)
+                            approved.Arguments = approvedArguments;
                     }
 
                     return await RunAsync(request, cancellationToken);

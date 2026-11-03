@@ -140,7 +140,9 @@ Dependabot keeps MassTransit < 9 (commercial) — never accept a 9.x bump.
   the model writes confirm and replies itself and message content can talk it into them, so `auto` (fall back to the
   model) and `off` are explicit opt-ins (startup warning over HTTP, and for `off`). The question is built so the model
   cannot steer it: before asking, the filter runs the tool's own preview (confirm=false; an error preview is returned,
-  nobody is asked) and `DescribePreview` puts what it found first; replies show the pending request they answer
+  nobody is asked; nothing to move → the preview is returned, nobody is asked) and `DescribePreview` puts what it found
+  first; after approval the move runs held to that preview (`BindToPreview`: the previewed messageIds and depth, or the
+  filter's scanned depth), so messages that arrive while the person reads stay; replies show the pending request they answer
   (`DescribeRequest`); every value goes through `HumanConfirmation.Shown` (one line, escapes, capped), redirecting
   arguments first. Audited as action `confirm`. New changing tools with a preview go into
   `HumanConfirmation.PreviewTools`, the `ConfirmTools` default and `DescribePreview`.
