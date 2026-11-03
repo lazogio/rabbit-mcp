@@ -33,7 +33,8 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
         "the broker confirmed the republish; failures stay in the error queue. Fault, x-death and dead-letter parking headers " +
         "are removed, the body is unchanged. A queue with active consumers is refused unless force=true. For incidents, select " +
         "by a filter (exceptionType, exceptionContains, contract, since, until): " +
-        "the preview then groups the matching messages by fault, and one confirmed call moves up to MaxBulkMessages.")]
+        "the preview then groups the matching messages by fault, and one confirmed call moves up to MaxBulkMessages. " +
+        ToolText.Untrusted)]
     public async Task<RepublishResult> RepublishFromErrorAsync(
         [Description("Error queue name, e.g. submit-order_error.")] string errorQueue,
         [Description(CountHelp)] int? count = null,
@@ -78,7 +79,7 @@ public sealed class RepublishTools(QueueBrowser browser, IOptions<RabbitMcpOptio
         "X-Dead-Letter-Reason record who moved it, from where, when and why. A TTL would expire a parked message, so it moves " +
         "to the X-Original-Expiration header. republish_from_error on the dead-letter queue brings messages back, with their " +
         "TTL. A queue that has consumers is never used as the dead-letter queue. " +
-        "Two steps: call without confirm to preview, then confirm=true with the messageIds from the preview.")]
+        "Two steps: call without confirm to preview, then confirm=true with the messageIds from the preview. " + ToolText.Untrusted)]
     public async Task<DeadLetterResult> DeadLetterFromErrorAsync(
         [Description("Error queue name, e.g. submit-order_error.")] string errorQueue,
         [Description(CountHelp)] int? count = null,

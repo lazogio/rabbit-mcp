@@ -1,6 +1,21 @@
 # Bugs (newest first)
 
-Next ID: BUG-073
+Next ID: BUG-075
+
+### BUG-073..074 The approval did not bind the move; message content unlabelled in more tools — fixed (2026-11-03, fix/confirmation-binding)
+Second "same type" audit. Guards: `HumanConfirmationTests.A_confirmed_move_is_held_to_what_its_preview_showed`,
+`A_preview_that_moves_nothing_needs_no_question`, integration
+`HumanInTheLoopTests.A_message_that_arrives_while_the_person_reads_the_question_is_not_moved`.
+- BUG-073 (medium) The person approved the preview, but the confirmed republish/dead-letter read the queue again: without
+  messageIds it took whatever was at the head up to `count`, with a filter every match up to MaxBulkMessages, so faults
+  that arrived while the dialog was open moved too (anyone can cause one with a bad message). Fix: `BindToPreview` runs the
+  approved call with the previewed messageIds and scan depth (filter: the preview's scanned depth); a preview with nothing
+  to move is returned without a question; messages without an id are named in the question instead.
+- BUG-074 (low) `ToolText.Untrusted` was missing from tools that also return message content: republish_from_error and
+  dead_letter_from_error previews, resend_corrected, request_* (another service's reply and exception), recent_activity.
+- Docs: a client that answers elicitation automatically (e.g. asks the model) defeats the confirmation (README, setup skill).
+- Left for the owner: publish_*/request_* in the ConfirmTools default, confirming force=true on read tools, a pause after
+  a decline (approval fatigue).
 
 ### BUG-069..072 The model could still approve its own changes, or steer the question — fixed (2026-11-03, fix/confirmation-hardening)
 Follow-up audit of BUG-068 ("find similar problems"). Guards: `HumanConfirmationTests` (defaults, reply tools, question

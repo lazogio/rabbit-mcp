@@ -17,7 +17,8 @@ public sealed class AuditTools(AuditLog audit, TimeProvider time)
     [Description(
         "What was done through this server, newest first: publishes, requests, republishes, dead-lettering, responder " +
         "replies and refused calls, with outcome, ids, contract, queue and who did it. Answers questions like " +
-        "'who republished from order-placed_error today?' or 'what happened to message X?'.")]
+        "'who republished from order-placed_error today?' or 'what happened to message X?'. Details and reasons may quote " +
+        "message content. " + ToolText.Untrusted)]
     public RecentActivity GetRecentActivity(
         [Description("publish, request, republish, deadletter, correct, declare, receive, respond, confirm or access.")] string? action = null,
         [Description("e.g. sent, error, republished, moved, denied, refused.")] string? outcome = null,

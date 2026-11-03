@@ -166,7 +166,7 @@ OpenTelemetry: set `OTEL_EXPORTER_OTLP_ENDPOINT`; traces join the MassTransit co
 - **No silent loss:** invalid messages are not sent; publisher confirms and `mandatory` turn an undeliverable message into an error.
 - **Safe moves:** a message leaves the error queue only after the broker confirmed its new copy; the body never changes.
 - **Nothing is deleted:** poison messages are parked with every header, and can be brought back; exchanges and queues are only ever created. Use RabbitMQ 4: on 3.x quorum queues with a delivery limit, peeking counts towards the limit and can drop a message.
-- **A person confirms:** clients with MCP elicitation (e.g. Claude Code over stdio) show a dialog with the server's own preview before anything moves or a service's request is answered. Clients without it, and stateless HTTP, are refused unless you set `HumanConfirmation=auto` (the model's own `confirm=true` and replies then count, and a message it reads could talk it into one).
+- **A person confirms:** clients with MCP elicitation (e.g. Claude Code over stdio) show a dialog with the server's own preview before anything moves or a service's request is answered, and only the previewed messages move. Clients without it, and stateless HTTP, are refused unless you set `HumanConfirmation=auto` (the model's own `confirm=true` and replies then count, and a message it reads could talk it into one). A client that answers these dialogs automatically (e.g. by asking the model) defeats them.
 - **Audited:** every send, move and answer — including refused ones — with the user.
 - **Untrusted content:** message headers never redirect where messages go; passwords never appear in logs or errors.
 

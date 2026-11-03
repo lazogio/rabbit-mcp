@@ -22,7 +22,7 @@ public sealed class CorrectionTools(QueueBrowser browser, PublishPolicy policy, 
         "to the queue it failed on and parks the original, unchanged, in the dead-letter queue (default <queue>_dead) with " +
         "a link to the correction. Nothing is deleted. The correction must satisfy the message's contract. Two steps: call " +
         "without confirm to see the field-by-field changes (nothing changes), then with confirm=true. Take the original " +
-        "message from peek_messages, change only what is wrong.")]
+        "message from peek_messages, change only what is wrong. " + ToolText.Untrusted)]
     public Task<CorrectionResult> ResendCorrectedAsync(
         [Description("Error queue the message is in, e.g. order-placed_error (or a _dead queue).")] string errorQueue,
         [Description("MessageId of the failed message (from peek_messages).")] string messageId,

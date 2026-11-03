@@ -40,7 +40,8 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
     }
 
     /// <param name="answer">null: the client does not support elicitation at all.</param>
-    private async Task<Session> StartAsync(bool? answer, string mode = "required")
+    /// <param name="whileAsked">Runs while the question is open, after the preview and before the answer.</param>
+    private async Task<Session> StartAsync(bool? answer, string mode = "required", Func<Task>? whileAsked = null)
     {
         var clientToServer = new AnonymousPipeServerStream(PipeDirection.Out);
         var serverIn = new AnonymousPipeClientStream(PipeDirection.In, clientToServer.ClientSafePipeHandle);
@@ -71,15 +72,17 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
             options.Handlers = new McpClientHandlers
             {
                 // Like a person ticking (or not ticking) the box in the client's dialog.
-                ElicitationHandler = (question, _) =>
+                ElicitationHandler = async (question, _) =>
                 {
                     lock (asked)
                         asked.Add(question?.Message ?? "");
-                    return ValueTask.FromResult(new ElicitResult
+                    if (whileAsked is not null)
+                        await whileAsked();
+                    return new ElicitResult
                     {
                         Action = "accept",
                         Content = new Dictionary<string, JsonElement> { [ElicitationPrompt.Field] = JsonSerializer.SerializeToElement(approve) },
-                    });
+                    };
                 },
             };
         }
@@ -90,12 +93,20 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
 
     private async Task QueueWithMessageAsync(string queue, string target)
     {
+        await using (var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None))
+        {
+            await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false);
+            await channel.QueueDeclareAsync(target, durable: true, exclusive: false, autoDelete: false);
+        }
+        await PublishAsync(queue);
+        await broker.WaitForQueueCount(queue, 1);
+    }
+
+    private async Task PublishAsync(string queue)
+    {
         await using var channel = await broker.Connection.CreateChannelAsync(publisherConfirms: false, CancellationToken.None);
-        await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false);
-        await channel.QueueDeclareAsync(target, durable: true, exclusive: false, autoDelete: false);
         await channel.BasicPublishAsync("", queue, mandatory: false,
             new BasicProperties { MessageId = Guid.NewGuid().ToString() }, """{"x":1}"""u8.ToArray());
-        await broker.WaitForQueueCount(queue, 1);
     }
 
     private static Dictionary<string, object?> Republish(string queue, string target) => new()
@@ -136,6 +147,25 @@ public sealed class HumanInTheLoopTests(BrokerFixture broker)
         var question = Assert.Single(session.Asked);
         Assert.Contains("Preview just now: would republish 1 message from it-human-approved", question);
         Assert.Contains("targetQueue: it-human-approved-target", question);
+    }
+
+    [Fact]
+    public async Task A_message_that_arrives_while_the_person_reads_the_question_is_not_moved()
+    {
+        await QueueWithMessageAsync("it-human-late", "it-human-late-target");
+        await using var session = await StartAsync(answer: true, whileAsked: async () =>
+        {
+            // A new fault lands behind the previewed message before the person answers.
+            await PublishAsync("it-human-late");
+            await broker.WaitForQueueCount("it-human-late", 2);
+        });
+
+        var result = await session.Client.CallToolAsync("republish_from_error", Republish("it-human-late", "it-human-late-target"));
+
+        Assert.NotEqual(true, result.IsError);
+        await broker.WaitForQueueCount("it-human-late-target", 1);
+        await broker.WaitForQueueCount("it-human-late", 1); // the newcomer, which the person never saw, stays
+        Assert.Contains("Only these previewed messages are moved", Assert.Single(session.Asked));
     }
 
     [Fact]
