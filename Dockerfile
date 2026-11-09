@@ -4,7 +4,7 @@
 # the build machine and cross-publishes, so no emulation is needed.
 #   docker run -p 5080:5080 -e RabbitMcp__Uri=amqp://user:pass@rabbit:5672/ -e RabbitMcp__ApiKeys="team:KEY" ghcr.io/lazogio/rabbit-mcp
 # Base images are pinned by digest (multi-arch index); Dependabot proposes new digests.
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e AS build
 ARG TARGETARCH
 ARG VERSION=0.0.0-local
 WORKDIR /src
