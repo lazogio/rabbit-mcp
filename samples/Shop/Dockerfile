@@ -12,7 +12,7 @@ RUN dotnet publish samples/Shop/Shop.Service -c Release -o /out/service \
  && dotnet publish src/RabbitMcp.Server -c Release -o /out/mcp \
  && dotnet build samples/Shop/Shop.Contracts -c Release -o /out/contracts
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0@sha256:a3f9f81954b9c810af2ed18849716c8dc74a4707bd0907fdbd69be81554c0f30 AS service
+FROM mcr.microsoft.com/dotnet/runtime:10.0@sha256:4f1f30cf0bb4ab0c8b2daa84613051683456f8df4a9bf7c812e20d74962992ac AS service
 WORKDIR /app
 COPY --from=build /out/service .
 USER $APP_UID
